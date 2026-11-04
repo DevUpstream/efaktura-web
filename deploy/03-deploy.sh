@@ -10,8 +10,8 @@ TAG="${1:-latest}"
 echo "== 1/4 Datoteki =="
 old_caddy=$(sha256sum "$DST/Caddyfile" 2>/dev/null | cut -d' ' -f1 || true)
 install -m 644 "$SRC/docker-compose.yml" "$SRC/Caddyfile" "$DST/"
-# .env: vrednostite od repoto (ne-tajni) + API_TAG
-install -m 644 "$SRC/.env" "$DST/.env"; echo "API_TAG=$TAG" >> "$DST/.env"
+# .env (od app.env): vrednostite od repoto (ne-tajni) + API_TAG
+install -m 644 "$SRC/app.env" "$DST/.env"; echo "API_TAG=$TAG" >> "$DST/.env"
 # app_key (kolacinja, TOTP): se generira EDNAS na serverot
 [ -s "$DST/secrets/app_key" ] || { openssl rand -base64 32 > "$DST/secrets/app_key"; echo "   nov app_key generiran"; }
 # entra tajnata ja vnesuva administratorot so set-secret.sh; prazna datoteka = najava so Microsoft isklucena
