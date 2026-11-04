@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
-import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate } from "../api";
+import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { DOC, PAYMENT, STATUS, addDays, date, money, money0, today } from "../format";
 import { UjpState } from "../components/UjpState";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
-  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string }
+  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | "" }
 interface Reason { code: string; name: string; kind: "void" | "correction" }
 interface Advance { id: number; number: string; issueDate: string; grossTotal: string; remaining: string }
 const DERIVED: DocType[] = ["ST", "OD", "KZ", "KR"];
@@ -28,8 +28,10 @@ export function InvoiceEditor() {
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
   const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: "INV", issueDate: today(), supplyDate: today(),
-    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "" });
+    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "" });
   const [reasons, setReasons] = useState<Reason[]>([]);
+  const [whs, setWhs] = useState<Warehouse[]>([]);
+  useEffect(() => { if (client.modules.includes("warehouse")) api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs); else setWhs([]); }, [client.id]);
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [lines, setLines] = useState<EditLine[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -48,7 +50,7 @@ export function InvoiceEditor() {
         setHead({ partnerId: i.partnerId, docType: i.docType, issueDate: i.issueDate,
           supplyDate: i.supplyDate ?? i.issueDate, dueDate: i.dueDate ?? "", paymentMethod: i.paymentMethod, note: i.note ?? "",
           reason: i.correctionReason ?? "", voidCode: i.voidReasonCode ?? "", corrCode: i.correctionReasonCode ?? "",
-          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "" });
+          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "" });
         setLines(i.lines.map(toEdit));
       } else {
         setLines([]);
@@ -95,7 +97,7 @@ export function InvoiceEditor() {
     return {
       partnerId: Number(head.partnerId), docType: head.docType, issueDate: head.issueDate,
       supplyDate: head.docType === "AV" ? null : head.supplyDate || head.issueDate, dueDate: head.dueDate || null,
-      paymentMethod: head.paymentMethod, note: head.note || null, version: inv?.version,
+      paymentMethod: head.paymentMethod, note: head.note || null, version: inv?.version, warehouseId: head.warehouseId || null,
       correctionReason: head.reason || null, voidReasonCode: head.voidCode || null, correctionReasonCode: head.corrCode || null,
       advanceInvoiceId: canAdvance && head.advanceId ? head.advanceId : null,
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
@@ -125,9 +127,10 @@ export function InvoiceEditor() {
     if (!invId) return;
     setBusy(true);
     try {
-      const r = await api.post<{ number: string }>(`/api/invoices/${invId}/issue`);
+      const r = await api.post<{ number: string; stockDocNumber: string | null; stockWarnings: string[] }>(`/api/invoices/${invId}/issue`);
       setInv(await api.get<Invoice>(`/api/invoices/${invId}`));
-      setMsg({ kind: "ok", text: `Издаден е документ ${r.number}. Агентот ќе го потпише и прати до УЈП.` });
+      setMsg({ kind: r.stockWarnings?.length ? "err" : "ok", text: `Издаден е документ ${r.number}.${r.stockDocNumber ? ` Испратница ${r.stockDocNumber}.` : ""}`
+        + `${r.stockWarnings?.length ? ` Предупредување: ${r.stockWarnings.join(" ")}` : ""} Агентот ќе го потпише и прати до УЈП.` });
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); }
     finally { setBusy(false); setConfirmIssue(false); }
   }
@@ -195,6 +198,11 @@ export function InvoiceEditor() {
           <label>Рок за плаќање
             {editable ? <input type="date" value={head.dueDate} onChange={(e) => set("dueDate", e.target.value)} /> : <output>{date(inv!.dueDate)}</output>}
           </label>
+          {whs.filter((w) => w.isActive).length > 1 && ["INV", "KR"].includes(head.docType) && <label>Магацин
+            {editable ? <select value={head.warehouseId} onChange={(e) => set("warehouseId", e.target.value ? Number(e.target.value) : "")}>
+              <option value="">Главен</option>{whs.filter((w) => w.isActive && !w.isDefault).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
+              : <output>{whs.find((w) => w.id === inv?.warehouseId)?.name ?? "Главен"}</output>}
+          </label>}
           <label>Начин на плаќање
             {editable ? (
               <select value={head.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)}>

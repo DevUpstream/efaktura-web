@@ -50,6 +50,13 @@
       "when": 1793813649481,
       "tag": "0006_client_modules",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793818228032,
+      "tag": "0007_warehouse",
+      "breakpoints": true
     }
   ]
 }

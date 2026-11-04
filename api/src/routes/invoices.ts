@@ -2,7 +2,7 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { invoiceLines, invoices, items, partners, vatRates } from "../db/schema.js";
+import { invoiceLines, invoices, items, partners, vatRates, warehouses } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
@@ -38,6 +38,7 @@ const DraftIn = z.object({
   correctionReasonCode: z.string().max(10).optional().nullable(),
   advanceInvoiceId: Id.optional().nullable(),
   advanceAmount: z.coerce.number().min(0).max(1e12).optional().nullable(),
+  warehouseId: Id.optional().nullable(),
   lines: z.array(LineIn).max(500),
   version: z.number().int().optional(),
 });
@@ -100,6 +101,10 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
       b = { ...b, lines: orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Math.abs(Number(l.qty)),
         unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId, priceSource: l.priceSource })) };
     }
+    if (b.warehouseId) {
+      const [w] = await tx.select({ id: warehouses.id }).from(warehouses).where(and(eq(warehouses.id, b.warehouseId), eq(warehouses.clientId, clientId), eq(warehouses.isActive, true)));
+      if (!w) throw new DomainError("validation", "Непознат магацин.", 422);
+    }
     const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
     const itemIds = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
     if (itemIds.length) {
@@ -128,7 +133,7 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
       advanceInvoiceId: adv?.id ?? null, advanceAmount: adv?.amount ?? null,
       partnerId: b.partnerId, docType: b.docType, year: Number(b.issueDate.slice(0, 4)), issueDate: b.issueDate,
       supplyDate: b.docType === "AV" ? null : (b.supplyDate || b.issueDate), dueDate: b.dueDate ?? null,
-      paymentMethod: b.paymentMethod, note: b.note ?? null, clauses: b.clauses ?? null,
+      paymentMethod: b.paymentMethod, note: b.note ?? null, clauses: b.clauses ?? null, warehouseId: b.warehouseId ?? null,
       netTotal: t.netTotal, vatTotal: t.vatTotal, grossTotal: t.grossTotal, payableAmount: t.payableAmount, lineCount: b.lines.length,
       buyerName: partner.name, version: sql`${invoices.version} + 1`,
     }).where(eq(invoices.id, invoiceId));
@@ -170,7 +175,7 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.post("/api/invoices/:id/issue", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req) => {
     const { u, inv } = await load(req);
     const r = await issueInvoice(db, inv.id, { userId: u.id, ip: req.ip });
-    return { id: r.id, number: r.number, status: r.status };
+    return { id: r.id, number: r.number, status: r.status, stockDocNumber: r.stockDocNumber, stockWarnings: r.stockWarnings };
   });
 
   /** PDF (format od clients.pdf_settings). Nacrtot ima voden zig "НАЦРТ". */

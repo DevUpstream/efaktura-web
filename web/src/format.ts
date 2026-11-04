@@ -21,3 +21,7 @@ export const dateTime = (iso: string) => {
   const d = new Date(iso);
   return `${date(d.toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" }))} ${d.toLocaleTimeString("en-GB", { timeZone: "Europe/Skopje", hour: "2-digit", minute: "2-digit" })}`;
 };
+export const ITEM_TYPE: Record<string, string> = { service: "Услуга", goods: "Стока", material: "Материјал / дел", product: "Готов производ" };
+export const STOCK_TYPES = ["goods", "material", "product"];
+export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос" };
+export const qtyFmt = (v: string | number | null | undefined) => (v === null || v === undefined ? "–" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(Number(v)));

@@ -7,7 +7,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method, credentials: "same-origin",
     headers: { ...(body !== undefined ? { "content-type": "application/json" } : {}), ...(method !== "GET" ? { "x-efaktura": "1" } : {}) },
-    body: body !== undefined ? JSON.stringify(body) : method !== "GET" ? "{}" : undefined,
+    body: body !== undefined ? JSON.stringify(body) : method !== "GET" && method !== "DELETE" ? "{}" : undefined,
   });
   const text = await r.text();
   const data = text ? JSON.parse(text) : null;
@@ -19,6 +19,7 @@ export const api = {
   post: <T>(u: string, b?: unknown) => req<T>("POST", u, b ?? {}),
   put: <T>(u: string, b: unknown) => req<T>("PUT", u, b),
   patch: <T>(u: string, b: unknown) => req<T>("PATCH", u, b),
+  del: <T>(u: string) => req<T>("DELETE", u),
 };
 
 /* --------------------------------------------------------------- tipovi */
@@ -32,14 +33,15 @@ export interface Me {
 }
 export interface Partner { id: number; name: string; edb: string | null; embs: string | null; vatNumber: string | null; address: string | null;
   city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; isActive: boolean; ujpRegistryAt: string | null }
-export interface Item { id: number; code: string; name: string; type: "goods" | "service"; unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
+export type ItemType = "goods" | "service" | "material" | "product";
+export interface Item { id: number; code: string; name: string; type: ItemType; trackLots: boolean; unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
 export interface InvoiceRow { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; dueDate: string | null;
   buyerName: string; netTotal: string; vatTotal: string; grossTotal: string; payableAmount: string | null;
   ujpId: string | null; ujpStatusName: string | null; ujpError: string | null }
 export interface Line { id?: number; itemId: number | null; description: string; unit: string; qty: string; unitPrice: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null }
-export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; supplyDate: string | null; paymentMethod: string;
+export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; warehouseId: number | null; supplyDate: string | null; paymentMethod: string;
   note: string | null; clauses: string | null; version: number; lines: Line[]; advanceAmount: string | null; issuedAt: string | null;
   byRate: { vatRatePct: string; net: string; vat: string }[];
   relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;
@@ -54,3 +56,4 @@ export interface PartnerCardData { partner: Partner & { note?: string | null }; 
   invoices: { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; grossTotal: string; payableAmount: string | null }[] }
 export interface FollowUp { id: number; partnerId: number; partnerName: string; kind: NoteKind; text: string; followUpAt: string;
   createdAt: string; author: string | null; overdue: boolean; isToday: boolean }
+export interface Warehouse { id: number; clientId: number; code: string; name: string; isDefault: boolean; isActive: boolean }
