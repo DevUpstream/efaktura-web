@@ -20,6 +20,7 @@ const PartnerIn = z.object({
   address: opt(z.string()), city: opt(z.string()), postalCode: opt(z.string().max(10)),
   country: z.string().trim().length(2).toUpperCase().default("MK"),
   email: opt(z.string().max(254)), phone: opt(z.string().max(50)),
+  bankAccount: opt(z.string().max(40)),
   isActive: z.boolean().default(true),
 });
 /** Polinja zakluceni po proverka vo registarot na UJP ("UJP ✓"). */

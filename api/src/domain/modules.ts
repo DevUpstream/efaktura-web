@@ -2,7 +2,7 @@
 export const MODULES = [
   { key: "invoices", name: "Излезни фактури", core: true, ready: true, requires: [] },
   { key: "crm", name: "Купувачи: контакти, историја, потсетници", core: false, ready: true, requires: [] },
-  { key: "payments", name: "Плаќања и наплата", core: false, ready: false, requires: [] },
+  { key: "payments", name: "Плаќања и наплата", core: false, ready: true, requires: [] },
   { key: "incoming", name: "Влезни фактури", core: false, ready: true, requires: [] },
   { key: "warehouse", name: "Магацин", core: false, ready: true, requires: [] },
   { key: "production", name: "Производство", core: false, ready: true, requires: ["warehouse"] },

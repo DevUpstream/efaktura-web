@@ -48,12 +48,19 @@ export interface ProductionSettings {
   overhead: "none" | "percent" | "piece";     // struja i opsti troshoci: ne / % od materijalite / fiksno po parce
   overheadValue: number;
 }
+/** Kako se cita CSV izvodot na bankata na firmata (sekoja banka ima svoj format). Koloni po broj (od 0). */
+export interface BankImportMapping {
+  delimiter: string; skipRows: number; dateCol: number; dateFormat: "dd.MM.yyyy" | "yyyy-MM-dd" | "dd/MM/yyyy";
+  amountMode: "signed" | "split"; amountCol?: number; creditCol?: number; debitCol?: number; decimal: "," | ".";
+  nameCol?: number; accountCol?: number; referenceCols: number[];
+}
 export const DEFAULT_PRODUCTION: ProductionSettings = { useWaste: false, labor: "none", laborRate: 0, overhead: "none", overheadValue: 0 };
 export const negativeStock = pgEnum("negative_stock", ["block", "warn"]);
 export const stockDocKind = pgEnum("stock_doc_kind", ["receipt", "issue", "writeoff", "inventory", "transfer", "consumption", "output"]);
 export const STOCK_DOC_CODE: Record<(typeof stockDocKind.enumValues)[number], string> = {
   receipt: "PR", issue: "IS", writeoff: "OT", inventory: "PO", transfer: "PN", consumption: "PI", output: "GP" };
 export const workOrderStatus = pgEnum("work_order_status", ["draft", "posted", "voided"]);
+export const paymentDirection = pgEnum("payment_direction", ["in", "out"]);  // in = naplata od kupuvac, out = plakjanje na dobavuvac
 export const purchaseStatus = pgEnum("purchase_status", ["draft", "posted", "voided"]);
 export const paymentMethod = pgEnum("payment_method", ["bank", "cash", "card", "compensation", "other"]);
 export const vatGroup = pgEnum("vat_group", ["DDV-A", "DDV-B", "DDV-V", "DDV-G"]);
@@ -127,6 +134,7 @@ export const clients = pgTable("clients", {
   invoiceClauses: text("invoice_clauses"),
   pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
   productionSettings: jsonb("production_settings").$type<ProductionSettings>(),  // docs/07
+  bankImportMapping: jsonb("bank_import_mapping").$type<BankImportMapping>(),     // mapiranje na CSV od izvod (docs/08)
   modules: text("modules").array().notNull().default(sql`'{invoices,crm}'::text[]`),
   negativeStock: negativeStock("negative_stock").notNull().default("block"),  // zaliha vo minus (docs/07)  // vkluceni moduli (src/domain/modules.ts)  // izgled na PDF fakturata (docs: Poставки на klientot)
   logoFileId: uuid("logo_file_id"),
@@ -179,6 +187,7 @@ export const partners = pgTable("partners", {
   legacySpId: integer("legacy_sp_id").unique(),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
+  bankAccount: varchar("bank_account", { length: 40 }),  // ziro-smetka, za prepoznavanje vo izvod
   edb: varchar("edb", { length: 13 }),
   embs: varchar("embs", { length: 8 }),
   vatNumber: varchar("vat_number", { length: 20 }),
@@ -715,4 +724,46 @@ export const workOrderLines = pgTable("work_order_lines", {
 }, (t) => [
   uniqueIndex("work_order_lines_no_uq").on(t.workOrderId, t.lineNo),
   check("work_order_lines_qty_ck", sql`${t.qty} >= 0`),
+]);
+
+/* ------------------------------------------------- plakjanja (docs/08) */
+
+/** Uplata (in) ili isplata (out). Ne se menuva; greshka -> storno (voidedAt). */
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  direction: paymentDirection("direction").notNull(),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  payDate: date("pay_date").notNull(),
+  amount: money("amount").notNull(),
+  method: paymentMethod("method").notNull().default("bank"),
+  reference: varchar("reference", { length: 200 }),
+  statementLineKey: varchar("statement_line_key", { length: 64 }),   // za uvoz od izvod: ist red ne se uvezuva dvapati
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+  voidedAt: ts("voided_at"),
+  voidedBy: integer("voided_by").references(() => users.id),
+  voidReason: text("void_reason"),
+}, (t) => [
+  index("payments_client_ix").on(t.clientId, t.payDate),
+  index("payments_partner_ix").on(t.partnerId),
+  uniqueIndex("payments_statement_uq").on(t.clientId, t.statementLineKey).where(sql`${t.statementLineKey} is not null and ${t.voidedAt} is null`),
+  check("payments_amount_ck", sql`${t.amount} > 0`),
+]);
+
+/** Raspored na uplata po fakturi. Samo za dodavanje (storno na uplatata gi isklucuva). */
+export const paymentAllocations = pgTable("payment_allocations", {
+  id: serial("id").primaryKey(),
+  paymentId: integer("payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
+  purchaseInvoiceId: integer("purchase_invoice_id").references(() => purchaseInvoices.id, { onDelete: "restrict" }),
+  amount: money("amount").notNull(),
+  createdAt: created(),
+}, (t) => [
+  index("payment_alloc_payment_ix").on(t.paymentId),
+  index("payment_alloc_invoice_ix").on(t.invoiceId),
+  index("payment_alloc_purchase_ix").on(t.purchaseInvoiceId),
+  check("payment_alloc_amount_ck", sql`${t.amount} > 0`),
+  check("payment_alloc_target_ck", sql`(${t.invoiceId} is null) <> (${t.purchaseInvoiceId} is null)`),
 ]);

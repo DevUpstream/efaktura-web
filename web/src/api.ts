@@ -32,7 +32,7 @@ export interface Me {
   clients?: ClientRef[];
 }
 export interface Partner { id: number; name: string; edb: string | null; embs: string | null; vatNumber: string | null; address: string | null;
-  city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; isActive: boolean; ujpRegistryAt: string | null }
+  city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; bankAccount?: string | null; isActive: boolean; ujpRegistryAt: string | null }
 export type ItemType = "goods" | "service" | "material" | "product";
 export interface Item { id: number; code: string; name: string; type: ItemType; trackLots: boolean; unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
