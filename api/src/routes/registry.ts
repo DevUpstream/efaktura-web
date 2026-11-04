@@ -28,7 +28,8 @@ export function registryDiff(cur: Partial<Record<RegField, string | null>>, reg:
 }
 const regValues = (r: UjpCompany) => ({ name: t(r.name), address: t(r.address), city: t(r.city),
   postalCode: t(r.postalCode) || null, vatNumber: t(r.vatNumber) || null, embs: t(r.embs) || null });
-const today = () => new Date().toLocaleDateString("mk-MK", { timeZone: "Europe/Skopje" });
+/** "04.11.2026" (isto kako vo SharePoint belezkite). */
+const today = () => new Date().toLocaleDateString("en-GB", { timeZone: "Europe/Skopje", day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, ".");
 
 /** Agentot se najavuva so x-agent-key (vo bazata samo SHA-256). */
 export async function requireAgent(db: Db, req: FastifyRequest) {

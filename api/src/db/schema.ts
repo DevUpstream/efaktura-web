@@ -431,3 +431,38 @@ export const registryRequests = pgTable("ujp_registry_requests", {
   createdAt: created(),
   doneAt: ts("done_at"),
 }, (t) => [index("ujp_registry_pending_ix").on(t.status, t.createdAt)]);
+
+/* ------------------------------------------------ kupuvaci: kontakti i istorija */
+
+export const partnerContacts = pgTable("partner_contacts", {
+  id: serial("id").primaryKey(),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 200 }).notNull(),
+  role: varchar("role", { length: 120 }),          // funkcija: smetkovoditel, nabavka, upravitel...
+  phone: varchar("phone", { length: 50 }),
+  mobile: varchar("mobile", { length: 50 }),
+  email: varchar("email", { length: 254 }),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("partner_contacts_partner_ix").on(t.partnerId)]);
+
+export const noteKind = pgEnum("note_kind", ["call", "meeting", "email", "note"]);
+
+/** Istorija na komunikacija so kupuvacot. Zapisite ne se menuvaat i ne se brisat (samo potsetnikot se zatvora). */
+export const partnerNotes = pgTable("partner_notes", {
+  id: serial("id").primaryKey(),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  contactId: integer("contact_id").references(() => partnerContacts.id, { onDelete: "set null" }),
+  kind: noteKind("kind").notNull().default("note"),
+  text: text("text").notNull(),
+  followUpAt: date("follow_up_at"),               // potsetnik: koga povtorno da se kontaktira
+  followUpDoneAt: ts("follow_up_done_at"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [
+  index("partner_notes_partner_ix").on(t.partnerId, t.createdAt),
+  index("partner_notes_followup_ix").on(t.clientId, t.followUpAt).where(sql`${t.followUpAt} is not null and ${t.followUpDoneAt} is null`),
+]);
