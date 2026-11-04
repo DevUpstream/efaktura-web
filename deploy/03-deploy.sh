@@ -20,6 +20,29 @@ for f in "$DST"/secrets/*; do chown root:root "$f"; chmod 444 "$f"; done
 # lozinkata ja citaat postgres (uid 70) i api (uid 1000); papkata secrets e 700 root, pa ne e vidliva za drugi korisnici
 chmod 700 "$DST/secrets"
 
+# rezervni kopii: skripti + systemd timer (dnevno 02:30)
+install -d -m 755 "$DST/bin"
+install -m 755 "$SRC/04-backup.sh" "$SRC/05-restore-test.sh" "$DST/bin/"
+cat > /etc/systemd/system/efaktura-backup.service <<'UNIT'
+[Unit]
+Description=eFaktura - rezervna kopija na bazata
+After=docker.service
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/efaktura/bin/04-backup.sh
+UNIT
+cat > /etc/systemd/system/efaktura-backup.timer <<'UNIT'
+[Unit]
+Description=eFaktura - dnevna rezervna kopija
+[Timer]
+OnCalendar=*-*-* 02:30
+RandomizedDelaySec=10m
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+systemctl daemon-reload; systemctl enable --now efaktura-backup.timer >/dev/null
+
 echo "== 2/4 Sliki =="
 cd "$DST"
 if ! docker compose pull -q; then
@@ -44,5 +67,6 @@ D=$(grep ^DOMAIN= .env | cut -d= -f2)
 curl -s "https://$D/api/health"; echo
 docker compose logs api --tail 10
 docker image prune -f >/dev/null
+systemctl list-timers efaktura-backup.timer --no-pager | head -2
 free -m | head -2
 echo GOTOVO
