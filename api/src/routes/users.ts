@@ -25,7 +25,8 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
 
   app.get("/api/clients", async (req) => {
     const u = requireUser(req);
-    return (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, isActive: c.isActive }));
+    return (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, isActive: c.isActive,
+      city: c.city, vatNumber: c.vatNumber, ujpRegistryAt: c.ujpRegistryAt, ujpRegistryNote: c.ujpRegistryNote }));
   });
 
   app.get("/api/users", async (req) => {

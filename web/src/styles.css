@@ -190,3 +190,10 @@ label.check input { width: auto; min-height: 0; }
 .banks { display: flex; flex-direction: column; gap: 8px; } .banks .lbl { font-size: 0.86rem; color: var(--muted); }
 .bank-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 36px; gap: 8px; align-items: center; }
 .form-grid h2 { margin-top: 8px; }
+
+.row-actions .grow { flex: 1 1 220px; }
+.row-actions { flex-wrap: wrap; align-items: flex-end; }
+.notice.wait { background: var(--wait-bg); color: var(--wait); }
+.facts.ujp { background: var(--ok-bg); padding: 12px 14px; border-radius: var(--r); }
+.grid.diff td { vertical-align: top; }
+.key-box { font-family: ui-monospace, monospace; font-size: 0.9rem; word-break: break-all; }

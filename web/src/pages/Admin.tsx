@@ -76,6 +76,7 @@ export function Admin() {
           </table>
         </div>
       )}
+      <AgentKeys />
       <p className="muted small">Microsoft корисниците се најавуваат со својата сметка од организацијата (MFA е кај Microsoft). Сопствените сметки добиваат линк за лозинка и при првата најава поставуваат апликација за кодови.</p>
     </>
   );
@@ -101,5 +102,46 @@ function NewUser({ onDone }: { onDone: (msg?: string) => void }) {
       <label>Улога<select name="role" defaultValue="accountant"><option value="accountant">Сметководител</option><option value="admin">Администратор</option></select></label>
       <div className="span-all row-actions"><button className="btn btn-primary">Додај</button><button type="button" className="link" onClick={() => onDone()}>Откажи</button></div>
     </form>
+  );
+}
+
+interface Key { id: number; name: string; isActive: boolean; lastUsedAt: string | null; createdAt: string }
+
+/** Kluchevi za lokalniot agent (kompjuterot so tokenot). Klucot se gleda samo pri kreiranje. */
+function AgentKeys() {
+  const [keys, setKeys] = useState<Key[]>([]);
+  const [fresh, setFresh] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const load = () => api.get<Key[]>("/api/agent-keys").then(setKeys);
+  useEffect(() => { void load(); }, []);
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const name = String(new FormData(form).get("name"));
+    try { setFresh((await api.post<{ key: string }>("/api/agent-keys", { name })).key); form.reset(); await load(); }
+    catch (x) { setErr((x as ApiError).message); }
+  }
+  return (
+    <section className="panel stack">
+      <h2>Агент (компјутер со токенот)</h2>
+      <p className="muted">Агентот ги извршува барањата кон УЈП (регистар, подоцна праќање фактури) бидејќи УЈП не е достапен од серверот. Секој компјутер со агент добива свој клуч.</p>
+      {err && <p className="alert">{err}</p>}
+      {fresh && <div className="notice stack">
+        <strong>Клучот се прикажува само сега. Копирајте го во agent.config.psd1 (ServerAgentKey) на компјутерот со токенот.</strong>
+        <div className="row-actions"><input readOnly value={fresh} className="key-box" onFocus={(e) => e.currentTarget.select()} aria-label="Клуч за агентот" />
+          <button className="btn" onClick={() => navigator.clipboard.writeText(fresh)}>Копирај</button>
+          <button className="link" onClick={() => setFresh(null)}>Готово</button></div>
+      </div>}
+      {keys.length > 0 && <div className="table-wrap"><table className="grid">
+        <thead><tr><th>Име</th><th>Последно се јавил</th><th>Активен</th></tr></thead>
+        <tbody>{keys.map((k) => <tr key={k.id} className={k.isActive ? "" : "row-inactive"}>
+          <td>{k.name}</td><td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("mk-MK") : "никогаш"}</td>
+          <td><input type="checkbox" checked={k.isActive} onChange={(e) => api.patch(`/api/agent-keys/${k.id}`, { isActive: e.target.checked }).then(load)} aria-label={`${k.name} активен`} /></td>
+        </tr>)}</tbody></table></div>}
+      <form onSubmit={create} className="row-actions">
+        <label className="grow">Име на компјутерот<input name="name" required minLength={2} placeholder="Сметководство – компјутер со токен" /></label>
+        <button className="btn">Нов клуч</button>
+      </form>
+    </section>
   );
 }

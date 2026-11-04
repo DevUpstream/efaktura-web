@@ -2,13 +2,15 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
 import { date } from "../format";
+import { CompanyCard, DiffTable, UjpPullStatus, useUjpPull } from "../components/UjpPull";
 
 const LOCKED = ["name", "edb", "embs", "vatNumber", "address", "city", "postalCode"];
 
 export function Partners() {
   const client = useOutletContext<ClientRef>();
   const [rows, setRows] = useState<Partner[] | null>(null);
-  const [edit, setEdit] = useState<Partner | "new" | null>(null);
+  const [edit, setEdit] = useState<Partner | "new" | "ujp" | null>(null);
+  const [check, setCheck] = useState<Partner | null>(null);
   const [q, setQ] = useState("");
   const load = () => api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setRows);
   useEffect(() => { setRows(null); setEdit(null); void load(); }, [client.id]);
@@ -17,8 +19,13 @@ export function Partners() {
   const shown = (rows ?? []).filter((p) => !needle || p.name.toLowerCase().includes(needle) || (p.edb ?? "").includes(needle));
   return (
     <>
-      <header className="page-head"><h1>Купувачи</h1><button className="btn btn-primary" onClick={() => setEdit("new")}>Нов купувач</button></header>
-      {edit && <PartnerForm client={client} p={edit === "new" ? null : edit} onDone={() => { setEdit(null); void load(); }} />}
+      <header className="page-head"><h1>Купувачи</h1><div className="row-actions">
+        <button className="btn btn-primary" onClick={() => { setEdit("ujp"); setCheck(null); }}>Нов купувач од УЈП</button>
+        <button className="btn" onClick={() => { setEdit("new"); setCheck(null); }}>Рачно (странски / без ЕДБ)</button></div></header>
+      {edit === "ujp" && <NewFromUjp client={client} onDone={() => { setEdit(null); void load(); }} />}
+      {edit && edit !== "ujp" && <PartnerForm client={client} p={edit === "new" ? null : edit} onDone={() => { setEdit(null); void load(); }}
+        onCheck={edit !== "new" && edit.edb ? () => { setCheck(edit); setEdit(null); } : undefined} />}
+      {check && <CheckPartner client={client} p={check} onDone={() => { setCheck(null); void load(); }} />}
       <div className="toolbar"><input type="search" placeholder="Назив или ЕДБ" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" /></div>
       {rows && shown.length === 0 && <div className="empty"><p>{rows.length ? "Нема купувач со тоа име или ЕДБ." : "Сè уште нема купувачи. Додадете го првиот."}</p></div>}
       {shown.length > 0 && (
@@ -37,7 +44,57 @@ export function Partners() {
   );
 }
 
-function PartnerForm({ client, p, onDone }: { client: ClientRef; p: Partner | null; onDone: () => void }) {
+function NewFromUjp({ client, onDone }: { client: ClientRef; onDone: () => void }) {
+  const pull = useUjpPull();
+  const [edb, setEdb] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const done = pull.req?.status === "done" ? pull.req.result : null;
+  async function create(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    try { await api.post(`/api/clients/${client.id}/partners/from-ujp`, { edb, registryRequestId: pull.req!.id, email: f.email || null, phone: f.phone || null }); onDone(); }
+    catch (x) { setErr((x as ApiError).message); }
+  }
+  return (
+    <section className="panel stack">
+      <h2>Нов купувач од регистарот на УЈП</h2>
+      <div className="row-actions">
+        <label className="grow">ЕДБ на купувачот<input value={edb} onChange={(e) => { setEdb(e.target.value.replace(/\D/g, "").slice(0, 13)); pull.reset(); }} inputMode="numeric" autoFocus /></label>
+        <button className="btn" disabled={edb.length !== 13 || pull.req?.status === "pending"} onClick={() => pull.start({ clientId: client.id, edb })}>Повлечи од УЈП</button>
+      </div>
+      <UjpPullStatus req={pull.req} err={pull.err} />
+      {done ? <form onSubmit={create} className="stack">
+        <CompanyCard c={done} />
+        {err && <p className="alert">{err}</p>}
+        <div className="form-grid"><div className="span2"><label>Е-пошта<input name="email" type="email" /></label></div><label>Телефон<input name="phone" /></label></div>
+        <div className="row-actions"><button className="btn btn-primary">Додај купувач</button><button type="button" className="link" onClick={onDone}>Откажи</button></div>
+      </form> : <button className="link" onClick={onDone}>Откажи</button>}
+    </section>
+  );
+}
+
+function CheckPartner({ client, p, onDone }: { client: ClientRef; p: Partner; onDone: () => void }) {
+  const pull = useUjpPull();
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { void pull.start({ clientId: client.id, partnerId: p.id }); }, [p.id]);
+  async function apply() {
+    try { await api.post(`/api/ujp/registry-requests/${pull.req!.id}/apply`); onDone(); } catch (x) { setErr((x as ApiError).message); }
+  }
+  return (
+    <section className="panel stack">
+      <h2>{p.name}: проверка во УЈП</h2>
+      <UjpPullStatus req={pull.req} err={pull.err ?? err} />
+      {pull.req?.status === "done" && pull.req.diff && <>
+        <DiffTable diff={pull.req.diff} />
+        <div className="row-actions"><button className="btn btn-primary" onClick={apply}>{pull.req.diff.length ? "Примени од УЈП" : "Означи „УЈП ✓“"}</button>
+          <button className="link" onClick={onDone}>Затвори</button></div>
+      </>}
+      {pull.req?.status !== "done" && <button className="link" onClick={onDone}>Затвори</button>}
+    </section>
+  );
+}
+
+function PartnerForm({ client, p, onDone, onCheck }: { client: ClientRef; p: Partner | null; onDone: () => void; onCheck?: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const locked = !!p?.ujpRegistryAt;
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -70,7 +127,9 @@ function PartnerForm({ client, p, onDone }: { client: ClientRef; p: Partner | nu
       {field("email", "Е-пошта", { type: "email" })}
       {field("phone", "Телефон")}
       <label className="check"><input type="checkbox" name="isActive" defaultChecked={p?.isActive ?? true} /> Активен</label>
-      <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button><button type="button" className="link" onClick={onDone}>Откажи</button></div>
+      <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button>
+        {onCheck && <button type="button" className="btn" onClick={onCheck}>Провери во УЈП</button>}
+        <button type="button" className="link" onClick={onDone}>Откажи</button></div>
     </form>
   );
 }
