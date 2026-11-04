@@ -182,3 +182,33 @@ describe("povrzani dokumenti (pravila od tekot v5)", () => {
     expect((await call(ana, "GET", `/api/clients/${t.c1.id}/advances?partnerId=${t.p1.id}`)).body[0].remaining).toBe("680.00");
   });
 });
+
+describe("za plakjanje - celi denari", () => {
+  it("avans so decimali e odbien pri izdavanje", async () => {
+    const [it] = await t.db.insert(items).values({ clientId: t.c1.id, code: "AVX", name: "Аванс", unit: "ком", unitPrice: "1000.42", vatRateId: t.vat18.id }).returning();
+    const line = { itemId: it!.id, description: "Аванс", unit: "ком", qty: 1, unitPrice: 1000.42, discountPct: 0, vatRateId: t.vat18.id };
+    const av = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, docType: "AV", issueDate: "2026-11-05", lines: [line] });
+    await call(ana, "POST", `/api/invoices/${av.body.id}/issue`);      // 1180,50
+    const inv = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-05",
+      advanceInvoiceId: av.body.id, advanceAmount: 1180.5, lines: [{ ...line, qty: 2 }] });
+    expect((await call(ana, "POST", `/api/invoices/${inv.body.id}/issue`)).body.message).toMatch(/цели денари/);
+  });
+});
+
+describe("PDF i postavki na klientot", () => {
+  it("samo admin gi menuva postavkite; PDF se vrakja kako application/pdf", async () => {
+    const body = { pdfSettings: { shortName: "MC ДООЕЛ", invoiceTitle: "Фактура-Испратница", bankAccounts: [{ account: "210076965310159", bank: "НЛБ Банка АД Скопје" }] } };
+    expect((await call(ana, "PATCH", `/api/clients/${t.c1.id}`, body)).status).toBe(403);
+    const r = await call(admin, "PATCH", `/api/clients/${t.c1.id}`, body);
+    expect(r.body.pdfSettings.shortName).toBe("MC ДООЕЛ");
+    const c = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-05",
+      lines: [{ description: "Услуга", unit: "ком", qty: 1, unitPrice: 270, discountPct: 0, vatRateId: t.vat18.id }] });
+    const pdf = await app.inject({ method: "GET", url: `/api/invoices/${c.body.id}/pdf`, headers: { cookie: ana } });
+    expect(pdf.statusCode).toBe(200);
+    expect(pdf.headers["content-type"]).toBe("application/pdf");
+    expect(pdf.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    // tug klient -> 404
+    const [foreign] = await t.db.insert(invoices).values({ clientId: t.c2.id, partnerId: t.p2.id, year: 2026, issueDate: "2026-11-05" }).returning();
+    expect((await app.inject({ method: "GET", url: `/api/invoices/${foreign!.id}/pdf`, headers: { cookie: ana } })).statusCode).toBe(404);
+  });
+});

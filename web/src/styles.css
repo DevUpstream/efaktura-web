@@ -184,3 +184,9 @@ label.check input { width: auto; min-height: 0; }
 .grid .center { text-align: center; }
 .grid input[type=checkbox] { width: 18px; height: 18px; min-height: 0; }
 .row-actions input { flex: 1; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 20px; margin: 0 0 16px; }
+.facts dt { font-size: 0.8rem; color: var(--muted); } .facts dd { margin: 0; }
+.banks { display: flex; flex-direction: column; gap: 8px; } .banks .lbl { font-size: 0.86rem; color: var(--muted); }
+.bank-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) 36px; gap: 8px; align-items: center; }
+.form-grid h2 { margin-top: 8px; }

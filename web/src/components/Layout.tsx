@@ -26,6 +26,7 @@ export function Layout() {
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
           <NavLink to={`/c/${client.id}/partners`}>Купувачи</NavLink>
           <NavLink to={`/c/${client.id}/items`}>Артикли и услуги</NavLink>
+          <NavLink to={`/c/${client.id}/settings`}>Поставки и PDF</NavLink>
           {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/admin`} className="menu-admin">Корисници и пристап</NavLink>}
         </nav>
         <div className="who">

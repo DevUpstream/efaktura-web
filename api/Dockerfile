@@ -24,6 +24,7 @@ COPY --from=api --chown=node:node /app/node_modules ./node_modules
 COPY --from=api --chown=node:node /app/dist ./dist
 COPY --from=web --chown=node:node /src/web/dist ./public
 COPY --chown=node:node api/drizzle ./drizzle
+COPY --chown=node:node api/assets ./assets
 COPY --chown=node:node api/package.json ./
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}

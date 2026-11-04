@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api, type ClientRef, type InvoiceRow, type Status } from "../api";
-import { DOC, STATUS, date, money } from "../format";
+import { DOC, STATUS, date, money0 } from "../format";
 import { UjpState } from "../components/UjpState";
 
 const FILTERS: { key: string; label: string; match: (s: Status) => boolean }[] = [
@@ -31,7 +31,7 @@ export function Invoices() {
     return (rows ?? []).filter((r) => f.match(r.status) &&
       (!needle || (r.number ?? "").toLowerCase().includes(needle) || r.buyerName.toLowerCase().includes(needle)));
   }, [rows, filter, q]);
-  const total = shown.filter((r) => r.status !== "draft").reduce((s, r) => s + Number(r.grossTotal), 0);
+  const total = shown.filter((r) => r.status !== "draft").reduce((s, r) => s + Number(r.payableAmount ?? Math.round(Number(r.grossTotal))), 0);
 
   return (
     <>
@@ -62,7 +62,7 @@ export function Invoices() {
         <div className="table-wrap">
           <table className="grid">
             <thead><tr>
-              <th>Број</th><th>Датум</th><th>Купувач</th><th className="num">Вкупно</th><th>Статус</th><th>УЈП</th>
+              <th>Број</th><th>Датум</th><th>Купувач</th><th className="num">За плаќање</th><th>Статус</th><th>УЈП</th>
             </tr></thead>
             <tbody>
               {shown.map((r) => (
@@ -75,13 +75,13 @@ export function Invoices() {
                   </td>
                   <td>{date(r.issueDate)}</td>
                   <td className="buyer">{r.buyerName}</td>
-                  <td className="num">{money(r.grossTotal)}</td>
+                  <td className="num">{money0(r.payableAmount ?? Math.round(Number(r.grossTotal)))}</td>
                   <td><span className={`chip st-${r.status}`}>{STATUS[r.status]}</span></td>
                   <td><UjpState r={r} /></td>
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr><td colSpan={3}>{shown.length} документи (без нацрти во збирот)</td><td className="num">{money(total)}</td><td colSpan={2} /></tr></tfoot>
+            <tfoot><tr><td colSpan={3}>{shown.length} документи (без нацрти во збирот)</td><td className="num">{money0(total)}</td><td colSpan={2} /></tr></tfoot>
           </table>
         </div>
       )}

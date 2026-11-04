@@ -74,6 +74,22 @@ export const users = pgTable("users", {
 
 /* ------------------------------------------------------------- klienti */
 
+/** Podatoci za zaglavjeto i podnozjeto na PDF fakturata (format od UPSTREAM fakturata 2026/10/11). */
+export interface PdfSettings {
+  shortName?: string;            // golem naziv, npr. "УПСТРЕАМ ДООЕЛ"
+  tagline?: string;              // nad nazivot, npr. "Друштво за производство, трговија и услуги"
+  subtitle?: string;             // pod nazivot, npr. "увоз-извоз Крива Паланка"
+  contactLine?: string;          // "upstream.mk | contact@upstream.mk | +389..."
+  addressLines?: string[];       // edna adresa po red; "**tekst**" = zadebeleno
+  bankAccounts?: { account: string; bank: string }[];
+  invoiceTitle?: string;         // naslov za obicna faktura, npr. "Фактура-Испратница"
+  signatory?: string;            // lice ovlasteno za potpisuvanje
+  paymentNote?: string;          // "Рок на плаќање: Најдоцна до наведениот рок за плаќање."
+  clausesTitle?: string;         // "УПСТРЕАМ ДООЕЛ го задржува правото ..."
+  receiverDeclaration?: string;  // izjava pod "Примил"
+  showReceivedBy?: boolean;      // "Примил (Име и Презиме, Потпис)" - za faktura-ispratnica
+}
+
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
   legacySpId: integer("legacy_sp_id").unique(),
@@ -92,6 +108,7 @@ export const clients = pgTable("clients", {
   phone: varchar("phone", { length: 50 }),
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
   invoiceClauses: text("invoice_clauses"),
+  pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),  // izgled na PDF fakturata (docs: Poставки на klientot)
   logoFileId: uuid("logo_file_id"),
   ujpRegistryAt: ts("ujp_registry_at"),              // "UJP ✓": polinjata od registarot se zaklucheni
   ujpRegistryNote: text("ujp_registry_note"),

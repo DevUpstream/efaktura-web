@@ -8,6 +8,7 @@ import { InvoiceEditor } from "./pages/InvoiceEditor";
 import { Partners } from "./pages/Partners";
 import { Items } from "./pages/Items";
 import { Admin } from "./pages/Admin";
+import { ClientSettings } from "./pages/ClientSettings";
 
 function Gate() {
   const { me } = useSession();
@@ -25,6 +26,7 @@ function Gate() {
         <Route path="partners" element={<Partners />} />
         <Route path="items" element={<Items />} />
         <Route path="admin" element={<Admin />} />
+        <Route path="settings" element={<ClientSettings />} />
         <Route index element={<Navigate to="invoices" replace />} />
       </Route>
       <Route path="*" element={first ? <Navigate to={`/c/${first.id}/invoices`} replace /> : <NoClients />} />

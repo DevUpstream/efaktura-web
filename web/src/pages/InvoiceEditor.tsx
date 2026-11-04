@@ -162,7 +162,8 @@ export function InvoiceEditor() {
           <Link to={inv ? "../../invoices" : "../invoices"} relative="path" className="back">← Фактури</Link>
           <h1>{inv?.number ?? (inv ? "Нацрт" : "Нова фактура")}{inv && inv.docType !== "INV" && <span className="doctype">{DOC[inv.docType]}</span>}</h1>
         </div>
-        {inv && <div className="head-state"><span className={`chip st-${inv.status}`}>{STATUS[inv.status]}</span><UjpState r={inv} /></div>}
+        {inv && <div className="head-state"><span className={`chip st-${inv.status}`}>{STATUS[inv.status]}</span><UjpState r={inv} />
+          <a className="btn" href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener" onClick={(e) => { if (dirty) { e.preventDefault(); setMsg({ kind: "err", text: "Прво зачувајте ги промените, па отворете PDF." }); } }}>PDF</a></div>}
       </header>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</p>}
       {inv?.ujpError && <p className="alert">УЈП: {inv.ujpError}</p>}
@@ -279,15 +280,15 @@ export function InvoiceEditor() {
             <label className="span2">Одбиј аванс
               {editable ? <select value={head.advanceId} onChange={(e) => {
                 const a = advances.find((x) => x.id === Number(e.target.value));
-                setHead((h) => ({ ...h, advanceId: a ? a.id : "", advanceAmount: a ? String(Math.min(Number(a.remaining), Math.round(Number(totals?.grossTotal ?? 0)))) : "" }));
+                setHead((h) => ({ ...h, advanceId: a ? a.id : "", advanceAmount: a ? String(Math.floor(Math.min(Number(a.remaining), Math.round(Number(totals?.grossTotal ?? 0))))) : "" }));
                 setDirty(true);
               }}>
                 <option value="">— без аванс —</option>
                 {advances.map((a) => <option key={a.id} value={a.id}>{a.number} од {date(a.issueDate)}, неискористено {money(a.remaining)}</option>)}
               </select> : <output>{inv?.advanceNumber}</output>}
             </label>
-            {head.advanceId !== "" && <label>Износ на авансот (со ДДВ)
-              {editable ? <input inputMode="decimal" value={head.advanceAmount} onChange={(e) => set("advanceAmount", e.target.value.replace(",", "."))} />
+            {head.advanceId !== "" && <label>Износ на авансот (со ДДВ, цели денари)
+              {editable ? <input inputMode="numeric" value={head.advanceAmount} onChange={(e) => set("advanceAmount", e.target.value.replace(/\D/g, ""))} />
                 : <output>{money(inv?.advanceAmount)}</output>}
             </label>}
           </div>

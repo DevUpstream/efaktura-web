@@ -8,6 +8,8 @@ import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { calcLine, calcTotals } from "../domain/calc.js";
 import { issueInvoice } from "../domain/issue.js";
+import { renderInvoicePdf } from "../domain/pdf.js";
+import { clients } from "../db/schema.js";
 import { assertClientAccess, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
@@ -169,6 +171,22 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const { u, inv } = await load(req);
     const r = await issueInvoice(db, inv.id, { userId: u.id, ip: req.ip });
     return { id: r.id, number: r.number, status: r.status };
+  });
+
+  /** PDF (format od clients.pdf_settings). Nacrtot ima voden zig "НАЦРТ". */
+  app.get("/api/invoices/:id/pdf", async (req, reply) => {
+    const { inv } = await load(req);
+    const lines = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, inv.id)).orderBy(asc(invoiceLines.lineNo));
+    const [client] = await db.select().from(clients).where(eq(clients.id, inv.clientId));
+    const rel = inv.relatedInvoiceId ? (await db.select().from(invoices).where(eq(invoices.id, inv.relatedInvoiceId)))[0] : undefined;
+    const adv = inv.advanceInvoiceId ? (await db.select().from(invoices).where(eq(invoices.id, inv.advanceInvoiceId)))[0] : undefined;
+    const ids = lines.map((l) => l.itemId).filter((x): x is number => !!x);
+    const codes = ids.length ? Object.fromEntries((await db.select({ id: items.id, code: items.code }).from(items).where(inArray(items.id, ids))).map((r) => [r.id, r.code])) : {};
+    const pdf = await renderInvoicePdf({ inv, lines, client: client!, relatedNumber: rel?.number, relatedDate: rel?.issueDate,
+      advanceNumber: adv?.number, itemCodes: codes });
+    const name = (inv.number ?? `nacrt-${inv.id}`).replace(/[^A-Za-z0-9._-]/g, "_");
+    return reply.header("content-type", "application/pdf").header("content-disposition", `inline; filename="${name}.pdf"`)
+      .header("cache-control", "private, no-store").send(pdf);
   });
 
   /** Od izdadena faktura: storno / knizno odobrenie / knizno zadolzuvanje / korekcija (kako vo Power Apps). */

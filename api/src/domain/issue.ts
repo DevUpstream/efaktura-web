@@ -88,6 +88,7 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
         const remaining = round(adv.grossTotal, 2).minus(agg?.used ?? 0);
         const amt = round(inv.advanceAmount ?? 0, 2);
         if (amt.lte(0)) errors.push("Износот на авансот мора да е поголем од 0.");
+        if (!amt.isInteger()) errors.push("Авансот се одбива во цели денари (за плаќање е секогаш без децимали).");
         if (amt.gt(remaining)) errors.push(`Авансот е поголем од неискористениот дел (${remaining.toFixed(2)}).`);
         if (amt.gt(round(totals.grossTotal, 0))) errors.push("Авансот е поголем од вкупниот износ на фактурата.");
       }

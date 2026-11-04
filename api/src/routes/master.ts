@@ -2,11 +2,11 @@
 import type { FastifyInstance } from "fastify";
 import { and, desc, eq, gt, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { z } from "zod";
-import { invoiceLines, invoices, items, partnerPrices, partners, ujpReasons, vatRates } from "../db/schema.js";
+import { clients, invoiceLines, invoices, items, partnerPrices, partners, ujpReasons, vatRates } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
-import { assertClientAccess, requireUser } from "../auth/context.js";
+import { assertClientAccess, requireAdmin, requireUser } from "../auth/context.js";
 
 export const Id = z.coerce.number().int().positive();
 const opt = (s: z.ZodString) => s.trim().max(300).optional().nullable().transform((v) => (v ? v : null));
@@ -55,6 +55,37 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.get("/api/ujp-reasons", async (req) => {
     requireUser(req);
     return db.select().from(ujpReasons).where(eq(ujpReasons.isActive, true)).orderBy(ujpReasons.code);
+  });
+
+  /* -------------------------------------------- klient: podatoci i PDF */
+  app.get("/api/clients/:clientId", async (req) => {
+    const { clientId } = await ctx(req);
+    const [c] = await db.select().from(clients).where(eq(clients.id, clientId));
+    return c;
+  });
+
+  const Txt = (max: number) => z.string().trim().max(max).optional();
+  const ClientPatch = z.object({
+    iban: z.string().trim().max(34).optional().nullable(), bankName: z.string().trim().max(200).optional().nullable(),
+    email: z.string().trim().max(254).optional().nullable(), phone: z.string().trim().max(50).optional().nullable(),
+    invoiceClauses: z.string().max(4000).optional().nullable(),
+    pdfSettings: z.object({
+      shortName: Txt(60), tagline: Txt(150), subtitle: Txt(150), contactLine: Txt(200),
+      addressLines: z.array(z.string().trim().max(200)).max(6).optional(),
+      bankAccounts: z.array(z.object({ account: z.string().trim().min(3).max(40), bank: z.string().trim().max(120) })).max(5).optional(),
+      invoiceTitle: Txt(40), signatory: Txt(120), paymentNote: Txt(300), clausesTitle: Txt(300), receiverDeclaration: Txt(500),
+      showReceivedBy: z.boolean().optional(),
+    }).optional(),
+  });
+  /** Samo administrator. Nazivot, EDB, adresata i DDV brojot doagjaat od registarot na UJP i ne se menuvaat tuka. */
+  app.patch("/api/clients/:clientId", async (req) => {
+    const u = requireAdmin(req);
+    const clientId = Id.parse((req.params as { clientId: string }).clientId);
+    const b = ClientPatch.parse(req.body);
+    const [c] = await db.update(clients).set(b).where(eq(clients.id, clientId)).returning();
+    if (!c) throw new DomainError("not_found", "Клиентот не постои.", 404);
+    await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "client", entityId: clientId, action: "update", changes: b });
+    return c;
   });
 
   /* ---------------------------------------------------------- kupuvaci */
