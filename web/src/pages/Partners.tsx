@@ -128,6 +128,7 @@ export function PartnerForm({ client, p, onDone, onCheck }: { client: ClientRef;
       {field("country", "Држава", { maxLength: 2, defaultValue: p?.country ?? "MK" })}
       {field("email", "Е-пошта", { type: "email" })}
       {field("phone", "Телефон")}
+      {field("bankAccount", "Жиро-сметка (за извод)")}
       <label className="check"><input type="checkbox" name="isActive" defaultChecked={p?.isActive ?? true} /> Активен</label>
       <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button>
         {onCheck && <button type="button" className="btn" onClick={onCheck}>Провери во УЈП</button>}

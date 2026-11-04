@@ -252,3 +252,25 @@ label.check input { width: auto; min-height: 0; }
 .prod-set { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 12px; }
 .cost-in { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .inline-unit { display: flex; align-items: center; gap: 8px; } .inline-unit input { max-width: 120px; }
+
+/* ------------------------------------------------------------ plakjanja */
+.aging { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; margin-bottom: 18px; }
+.aging .ag { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.aging .ag span { font-size: 0.8rem; color: var(--muted); }
+.aging .ag strong { font-variant-numeric: tabular-nums; font-size: 1.05rem; }
+.aging .ag.late strong { color: var(--err); }
+.aging .ag.total { background: var(--paper); } .aging .ag.total strong { font-size: 1.2rem; }
+@media (max-width: 800px) { .aging { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.late-amt, .late-amt dd { color: var(--err); }
+tr.sub > td { background: var(--paper); padding: 10px 16px 14px; }
+tr.sub .grid.compact { background: var(--surface); }
+.amt-in { width: 120px; text-align: right; }
+.pay-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.map-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.mono-in { font-family: ui-monospace, Consolas, monospace; font-size: 0.82rem; }
+.grid.sample td { white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; }
+.btn-small { padding: 4px 10px; font-size: 0.85rem; }
+.link.danger { color: var(--err); }
+.void-inline { display: inline-flex; gap: 6px; align-items: center; } .void-inline input { width: 160px; }
+.small-totals div { padding: 4px 0; }
+@media (max-width: 700px) { .pay-grid { grid-template-columns: 1fr 1fr; } }

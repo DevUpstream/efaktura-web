@@ -13,6 +13,7 @@ import { Clients } from "./pages/Clients";
 import { PartnerCard } from "./pages/PartnerCard";
 import { Followups } from "./pages/Followups";
 import { PurchaseEditor, Purchases } from "./pages/Purchases";
+import { OpenItems, PaymentsList, StatementImport } from "./pages/Payments";
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
 import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 
@@ -40,6 +41,10 @@ function Gate() {
         <Route path="stock/docs" element={<StockDocs />} />
         <Route path="stock/docs/new" element={<StockDocNew />} />
         <Route path="stock/docs/:docId" element={<StockDocView />} />
+        <Route path="payments" element={<OpenItems direction="in" />} />
+        <Route path="payments/out" element={<OpenItems direction="out" />} />
+        <Route path="payments/list" element={<PaymentsList />} />
+        <Route path="payments/import" element={<StatementImport />} />
         <Route path="production" element={<WorkOrders />} />
         <Route path="production/new" element={<WorkOrderEditor />} />
         <Route path="production/:id" element={<WorkOrderEditor />} />

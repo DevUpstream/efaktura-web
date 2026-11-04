@@ -38,6 +38,7 @@ export function Layout() {
         <nav className="menu">
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
           {client.modules.includes("incoming") && <NavLink to={`/c/${client.id}/purchases`}>Влезни фактури</NavLink>}
+          {client.modules.includes("payments") && <NavLink to={`/c/${client.id}/payments`}>Плаќања и наплата</NavLink>}
           {client.modules.includes("warehouse") && <NavLink to={`/c/${client.id}/stock`}>Магацин</NavLink>}
           {client.modules.includes("production") && <NavLink to={`/c/${client.id}/production`}>Производство</NavLink>}
           <NavLink to={`/c/${client.id}/partners`}>{client.modules.includes("incoming") ? "Купувачи и добавувачи" : "Купувачи"}</NavLink>
