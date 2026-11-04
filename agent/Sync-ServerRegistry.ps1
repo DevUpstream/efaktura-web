@@ -39,7 +39,8 @@ $cfg = Import-PowerShellDataFile $ConfigPath
 if (-not $cfg.AllowProduction -and $cfg.ApiBaseUrl -notmatch 'efakturatest\.') { throw "Конфигурацијата не покажува кон тест околината на УЈП." }
 if (-not $ServerUrl) { $ServerUrl = if ($cfg.ServerUrl) { $cfg.ServerUrl } else { "https://92-5-149-62.sslip.io" } }
 if (-not (Test-Path $KeyFile)) { throw "Нема клуч за серверот. Пушти: .\Sync-ServerRegistry.ps1 -SetKey" }
-$key = [Net.NetworkCredential]::new("", (Get-Content $KeyFile -Raw).Trim() | ConvertTo-SecureString).Password
+$sec = (Get-Content $KeyFile -Raw).Trim() | ConvertTo-SecureString
+$key = [Net.NetworkCredential]::new("", $sec).Password
 $Headers = @{ "x-agent-key" = $key; "x-efaktura" = "1" }
 
 function Invoke-Server([string]$Method, [string]$Path, $Body) {
