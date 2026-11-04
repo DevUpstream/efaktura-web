@@ -1,0 +1,4134 @@
+{
+ "exportedAt": "2026-11-04T14:46:41+01:00",
+ "site": "https://example.sharepoint.com/sites/eFaktura",
+ "lists": {
+  "Clients": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Назив",
+     "type": "Text"
+    },
+    {
+     "name": "Edb",
+     "title": "ЕДБ",
+     "type": "Text"
+    },
+    {
+     "name": "Embs",
+     "title": "ЕМБС",
+     "type": "Text"
+    },
+    {
+     "name": "VatNumber",
+     "title": "ДДВ број",
+     "type": "Text"
+    },
+    {
+     "name": "VatPayer",
+     "title": "ДДВ обврзник",
+     "type": "Boolean"
+    },
+    {
+     "name": "Address",
+     "title": "Адреса",
+     "type": "Text"
+    },
+    {
+     "name": "City",
+     "title": "Град",
+     "type": "Text"
+    },
+    {
+     "name": "PostalCode",
+     "title": "Поштенски број",
+     "type": "Text"
+    },
+    {
+     "name": "Country",
+     "title": "Држава",
+     "type": "Text"
+    },
+    {
+     "name": "Iban",
+     "title": "Жиро-сметка",
+     "type": "Text"
+    },
+    {
+     "name": "BankName",
+     "title": "Банка",
+     "type": "Text"
+    },
+    {
+     "name": "Email",
+     "title": "Е-пошта",
+     "type": "Text"
+    },
+    {
+     "name": "Phone",
+     "title": "Телефон",
+     "type": "Text"
+    },
+    {
+     "name": "InvoicePrefix",
+     "title": "Префикс за фактури",
+     "type": "Text"
+    },
+    {
+     "name": "LogoPath",
+     "title": "Лого (патека)",
+     "type": "Text"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активен",
+     "type": "Boolean"
+    },
+    {
+     "name": "InvoiceClauses",
+     "title": "Клаузули на фактура",
+     "type": "Note"
+    },
+    {
+     "name": "UjpRegistryAt",
+     "title": "Проверено во регистар на УЈП",
+     "type": "DateTime"
+    },
+    {
+     "name": "UjpRegistryNote",
+     "title": "Регистар на УЈП – белешка",
+     "type": "Note"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "ТЕСТ Клиент А ДООЕЛ",
+     "Edb": "9999999999991",
+     "Embs": "9999991",
+     "VatNumber": "MK9999999999991",
+     "VatPayer": true,
+     "Address": "ул. Тестна бр. 1",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Iban": "999000000000001",
+     "BankName": "Тест банка",
+     "Email": "test-a@example.com",
+     "Phone": null,
+     "InvoicePrefix": "TA",
+     "LogoPath": null,
+     "IsActive": true,
+     "InvoiceClauses": null,
+     "UjpRegistryAt": "2026-11-03T15:19:52+01:00",
+     "UjpRegistryNote": "Не е најден во регистарот на УЈП (03.11.2026)",
+     "ID": 1,
+     "Modified": "2026-10-31T09:55:49+01:00",
+     "Created": "2026-10-31T09:55:49+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Клиент Б ДОО",
+     "Edb": "9999999999992",
+     "Embs": "9999992",
+     "VatNumber": null,
+     "VatPayer": false,
+     "Address": "ул. Тестна бр. 2",
+     "City": "Битола",
+     "PostalCode": "7000",
+     "Country": "MK",
+     "Iban": "999000000000002",
+     "BankName": "Тест банка",
+     "Email": "test-b@example.com",
+     "Phone": null,
+     "InvoicePrefix": "TB",
+     "LogoPath": null,
+     "IsActive": true,
+     "InvoiceClauses": null,
+     "UjpRegistryAt": "2026-11-03T15:19:53+01:00",
+     "UjpRegistryNote": "Не е најден во регистарот на УЈП (03.11.2026)",
+     "ID": 2,
+     "Modified": "2026-10-31T09:55:50+01:00",
+     "Created": "2026-10-31T09:55:50+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ",
+     "Edb": "4030994180119",
+     "Embs": "4878256",
+     "VatNumber": "МК4030994180119",
+     "VatPayer": true,
+     "Address": "НИКОЛА ПАРАПУНОВ 41А",
+     "City": "СКОПЈЕ-КАРПОШ",
+     "PostalCode": "1020",
+     "Country": "MK",
+     "Iban": null,
+     "BankName": null,
+     "Email": null,
+     "Phone": null,
+     "InvoicePrefix": "MC",
+     "LogoPath": null,
+     "IsActive": true,
+     "InvoiceClauses": null,
+     "UjpRegistryAt": "2026-11-03T15:19:55+01:00",
+     "UjpRegistryNote": "Ажурирано од регистарот на УЈП 03.11.2026 15:19: Embs: «» → «4878256»",
+     "ID": 3,
+     "Modified": "2026-11-03T15:19:56+01:00",
+     "Created": "2026-11-03T13:55:46+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "УПСТРЕАМ Д.О.О.Е.Л. УВОЗ-ИЗВОЗ КРИВА ПАЛАНКА",
+     "Edb": "4015023508550",
+     "Embs": "7696531",
+     "VatNumber": "МК4015023508550",
+     "VatPayer": true,
+     "Address": "СВ.ЈОАКИМ ОСОГОВСКИ 69/9/-",
+     "City": "КРИВА ПАЛАНКА",
+     "PostalCode": "1330",
+     "Country": "MK",
+     "Iban": "MK4015023508550",
+     "BankName": null,
+     "Email": null,
+     "Phone": null,
+     "InvoicePrefix": "UPSTRI",
+     "LogoPath": null,
+     "IsActive": true,
+     "InvoiceClauses": null,
+     "UjpRegistryAt": "2026-11-03T15:19:56+01:00",
+     "UjpRegistryNote": "Ажурирано од регистарот на УЈП 03.11.2026 15:19: Embs: «» → «7696531»",
+     "ID": 4,
+     "Modified": "2026-11-03T16:04:07+01:00",
+     "Created": "2026-11-03T14:53:56+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  },
+  "ClientAccess": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Белешка",
+     "type": "Text"
+    },
+    {
+     "name": "Accountant",
+     "title": "Сметководител",
+     "type": "User"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активен",
+     "type": "Boolean"
+    },
+    {
+     "name": "ClientRef",
+     "title": "Клиент",
+     "type": "Lookup"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "Тест пристап",
+     "Accountant": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 1,
+     "Modified": "2026-10-31T09:55:52+01:00",
+     "Created": "2026-10-31T09:55:52+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Тест пристап",
+     "Accountant": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 2,
+     "Modified": "2026-10-31T09:55:54+01:00",
+     "Created": "2026-10-31T09:55:54+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Тест пристап (Studio)",
+     "Accountant": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 3,
+     "Modified": "2026-10-31T10:14:08+01:00",
+     "Created": "2026-10-31T10:14:08+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Тест пристап (Studio)",
+     "Accountant": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 4,
+     "Modified": "2026-10-31T10:14:08+01:00",
+     "Created": "2026-10-31T10:14:08+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Пристап",
+     "Accountant": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "ID": 5,
+     "Modified": "2026-11-03T13:55:49+01:00",
+     "Created": "2026-11-03T13:55:49+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Пристап (Studio)",
+     "Accountant": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "ID": 6,
+     "Modified": "2026-11-03T14:21:05+01:00",
+     "Created": "2026-11-03T14:21:05+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Пристап",
+     "Accountant": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 4,
+      "value": "УПСТРЕАМ Д.О.О.Е.Л. УВОЗ-ИЗВОЗ КРИВА ПАЛАНКА"
+     },
+     "ClientNo": 4.0,
+     "ID": 7,
+     "Modified": "2026-11-03T14:53:57+01:00",
+     "Created": "2026-11-03T14:53:57+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Пристап",
+     "Accountant": {
+      "id": 12,
+      "email": "goran@example.mk",
+      "name": "goran"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 4,
+      "value": "УПСТРЕАМ Д.О.О.Е.Л. УВОЗ-ИЗВОЗ КРИВА ПАЛАНКА"
+     },
+     "ClientNo": 4.0,
+     "ID": 8,
+     "Modified": "2026-11-03T16:03:55+01:00",
+     "Created": "2026-11-03T16:03:55+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Пристап",
+     "Accountant": {
+      "id": 12,
+      "email": "goran@example.mk",
+      "name": "goran"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 9,
+     "Modified": "2026-11-03T16:09:19+01:00",
+     "Created": "2026-11-03T16:09:19+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Пристап",
+     "Accountant": {
+      "id": 12,
+      "email": "goran@example.mk",
+      "name": "goran"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 10,
+     "Modified": "2026-11-03T16:09:27+01:00",
+     "Created": "2026-11-03T16:09:27+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  },
+  "VatRates": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Назив",
+     "type": "Text"
+    },
+    {
+     "name": "Code",
+     "title": "Шифра",
+     "type": "Text"
+    },
+    {
+     "name": "UjpCode",
+     "title": "Даночен индикатор (УЈП)",
+     "type": "Text"
+    },
+    {
+     "name": "RatePct",
+     "title": "Стапка %",
+     "type": "Number"
+    },
+    {
+     "name": "IsExempt",
+     "title": "Ослободување",
+     "type": "Boolean"
+    },
+    {
+     "name": "LegalBasis",
+     "title": "Правен основ",
+     "type": "Note"
+    },
+    {
+     "name": "ValidFrom",
+     "title": "Важи од",
+     "type": "DateTime"
+    },
+    {
+     "name": "ValidTo",
+     "title": "Важи до",
+     "type": "DateTime"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активна",
+     "type": "Boolean"
+    },
+    {
+     "name": "VatGroup",
+     "title": "Даночна група (УЈП)",
+     "type": "Choice"
+    },
+    {
+     "name": "VatImpact",
+     "title": "Влијание врз ДДВ (УЈП)",
+     "type": "Choice"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "Општа стапка 18%",
+     "Code": "S18",
+     "UjpCode": "DDV-A",
+     "RatePct": 18.0,
+     "IsExempt": false,
+     "LegalBasis": "ЗДДВ – општа стапка. Да се потврди.",
+     "ValidFrom": "2000-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-A",
+     "VatImpact": "STANDARD",
+     "ID": 1,
+     "Modified": "2026-10-31T09:55:42+01:00",
+     "Created": "2026-10-31T09:55:42+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Повластена стапка 10% (угостителски услуги)",
+     "Code": "R10",
+     "UjpCode": "DDV-V",
+     "RatePct": 10.0,
+     "IsExempt": false,
+     "LegalBasis": "ЗДДВ – стапка за угостителски услуги. Да се потврди.",
+     "ValidFrom": "2023-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-V",
+     "VatImpact": "STANDARD",
+     "ID": 2,
+     "Modified": "2026-10-31T09:55:43+01:00",
+     "Created": "2026-10-31T09:55:43+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Повластена стапка 5%",
+     "Code": "R5",
+     "UjpCode": "DDV-B",
+     "RatePct": 5.0,
+     "IsExempt": false,
+     "LegalBasis": "ЗДДВ – повластена стапка. Да се потврди.",
+     "ValidFrom": "2000-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-B",
+     "VatImpact": "STANDARD",
+     "ID": 3,
+     "Modified": "2026-10-31T09:55:45+01:00",
+     "Created": "2026-10-31T09:55:45+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Ослободено со право на одбивка (0%)",
+     "Code": "Z0",
+     "UjpCode": null,
+     "RatePct": 0.0,
+     "IsExempt": true,
+     "LegalBasis": "ЗДДВ – ослободување со право на одбивка (на пр. извоз). Да се наведе член.",
+     "ValidFrom": "2000-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-G",
+     "VatImpact": null,
+     "ID": 4,
+     "Modified": "2026-10-31T09:55:46+01:00",
+     "Created": "2026-10-31T09:55:46+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Ослободено без право на одбивка (0%)",
+     "Code": "E0",
+     "UjpCode": null,
+     "RatePct": 0.0,
+     "IsExempt": true,
+     "LegalBasis": "ЗДДВ – ослободување без право на одбивка. Да се наведе член.",
+     "ValidFrom": "2000-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-G",
+     "VatImpact": null,
+     "ID": 5,
+     "Modified": "2026-10-31T09:55:47+01:00",
+     "Created": "2026-10-31T09:55:47+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Не е ДДВ обврзник",
+     "Code": "NP",
+     "UjpCode": "DDV-G",
+     "RatePct": 0.0,
+     "IsExempt": true,
+     "LegalBasis": "ДДВ не е пресметан согласно член 51 став 3 од ЗДДВ (шифрарник на УЈП, DDV-G).",
+     "ValidFrom": "2000-01-01T01:00:00+01:00",
+     "ValidTo": null,
+     "IsActive": true,
+     "VatGroup": "DDV-G",
+     "VatImpact": "NULA",
+     "ID": 6,
+     "Modified": "2026-11-01T11:43:03+01:00",
+     "Created": "2026-11-01T11:43:03+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    }
+   ]
+  },
+  "Partners": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Назив",
+     "type": "Text"
+    },
+    {
+     "name": "PartnerKey",
+     "title": "Клуч (систем)",
+     "type": "Text"
+    },
+    {
+     "name": "Edb",
+     "title": "ЕДБ",
+     "type": "Text"
+    },
+    {
+     "name": "Embs",
+     "title": "ЕМБС",
+     "type": "Text"
+    },
+    {
+     "name": "VatNumber",
+     "title": "ДДВ број",
+     "type": "Text"
+    },
+    {
+     "name": "Address",
+     "title": "Адреса",
+     "type": "Text"
+    },
+    {
+     "name": "City",
+     "title": "Град",
+     "type": "Text"
+    },
+    {
+     "name": "PostalCode",
+     "title": "Поштенски број",
+     "type": "Text"
+    },
+    {
+     "name": "Country",
+     "title": "Држава",
+     "type": "Text"
+    },
+    {
+     "name": "Email",
+     "title": "Е-пошта",
+     "type": "Text"
+    },
+    {
+     "name": "Phone",
+     "title": "Телефон",
+     "type": "Text"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активен",
+     "type": "Boolean"
+    },
+    {
+     "name": "ClientRef",
+     "title": "Клиент",
+     "type": "Lookup"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "UjpRegistryAt",
+     "title": "Проверено во регистар на УЈП",
+     "type": "DateTime"
+    },
+    {
+     "name": "UjpRegistryNote",
+     "title": "Регистар на УЈП – белешка",
+     "type": "Note"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "ТЕСТ Купувач 1 (TA)",
+     "PartnerKey": "1-8888888888881",
+     "Edb": "8888888888881",
+     "Embs": null,
+     "VatNumber": "MK8888888888881",
+     "Address": "ул. Купувачка бр. 1",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 1,
+     "Modified": "2026-10-31T09:55:56+01:00",
+     "Created": "2026-10-31T09:55:56+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Купувач 2 (TA)",
+     "PartnerKey": "1-8888888888882",
+     "Edb": "8888888888882",
+     "Embs": null,
+     "VatNumber": "MK8888888888882",
+     "Address": "ул. Купувачка бр. 2",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 2,
+     "Modified": "2026-10-31T09:55:57+01:00",
+     "Created": "2026-10-31T09:55:57+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Купувач 1 (TB)1",
+     "PartnerKey": "2-8888888888881",
+     "Edb": "8888888888881",
+     "Embs": null,
+     "VatNumber": "MK8888888888881",
+     "Address": "ул. Купувачка бр. 1",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 3,
+     "Modified": "2026-11-01T10:07:39+01:00",
+     "Created": "2026-10-31T09:56:02+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Купувач 2 (TB)",
+     "PartnerKey": "2-8888888888882",
+     "Edb": "8888888888882",
+     "Embs": null,
+     "VatNumber": "MK8888888888882",
+     "Address": "ул. Купувачка бр. 2",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 4,
+     "Modified": "2026-10-31T09:56:04+01:00",
+     "Created": "2026-10-31T09:56:04+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Пренос ДООЕЛ",
+     "PartnerKey": "1-4030000000001",
+     "Edb": "4030000000001",
+     "Embs": "7000001",
+     "VatNumber": "MK4030000000001",
+     "Address": "ул. Пробна бр. 5",
+     "City": "Охрид",
+     "PostalCode": "6000",
+     "Country": "MK",
+     "Email": "test@primer.mk",
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 5,
+     "Modified": "2026-10-31T17:04:25+01:00",
+     "Created": "2026-10-31T17:04:25+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Пренос ДООЕЛ",
+     "PartnerKey": "2-4030000000001",
+     "Edb": "4030000000001",
+     "Embs": "7000001",
+     "VatNumber": "MK4030000000001",
+     "Address": "ул. Пробна бр. 5",
+     "City": "Охрид",
+     "PostalCode": "6000",
+     "Country": "MK",
+     "Email": "test@primer.mk",
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 6,
+     "Modified": "2026-10-31T17:04:56+01:00",
+     "Created": "2026-10-31T17:04:56+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Тест компанија 2",
+     "PartnerKey": "3-4001235555678",
+     "Edb": "4001235555678",
+     "Embs": "4667788",
+     "VatNumber": null,
+     "Address": "ул. Тест адреса за тест компанија 2 245",
+     "City": "Скопје",
+     "PostalCode": "1000",
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "UjpRegistryAt": "2026-11-03T15:19:59+01:00",
+     "UjpRegistryNote": "Ажурирано од регистарот на УЈП 03.11.2026 15:19: Embs: «» → «4667788»",
+     "ID": 7,
+     "Modified": "2026-11-03T15:20:01+01:00",
+     "Created": "2026-11-03T13:58:28+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "TTK",
+     "PartnerKey": "4-4013002115319",
+     "Edb": "4013002115319",
+     "Embs": null,
+     "VatNumber": "MK4013002115319",
+     "Address": null,
+     "City": null,
+     "PostalCode": null,
+     "Country": "MK",
+     "Email": null,
+     "Phone": null,
+     "IsActive": true,
+     "ClientRef": {
+      "id": 4,
+      "value": "УПСТРЕАМ Д.О.О.Е.Л. УВОЗ-ИЗВОЗ КРИВА ПАЛАНКА"
+     },
+     "ClientNo": 4.0,
+     "UjpRegistryAt": null,
+     "UjpRegistryNote": null,
+     "ID": 8,
+     "Modified": "2026-11-03T16:05:38+01:00",
+     "Created": "2026-11-03T16:05:38+01:00",
+     "Author": {
+      "id": 12,
+      "email": "goran@example.mk",
+      "name": "goran"
+     },
+     "Editor": {
+      "id": 12,
+      "email": "goran@example.mk",
+      "name": "goran"
+     }
+    }
+   ]
+  },
+  "Items": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Назив",
+     "type": "Text"
+    },
+    {
+     "name": "Code",
+     "title": "Шифра",
+     "type": "Text"
+    },
+    {
+     "name": "ItemKey",
+     "title": "Клуч (систем)",
+     "type": "Text"
+    },
+    {
+     "name": "ItemType",
+     "title": "Тип",
+     "type": "Choice"
+    },
+    {
+     "name": "Unit",
+     "title": "Единица мерка",
+     "type": "Text"
+    },
+    {
+     "name": "UnitPrice",
+     "title": "Цена без ДДВ",
+     "type": "Number"
+    },
+    {
+     "name": "VatRateId",
+     "title": "ДДВ стапка",
+     "type": "Lookup"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активен",
+     "type": "Boolean"
+    },
+    {
+     "name": "ClientRef",
+     "title": "Клиент",
+     "type": "Lookup"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "Code": "USL-01",
+     "ItemKey": "1-USL-01",
+     "ItemType": "Услуга",
+     "Unit": "час",
+     "UnitPrice": 1500.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 1,
+     "Modified": "2026-10-31T09:55:59+01:00",
+     "Created": "2026-10-31T09:55:59+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "Code": "PRD-01",
+     "ItemKey": "1-PRD-01",
+     "ItemType": "Производ",
+     "Unit": "ком",
+     "UnitPrice": 250.5,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 2,
+     "Modified": "2026-10-31T09:56:01+01:00",
+     "Created": "2026-10-31T09:56:01+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "Code": "USL-01",
+     "ItemKey": "2-USL-01",
+     "ItemType": "Услуга",
+     "Unit": "час",
+     "UnitPrice": 1500.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 3,
+     "Modified": "2026-10-31T09:56:05+01:00",
+     "Created": "2026-10-31T09:56:05+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "Code": "PRD-01",
+     "ItemKey": "2-PRD-01",
+     "ItemType": "Производ",
+     "Unit": "ком",
+     "UnitPrice": 250.5,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 4,
+     "Modified": "2026-10-31T09:56:07+01:00",
+     "Created": "2026-10-31T09:56:07+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "ТЕСТ Консултација",
+     "Code": "TST-01",
+     "ItemKey": "2-TST-01",
+     "ItemType": "Услуга",
+     "Unit": "час",
+     "UnitPrice": 1234.5,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 5,
+     "Modified": "2026-10-31T17:14:08+01:00",
+     "Created": "2026-10-31T17:14:08+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Тест услуга (УЈП)",
+     "Code": "TEST-UJP",
+     "ItemKey": "3-TEST-UJP",
+     "ItemType": "Услуга",
+     "Unit": "ком",
+     "UnitPrice": 100.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "IsActive": true,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "ID": 6,
+     "Modified": "2026-11-03T13:55:52+01:00",
+     "Created": "2026-11-03T13:55:52+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    }
+   ]
+  },
+  "PartnerPrices": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Опис (купувач – артикл)",
+     "type": "Text"
+    },
+    {
+     "name": "PriceKey",
+     "title": "Клуч (систем)",
+     "type": "Text"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "PartnerNo",
+     "title": "Купувач (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ItemNo",
+     "title": "Артикл (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "Price",
+     "title": "Цена без ДДВ",
+     "type": "Number"
+    },
+    {
+     "name": "ValidFrom",
+     "title": "Важи од",
+     "type": "DateTime"
+    },
+    {
+     "name": "ValidTo",
+     "title": "Важи до",
+     "type": "DateTime"
+    },
+    {
+     "name": "Note",
+     "title": "Забелешка / договор",
+     "type": "Note"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "ТЕСТ Купувач 1 (TA) – ТЕСТ Сметководствена услуга",
+     "PriceKey": "C1-P1-I1-20261102",
+     "ClientNo": 1.0,
+     "PartnerNo": 1.0,
+     "ItemNo": 1.0,
+     "Price": 1200.0,
+     "ValidFrom": "2026-11-02T00:00:00+01:00",
+     "ValidTo": "2099-12-31T00:00:00+01:00",
+     "Note": "ТЕСТ договор",
+     "ID": 1,
+     "Modified": "2026-11-02T10:06:42+01:00",
+     "Created": "2026-11-02T10:06:42+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  },
+  "Invoices": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Број на фактура",
+     "type": "Text"
+    },
+    {
+     "name": "NumberKey",
+     "title": "Клуч за нумерација",
+     "type": "Text"
+    },
+    {
+     "name": "PartnerId",
+     "title": "Купувач",
+     "type": "Lookup"
+    },
+    {
+     "name": "DocType",
+     "title": "Вид документ",
+     "type": "Choice"
+    },
+    {
+     "name": "InvoiceYear",
+     "title": "Година",
+     "type": "Number"
+    },
+    {
+     "name": "SeqNo",
+     "title": "Реден број",
+     "type": "Number"
+    },
+    {
+     "name": "IssueDate",
+     "title": "Датум на издавање",
+     "type": "DateTime"
+    },
+    {
+     "name": "SupplyDate",
+     "title": "Датум на промет",
+     "type": "DateTime"
+    },
+    {
+     "name": "DueDate",
+     "title": "Рок за плаќање",
+     "type": "DateTime"
+    },
+    {
+     "name": "Currency",
+     "title": "Валута",
+     "type": "Text"
+    },
+    {
+     "name": "ExchangeRate",
+     "title": "Курс",
+     "type": "Number"
+    },
+    {
+     "name": "NetTotal",
+     "title": "Основица",
+     "type": "Number"
+    },
+    {
+     "name": "VatTotal",
+     "title": "ДДВ вкупно",
+     "type": "Number"
+    },
+    {
+     "name": "GrossTotal",
+     "title": "За плаќање",
+     "type": "Number"
+    },
+    {
+     "name": "LineCount",
+     "title": "Број на ставки",
+     "type": "Number"
+    },
+    {
+     "name": "Status",
+     "title": "Статус",
+     "type": "Choice"
+    },
+    {
+     "name": "StatusMessage",
+     "title": "Порака од системот",
+     "type": "Note"
+    },
+    {
+     "name": "BuyerName",
+     "title": "Купувач – назив",
+     "type": "Text"
+    },
+    {
+     "name": "BuyerEdb",
+     "title": "Купувач – ЕДБ",
+     "type": "Text"
+    },
+    {
+     "name": "BuyerVatNumber",
+     "title": "Купувач – ДДВ број",
+     "type": "Text"
+    },
+    {
+     "name": "BuyerAddress",
+     "title": "Купувач – адреса",
+     "type": "Text"
+    },
+    {
+     "name": "BuyerCity",
+     "title": "Купувач – град",
+     "type": "Text"
+    },
+    {
+     "name": "BuyerCountry",
+     "title": "Купувач – држава",
+     "type": "Text"
+    },
+    {
+     "name": "SellerName",
+     "title": "Продавач – назив",
+     "type": "Text"
+    },
+    {
+     "name": "SellerEdb",
+     "title": "Продавач – ЕДБ",
+     "type": "Text"
+    },
+    {
+     "name": "SellerVatNumber",
+     "title": "Продавач – ДДВ број",
+     "type": "Text"
+    },
+    {
+     "name": "SellerAddress",
+     "title": "Продавач – адреса",
+     "type": "Text"
+    },
+    {
+     "name": "SellerIban",
+     "title": "Продавач – жиро-сметка",
+     "type": "Text"
+    },
+    {
+     "name": "SellerBank",
+     "title": "Продавач – банка",
+     "type": "Text"
+    },
+    {
+     "name": "IssuedBy",
+     "title": "Издал",
+     "type": "User"
+    },
+    {
+     "name": "IssuedAt",
+     "title": "Време на издавање",
+     "type": "DateTime"
+    },
+    {
+     "name": "UjpId",
+     "title": "Идентификатор од УЈП",
+     "type": "Text"
+    },
+    {
+     "name": "UjpTimestamp",
+     "title": "Временски жиг од УЈП",
+     "type": "DateTime"
+    },
+    {
+     "name": "RelatedInvoiceId",
+     "title": "Поврзана фактура",
+     "type": "Lookup"
+    },
+    {
+     "name": "PdfUrl",
+     "title": "PDF",
+     "type": "URL"
+    },
+    {
+     "name": "JsonUrl",
+     "title": "JSON",
+     "type": "URL"
+    },
+    {
+     "name": "Note",
+     "title": "Забелешка / правен основ",
+     "type": "Note"
+    },
+    {
+     "name": "ClientRef",
+     "title": "Клиент",
+     "type": "Lookup"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "PaymentMethod",
+     "title": "Начин на плаќање",
+     "type": "Choice"
+    },
+    {
+     "name": "Clauses",
+     "title": "Клаузули (подножје)",
+     "type": "Note"
+    },
+    {
+     "name": "CorrectionReason",
+     "title": "Причина за корекција/сторно",
+     "type": "Note"
+    },
+    {
+     "name": "RelatedNo",
+     "title": "Поврзана фактура (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "RelatedTitle",
+     "title": "Поврзана фактура – број",
+     "type": "Text"
+    },
+    {
+     "name": "RelatedIssueDate",
+     "title": "Поврзана фактура – датум",
+     "type": "DateTime"
+    },
+    {
+     "name": "UjpQrLink",
+     "title": "УЈП – линк за QR",
+     "type": "Text"
+    },
+    {
+     "name": "UjpStatusCode",
+     "title": "УЈП – шифра на статус",
+     "type": "Text"
+    },
+    {
+     "name": "UjpStatusName",
+     "title": "УЈП – статус",
+     "type": "Text"
+    },
+    {
+     "name": "UjpSentAt",
+     "title": "УЈП – испратено",
+     "type": "DateTime"
+    },
+    {
+     "name": "UjpError",
+     "title": "УЈП – последна грешка",
+     "type": "Note"
+    },
+    {
+     "name": "VoidReasonCode",
+     "title": "Шифра на причина за сторно (УЈП)",
+     "type": "Text"
+    },
+    {
+     "name": "CorrectionReasonCode",
+     "title": "Шифра на причина за корекција (УЈП)",
+     "type": "Text"
+    },
+    {
+     "name": "AdvanceInvoiceNo",
+     "title": "Авансна фактура (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "AdvanceAmount",
+     "title": "Одбиен аванс",
+     "type": "Number"
+    },
+    {
+     "name": "PayableAmount",
+     "title": "За плаќање (заокружено)",
+     "type": "Number"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "TA-2026-00001",
+     "NumberKey": "INV-1-2026-00001",
+     "PartnerId": {
+      "id": 1,
+      "value": "ТЕСТ Купувач 1 (TA)"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-10-31T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-15T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 1500.0,
+     "VatTotal": 270.0,
+     "GrossTotal": 1770.0,
+     "LineCount": 1.0,
+     "Status": "Сторнирана",
+     "StatusMessage": "Сторнирана со TA-ST-2026-00001",
+     "BuyerName": "ТЕСТ Купувач 1 (TA)",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-10-31T16:07:55+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": null,
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 4,
+     "Modified": "2026-10-31T21:11:25+01:00",
+     "Created": "2026-10-31T16:07:38+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TB-2026-00001",
+     "NumberKey": "INV-2-2026-00001",
+     "PartnerId": {
+      "id": 3,
+      "value": "ТЕСТ Купувач 1 (TB)1"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-10-31T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-15T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 250.5,
+     "VatTotal": 0.0,
+     "GrossTotal": 250.5,
+     "LineCount": 1.0,
+     "Status": "Сторнирана",
+     "StatusMessage": "Сторнирана со TB-ST-2026-00001",
+     "BuyerName": "ТЕСТ Купувач 1 (TB)",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент Б ДОО",
+     "SellerEdb": "9999999999992",
+     "SellerVatNumber": null,
+     "SellerAddress": "ул. Тестна бр. 2, Битола",
+     "SellerIban": "999000000000002",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-10-31T16:11:24+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": "https://fkkvidi.sharepoint.com/sites/eFaktura/InvoiceFiles/TB-2026-00001.pdf",
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "PaymentMethod": null,
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 5,
+     "Modified": "2026-11-02T09:36:00+01:00",
+     "Created": "2026-10-31T16:11:13+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-2026-00002",
+     "NumberKey": "INV-1-2026-00002",
+     "PartnerId": {
+      "id": 2,
+      "value": "ТЕСТ Купувач 2 (TA)"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 2.0,
+     "IssueDate": "2026-10-31T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-15T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 18231.75,
+     "VatTotal": 2842.09,
+     "GrossTotal": 21073.84,
+     "LineCount": 2.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 2 (TA)",
+     "BuyerEdb": "8888888888882",
+     "BuyerVatNumber": "MK8888888888882",
+     "BuyerAddress": "ул. Купувачка бр. 2",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-10-31T17:24:50+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": "https://fkkvidi.sharepoint.com/sites/eFaktura/InvoiceFiles/TA-2026-00002.pdf",
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": null,
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 6,
+     "Modified": "2026-10-31T17:25:16+01:00",
+     "Created": "2026-10-31T17:24:43+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-OD-2026-00001",
+     "NumberKey": "OD-1-2026-00001",
+     "PartnerId": {
+      "id": 2,
+      "value": "ТЕСТ Купувач 2 (TA)"
+     },
+     "DocType": "Книжно одобрение",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-10-31T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-15T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": -450.9,
+     "VatTotal": -22.55,
+     "GrossTotal": -473.45,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 2 (TA)",
+     "BuyerEdb": "8888888888882",
+     "BuyerVatNumber": "MK8888888888882",
+     "BuyerAddress": "ул. Купувачка бр. 2",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-10-31T21:10:14+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": {
+      "id": 6,
+      "value": "TA-2026-00002"
+     },
+     "PdfUrl": "https://fkkvidi.sharepoint.com/sites/eFaktura/InvoiceFiles/TA-OD-2026-00001.pdf",
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": "ТЕСТ: вратени 2 комади",
+     "RelatedNo": 6.0,
+     "RelatedTitle": "TA-2026-00002",
+     "RelatedIssueDate": "2026-10-31T00:00:00+01:00",
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 7,
+     "Modified": "2026-10-31T21:11:58+01:00",
+     "Created": "2026-10-31T19:48:06+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-ST-2026-00001",
+     "NumberKey": "ST-1-2026-00001",
+     "PartnerId": {
+      "id": 1,
+      "value": "ТЕСТ Купувач 1 (TA)"
+     },
+     "DocType": "Сторно",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-10-31T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-15T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": -1500.0,
+     "VatTotal": -270.0,
+     "GrossTotal": -1770.0,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 1 (TA)",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-10-31T21:11:22+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": {
+      "id": 4,
+      "value": "TA-2026-00001"
+     },
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": "ТЕСТ: двојно фактурирање",
+     "RelatedNo": 4.0,
+     "RelatedTitle": "TA-2026-00001",
+     "RelatedIssueDate": "2026-10-31T00:00:00+01:00",
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 8,
+     "Modified": "2026-10-31T21:11:23+01:00",
+     "Created": "2026-10-31T21:10:53+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TB-2026-00002",
+     "NumberKey": "INV-2-2026-00002",
+     "PartnerId": {
+      "id": 3,
+      "value": "ТЕСТ Купувач 1 (TB)1"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 2.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-11-02T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 1234.5,
+     "VatTotal": 0.0,
+     "GrossTotal": 1234.5,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 1 (TB)1",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент Б ДОО",
+     "SellerEdb": "9999999999992",
+     "SellerVatNumber": null,
+     "SellerAddress": "ул. Тестна бр. 2, Битола",
+     "SellerIban": "999000000000002",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T09:35:12+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 9,
+     "Modified": "2026-11-02T09:35:13+01:00",
+     "Created": "2026-11-02T09:35:04+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TB-ST-2026-00001",
+     "NumberKey": "ST-2-2026-00001",
+     "PartnerId": {
+      "id": 3,
+      "value": "ТЕСТ Купувач 1 (TB)1"
+     },
+     "DocType": "Сторно",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-10-31T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": -250.5,
+     "VatTotal": 0.0,
+     "GrossTotal": -250.5,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 1 (TB)1",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент Б ДОО",
+     "SellerEdb": "9999999999992",
+     "SellerVatNumber": null,
+     "SellerAddress": "ул. Тестна бр. 2, Битола",
+     "SellerIban": "999000000000002",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T09:35:58+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": {
+      "id": 5,
+      "value": "TB-2026-00001"
+     },
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": "gdfg dgdfgd gdf gdfg df gdf g",
+     "RelatedNo": 5.0,
+     "RelatedTitle": "TB-2026-00001",
+     "RelatedIssueDate": "2026-10-31T00:00:00+01:00",
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 10,
+     "Modified": "2026-11-02T09:35:59+01:00",
+     "Created": "2026-11-02T09:35:22+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-2026-00003",
+     "NumberKey": "INV-1-2026-00003",
+     "PartnerId": {
+      "id": 2,
+      "value": "ТЕСТ Купувач 2 (TA)"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 3.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-11-02T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 270.0,
+     "VatTotal": 13.5,
+     "GrossTotal": 283.5,
+     "LineCount": 1.0,
+     "Status": "Корегирана",
+     "StatusMessage": "Заменета со корекција TA-KR-2026-00001",
+     "BuyerName": "ТЕСТ Купувач 2 (TA)",
+     "BuyerEdb": "8888888888882",
+     "BuyerVatNumber": "MK8888888888882",
+     "BuyerAddress": "ул. Купувачка бр. 2",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T10:11:47+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": null,
+     "PayableAmount": null,
+     "ID": 11,
+     "Modified": "2026-11-02T11:04:08+01:00",
+     "Created": "2026-11-02T10:11:39+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-AV-2026-00001",
+     "NumberKey": "AV-1-2026-00001",
+     "PartnerId": {
+      "id": 1,
+      "value": "ТЕСТ Купувач 1 (TA)"
+     },
+     "DocType": "Авансна фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-11-02T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 1200.0,
+     "VatTotal": 216.0,
+     "GrossTotal": 1416.0,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 1 (TA)",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T11:01:11+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": "https://fkkvidi.sharepoint.com/sites/eFaktura/InvoiceFiles/TA-AV-2026-00001.pdf",
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": 0.0,
+     "PayableAmount": 1416.0,
+     "ID": 12,
+     "Modified": "2026-11-03T16:11:39+01:00",
+     "Created": "2026-11-02T10:58:00+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-2026-00004",
+     "NumberKey": "INV-1-2026-00004",
+     "PartnerId": {
+      "id": 1,
+      "value": "ТЕСТ Купувач 1 (TA)"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 4.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-11-02T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 2400.0,
+     "VatTotal": 432.0,
+     "GrossTotal": 2832.0,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 1 (TA)",
+     "BuyerEdb": "8888888888881",
+     "BuyerVatNumber": "MK8888888888881",
+     "BuyerAddress": "ул. Купувачка бр. 1",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T11:02:45+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": 12.0,
+     "AdvanceAmount": 1416.0,
+     "PayableAmount": 1416.0,
+     "ID": 13,
+     "Modified": "2026-11-02T11:02:45+01:00",
+     "Created": "2026-11-02T11:02:28+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "TA-KR-2026-00001",
+     "NumberKey": "KR-1-2026-00001",
+     "PartnerId": {
+      "id": 2,
+      "value": "ТЕСТ Купувач 2 (TA)"
+     },
+     "DocType": "Корекција",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-11-02T00:00:00+01:00",
+     "SupplyDate": "2026-11-02T00:00:00+01:00",
+     "DueDate": "2026-11-17T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 540.0,
+     "VatTotal": 27.0,
+     "GrossTotal": 567.0,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "ТЕСТ Купувач 2 (TA)",
+     "BuyerEdb": "8888888888882",
+     "BuyerVatNumber": "MK8888888888882",
+     "BuyerAddress": "ул. Купувачка бр. 2",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "ТЕСТ Клиент А ДООЕЛ",
+     "SellerEdb": "9999999999991",
+     "SellerVatNumber": "MK9999999999991",
+     "SellerAddress": "ул. Тестна бр. 1, Скопје",
+     "SellerIban": "999000000000001",
+     "SellerBank": "Тест банка",
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-02T11:04:07+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": {
+      "id": 11,
+      "value": "TA-2026-00003"
+     },
+     "PdfUrl": "https://fkkvidi.sharepoint.com/sites/eFaktura/InvoiceFiles/TA-KR-2026-00001.pdf",
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": "Тест: испорачани се 2 комади, не 1",
+     "RelatedNo": 11.0,
+     "RelatedTitle": "TA-2026-00003",
+     "RelatedIssueDate": "2026-11-02T00:00:00+01:00",
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": "C02",
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": 0.0,
+     "PayableAmount": 567.0,
+     "ID": 14,
+     "Modified": "2026-11-03T16:10:40+01:00",
+     "Created": "2026-11-02T11:03:21+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "MC-2026-00001",
+     "NumberKey": "INV-3-2026-00001",
+     "PartnerId": {
+      "id": 7,
+      "value": "Тест компанија 2"
+     },
+     "DocType": "Фактура",
+     "InvoiceYear": 2026.0,
+     "SeqNo": 1.0,
+     "IssueDate": "2026-11-03T00:00:00+01:00",
+     "SupplyDate": "2026-11-03T00:00:00+01:00",
+     "DueDate": "2026-11-18T00:00:00+01:00",
+     "Currency": "MKD",
+     "ExchangeRate": 1.0,
+     "NetTotal": 270.0,
+     "VatTotal": 48.6,
+     "GrossTotal": 318.6,
+     "LineCount": 1.0,
+     "Status": "Издадена",
+     "StatusMessage": null,
+     "BuyerName": "Тест компанија 2",
+     "BuyerEdb": "4001235555678",
+     "BuyerVatNumber": null,
+     "BuyerAddress": "ул. Тест адреса за тест компанија 2 245",
+     "BuyerCity": "Скопје",
+     "BuyerCountry": "MK",
+     "SellerName": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ",
+     "SellerEdb": "4030994180119",
+     "SellerVatNumber": "МК4030994180119",
+     "SellerAddress": "НИКОЛА ПАРАПУНОВ 41А, СКОПЈЕ-КАРПОШ",
+     "SellerIban": null,
+     "SellerBank": null,
+     "IssuedBy": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "IssuedAt": "2026-11-03T14:23:53+01:00",
+     "UjpId": null,
+     "UjpTimestamp": null,
+     "RelatedInvoiceId": null,
+     "PdfUrl": null,
+     "JsonUrl": null,
+     "Note": null,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "PaymentMethod": "Трансакциска сметка",
+     "Clauses": null,
+     "CorrectionReason": null,
+     "RelatedNo": null,
+     "RelatedTitle": null,
+     "RelatedIssueDate": null,
+     "UjpQrLink": null,
+     "UjpStatusCode": null,
+     "UjpStatusName": null,
+     "UjpSentAt": null,
+     "UjpError": null,
+     "VoidReasonCode": null,
+     "CorrectionReasonCode": null,
+     "AdvanceInvoiceNo": null,
+     "AdvanceAmount": 0.0,
+     "PayableAmount": 319.0,
+     "ID": 15,
+     "Modified": "2026-11-03T14:23:54+01:00",
+     "Created": "2026-11-03T14:23:44+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  },
+  "InvoiceLines": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Опис",
+     "type": "Text"
+    },
+    {
+     "name": "InvoiceId",
+     "title": "Фактура",
+     "type": "Lookup"
+    },
+    {
+     "name": "LineNo",
+     "title": "Реден број",
+     "type": "Number"
+    },
+    {
+     "name": "ItemId",
+     "title": "Артикл",
+     "type": "Lookup"
+    },
+    {
+     "name": "Unit",
+     "title": "Единица мерка",
+     "type": "Text"
+    },
+    {
+     "name": "Qty",
+     "title": "Количина",
+     "type": "Number"
+    },
+    {
+     "name": "UnitPrice",
+     "title": "Цена без ДДВ",
+     "type": "Number"
+    },
+    {
+     "name": "DiscountPct",
+     "title": "Попуст %",
+     "type": "Number"
+    },
+    {
+     "name": "VatRateId",
+     "title": "ДДВ стапка",
+     "type": "Lookup"
+    },
+    {
+     "name": "VatRatePct",
+     "title": "ДДВ % (снимка)",
+     "type": "Number"
+    },
+    {
+     "name": "NetAmount",
+     "title": "Износ без ДДВ",
+     "type": "Number"
+    },
+    {
+     "name": "VatAmount",
+     "title": "ДДВ",
+     "type": "Number"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "InvoiceNo",
+     "title": "Фактура (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ItemNo",
+     "title": "Артикл (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "PartnerNo",
+     "title": "Купувач (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "PriceSource",
+     "title": "Извор на цената",
+     "type": "Text"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "InvoiceId": {
+      "id": 4,
+      "value": "TA-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 1,
+      "value": "ТЕСТ Сметководствена услуга"
+     },
+     "Unit": "час",
+     "Qty": 1.0,
+     "UnitPrice": 1500.0,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": 1500.0,
+     "VatAmount": 270.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 4.0,
+     "ItemNo": 1.0,
+     "PartnerNo": 1.0,
+     "PriceSource": null,
+     "ID": 6,
+     "Modified": "2026-10-31T16:07:39+01:00",
+     "Created": "2026-10-31T16:07:39+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 5,
+      "value": "TB-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 4,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": 1.0,
+     "UnitPrice": 250.5,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 5,
+      "value": "Ослободено без право на одбивка (0%)"
+     },
+     "VatRatePct": 0.0,
+     "NetAmount": 250.5,
+     "VatAmount": 0.0,
+     "ClientNo": 2.0,
+     "InvoiceNo": 5.0,
+     "ItemNo": 4.0,
+     "PartnerNo": 3.0,
+     "PriceSource": null,
+     "ID": 7,
+     "Modified": "2026-10-31T16:11:14+01:00",
+     "Created": "2026-10-31T16:11:14+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 6,
+      "value": "TA-2026-00002"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 2,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": 15.0,
+     "UnitPrice": 250.5,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "VatRatePct": 5.0,
+     "NetAmount": 3381.75,
+     "VatAmount": 169.09,
+     "ClientNo": 1.0,
+     "InvoiceNo": 6.0,
+     "ItemNo": 2.0,
+     "PartnerNo": 2.0,
+     "PriceSource": null,
+     "ID": 8,
+     "Modified": "2026-10-31T17:24:44+01:00",
+     "Created": "2026-10-31T17:24:44+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "InvoiceId": {
+      "id": 6,
+      "value": "TA-2026-00002"
+     },
+     "LineNo": 2.0,
+     "ItemId": {
+      "id": 1,
+      "value": "ТЕСТ Сметководствена услуга"
+     },
+     "Unit": "час",
+     "Qty": 11.0,
+     "UnitPrice": 1500.0,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": 14850.0,
+     "VatAmount": 2673.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 6.0,
+     "ItemNo": 1.0,
+     "PartnerNo": 2.0,
+     "PriceSource": null,
+     "ID": 9,
+     "Modified": "2026-10-31T17:24:44+01:00",
+     "Created": "2026-10-31T17:24:44+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 7,
+      "value": "TA-OD-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 2,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": -2.0,
+     "UnitPrice": 250.5,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "VatRatePct": 5.0,
+     "NetAmount": -450.9,
+     "VatAmount": -22.55,
+     "ClientNo": 1.0,
+     "InvoiceNo": 7.0,
+     "ItemNo": 2.0,
+     "PartnerNo": 2.0,
+     "PriceSource": null,
+     "ID": 11,
+     "Modified": "2026-10-31T19:48:26+01:00",
+     "Created": "2026-10-31T19:48:07+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "InvoiceId": {
+      "id": 8,
+      "value": "TA-ST-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 1,
+      "value": "ТЕСТ Сметководствена услуга"
+     },
+     "Unit": "час",
+     "Qty": -1.0,
+     "UnitPrice": 1500.0,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": -1500.0,
+     "VatAmount": -270.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 8.0,
+     "ItemNo": 1.0,
+     "PartnerNo": 1.0,
+     "PriceSource": null,
+     "ID": 12,
+     "Modified": "2026-10-31T21:11:13+01:00",
+     "Created": "2026-10-31T21:10:55+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Консултација",
+     "InvoiceId": {
+      "id": 9,
+      "value": "TB-2026-00002"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 5,
+      "value": "ТЕСТ Консултација"
+     },
+     "Unit": "час",
+     "Qty": 1.0,
+     "UnitPrice": 1234.5,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 6,
+      "value": "Не е ДДВ обврзник"
+     },
+     "VatRatePct": 0.0,
+     "NetAmount": 1234.5,
+     "VatAmount": 0.0,
+     "ClientNo": 2.0,
+     "InvoiceNo": 9.0,
+     "ItemNo": 5.0,
+     "PartnerNo": 3.0,
+     "PriceSource": null,
+     "ID": 13,
+     "Modified": "2026-11-02T09:35:04+01:00",
+     "Created": "2026-11-02T09:35:04+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 10,
+      "value": "TB-ST-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 4,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": -1.0,
+     "UnitPrice": 250.5,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 5,
+      "value": "Ослободено без право на одбивка (0%)"
+     },
+     "VatRatePct": 0.0,
+     "NetAmount": -250.5,
+     "VatAmount": 0.0,
+     "ClientNo": 2.0,
+     "InvoiceNo": 10.0,
+     "ItemNo": 4.0,
+     "PartnerNo": 3.0,
+     "PriceSource": null,
+     "ID": 14,
+     "Modified": "2026-11-02T09:35:52+01:00",
+     "Created": "2026-11-02T09:35:22+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 11,
+      "value": "TA-2026-00003"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 2,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": 1.0,
+     "UnitPrice": 300.0,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "VatRatePct": 5.0,
+     "NetAmount": 270.0,
+     "VatAmount": 13.5,
+     "ClientNo": 1.0,
+     "InvoiceNo": 11.0,
+     "ItemNo": 2.0,
+     "PartnerNo": 2.0,
+     "PriceSource": "Рачно внесена",
+     "ID": 15,
+     "Modified": "2026-11-02T10:11:41+01:00",
+     "Created": "2026-11-02T10:11:41+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "InvoiceId": {
+      "id": 12,
+      "value": "TA-AV-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 1,
+      "value": "ТЕСТ Сметководствена услуга"
+     },
+     "Unit": "час",
+     "Qty": 1.0,
+     "UnitPrice": 1200.0,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": 1200.0,
+     "VatAmount": 216.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 12.0,
+     "ItemNo": 1.0,
+     "PartnerNo": 1.0,
+     "PriceSource": "Договорена цена (од 02.11.2026)",
+     "ID": 16,
+     "Modified": "2026-11-02T10:58:00+01:00",
+     "Created": "2026-11-02T10:58:00+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Сметководствена услуга",
+     "InvoiceId": {
+      "id": 13,
+      "value": "TA-2026-00004"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 1,
+      "value": "ТЕСТ Сметководствена услуга"
+     },
+     "Unit": "час",
+     "Qty": 2.0,
+     "UnitPrice": 1200.0,
+     "DiscountPct": 0.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": 2400.0,
+     "VatAmount": 432.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 13.0,
+     "ItemNo": 1.0,
+     "PartnerNo": 1.0,
+     "PriceSource": "Договорена цена (од 02.11.2026)",
+     "ID": 17,
+     "Modified": "2026-11-02T11:02:28+01:00",
+     "Created": "2026-11-02T11:02:28+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "ТЕСТ Производ",
+     "InvoiceId": {
+      "id": 14,
+      "value": "TA-KR-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 2,
+      "value": "ТЕСТ Производ"
+     },
+     "Unit": "ком",
+     "Qty": 2.0,
+     "UnitPrice": 300.0,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 3,
+      "value": "Повластена стапка 5%"
+     },
+     "VatRatePct": 5.0,
+     "NetAmount": 540.0,
+     "VatAmount": 27.0,
+     "ClientNo": 1.0,
+     "InvoiceNo": 14.0,
+     "ItemNo": 2.0,
+     "PartnerNo": 2.0,
+     "PriceSource": "Од TA-2026-00003",
+     "ID": 18,
+     "Modified": "2026-11-02T11:03:51+01:00",
+     "Created": "2026-11-02T11:03:21+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "Тест услуга (УЈП)",
+     "InvoiceId": {
+      "id": 15,
+      "value": "MC-2026-00001"
+     },
+     "LineNo": 1.0,
+     "ItemId": {
+      "id": 6,
+      "value": "Тест услуга (УЈП)"
+     },
+     "Unit": "ком",
+     "Qty": 3.0,
+     "UnitPrice": 100.0,
+     "DiscountPct": 10.0,
+     "VatRateId": {
+      "id": 1,
+      "value": "Општа стапка 18%"
+     },
+     "VatRatePct": 18.0,
+     "NetAmount": 270.0,
+     "VatAmount": 48.6,
+     "ClientNo": 3.0,
+     "InvoiceNo": 15.0,
+     "ItemNo": 6.0,
+     "PartnerNo": 7.0,
+     "PriceSource": "Стандардна цена",
+     "ID": 19,
+     "Modified": "2026-11-03T14:23:45+01:00",
+     "Created": "2026-11-03T14:23:45+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  },
+  "UjpReasons": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Назив (од УЈП)",
+     "type": "Text"
+    },
+    {
+     "name": "Code",
+     "title": "Шифра",
+     "type": "Text"
+    },
+    {
+     "name": "Kind",
+     "title": "Вид",
+     "type": "Choice"
+    },
+    {
+     "name": "IsActive",
+     "title": "Активна",
+     "type": "Boolean"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "Погрешен купувач",
+     "Code": "S-1",
+     "Kind": "Сторно",
+     "IsActive": true,
+     "ID": 1,
+     "Modified": "2026-11-03T13:20:01+01:00",
+     "Created": "2026-11-02T10:21:47+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Поништување на договор",
+     "Code": "S-2",
+     "Kind": "Сторно",
+     "IsActive": true,
+     "ID": 2,
+     "Modified": "2026-11-03T13:20:03+01:00",
+     "Created": "2026-11-02T10:21:48+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Стоката е вратена во целост",
+     "Code": "S-3",
+     "Kind": "Сторно",
+     "IsActive": true,
+     "ID": 3,
+     "Modified": "2026-11-03T13:20:05+01:00",
+     "Created": "2026-11-02T10:21:50+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Грешка во цена",
+     "Code": "C01",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 4,
+     "Modified": "2026-11-03T13:20:10+01:00",
+     "Created": "2026-11-02T10:21:51+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Грешка во количина",
+     "Code": "C02",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 5,
+     "Modified": "2026-11-03T13:20:13+01:00",
+     "Created": "2026-11-02T10:21:52+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Двојно фактурирање на ист промет",
+     "Code": "S-4",
+     "Kind": "Сторно",
+     "IsActive": true,
+     "ID": 6,
+     "Modified": "2026-11-03T13:20:07+01:00",
+     "Created": "2026-11-03T13:20:07+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Друго",
+     "Code": "S-5",
+     "Kind": "Сторно",
+     "IsActive": true,
+     "ID": 7,
+     "Modified": "2026-11-03T13:20:09+01:00",
+     "Created": "2026-11-03T13:20:09+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Делумно враќање на стока",
+     "Code": "C03",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 8,
+     "Modified": "2026-11-03T13:20:14+01:00",
+     "Created": "2026-11-03T13:20:14+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Погрешен даночен индикатор",
+     "Code": "C04",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 9,
+     "Modified": "2026-11-03T13:20:15+01:00",
+     "Created": "2026-11-03T13:20:15+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Погрешна ДДВ стапка",
+     "Code": "C05",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 10,
+     "Modified": "2026-11-03T13:20:17+01:00",
+     "Created": "2026-11-03T13:20:17+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Погрешна даночна основица",
+     "Code": "C06",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 11,
+     "Modified": "2026-11-03T13:20:19+01:00",
+     "Created": "2026-11-03T13:20:19+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Исправка на опис",
+     "Code": "C07",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 12,
+     "Modified": "2026-11-03T13:20:20+01:00",
+     "Created": "2026-11-03T13:20:20+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    },
+    {
+     "Title": "Друго (внес на слободен текст)",
+     "Code": "C08",
+     "Kind": "Корекција",
+     "IsActive": true,
+     "ID": 13,
+     "Modified": "2026-11-03T13:20:22+01:00",
+     "Created": "2026-11-03T13:20:22+01:00",
+     "Author": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     },
+     "Editor": {
+      "id": 10,
+      "email": "admin@example.mk",
+      "name": "admin"
+     }
+    }
+   ]
+  },
+  "UjpLog": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Документ",
+     "type": "Text"
+    },
+    {
+     "name": "InvoiceNo",
+     "title": "Фактура (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "Action",
+     "title": "Акција",
+     "type": "Choice"
+    },
+    {
+     "name": "Success",
+     "title": "Успешно",
+     "type": "Boolean"
+    },
+    {
+     "name": "HttpStatus",
+     "title": "HTTP",
+     "type": "Number"
+    },
+    {
+     "name": "Euid",
+     "title": "EUID",
+     "type": "Text"
+    },
+    {
+     "name": "Message",
+     "title": "Порака",
+     "type": "Note"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": []
+  },
+  "Counters": {
+   "fields": [
+    {
+     "name": "Title",
+     "title": "Клуч на бројач",
+     "type": "Text"
+    },
+    {
+     "name": "DocType",
+     "title": "Вид документ",
+     "type": "Choice"
+    },
+    {
+     "name": "Year",
+     "title": "Година",
+     "type": "Number"
+    },
+    {
+     "name": "LastNo",
+     "title": "Последен број",
+     "type": "Number"
+    },
+    {
+     "name": "ClientRef",
+     "title": "Клиент",
+     "type": "Lookup"
+    },
+    {
+     "name": "ClientNo",
+     "title": "Клиент (ID)",
+     "type": "Number"
+    },
+    {
+     "name": "ID",
+     "title": "ID",
+     "type": "Counter"
+    },
+    {
+     "name": "Modified",
+     "title": "Modified",
+     "type": "DateTime"
+    },
+    {
+     "name": "Created",
+     "title": "Created",
+     "type": "DateTime"
+    },
+    {
+     "name": "Author",
+     "title": "Created By",
+     "type": "User"
+    },
+    {
+     "name": "Editor",
+     "title": "Modified By",
+     "type": "User"
+    }
+   ],
+   "items": [
+    {
+     "Title": "C1-INV-2026",
+     "DocType": "Фактура",
+     "Year": 2026.0,
+     "LastNo": 4.0,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 1,
+     "Modified": "2026-11-02T11:02:46+01:00",
+     "Created": "2026-10-31T15:20:19+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C2-INV-2026",
+     "DocType": "Фактура",
+     "Year": 2026.0,
+     "LastNo": 2.0,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 2,
+     "Modified": "2026-11-02T09:35:14+01:00",
+     "Created": "2026-10-31T16:11:25+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C1-OD-2026",
+     "DocType": "Книжно одобрение",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 3,
+     "Modified": "2026-10-31T21:10:15+01:00",
+     "Created": "2026-10-31T21:10:15+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C1-ST-2026",
+     "DocType": "Сторно",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 4,
+     "Modified": "2026-10-31T21:11:24+01:00",
+     "Created": "2026-10-31T21:11:24+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C2-ST-2026",
+     "DocType": "Сторно",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 2,
+      "value": "ТЕСТ Клиент Б ДОО"
+     },
+     "ClientNo": 2.0,
+     "ID": 5,
+     "Modified": "2026-11-02T09:35:59+01:00",
+     "Created": "2026-11-02T09:35:59+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C1-AV-2026",
+     "DocType": "Авансна фактура",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 6,
+     "Modified": "2026-11-02T11:01:12+01:00",
+     "Created": "2026-11-02T11:01:12+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C1-KR-2026",
+     "DocType": "Корекција",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 1,
+      "value": "ТЕСТ Клиент А ДООЕЛ"
+     },
+     "ClientNo": 1.0,
+     "ID": 7,
+     "Modified": "2026-11-02T11:04:08+01:00",
+     "Created": "2026-11-02T11:04:08+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    },
+    {
+     "Title": "C3-INV-2026",
+     "DocType": "Фактура",
+     "Year": 2026.0,
+     "LastNo": 1.0,
+     "ClientRef": {
+      "id": 3,
+      "value": "МАКЕДОНСКИ ЦЕНТАР ЗА МЕѓУНАРОДНА СОРАБОТКА СКОПЈЕ"
+     },
+     "ClientNo": 3.0,
+     "ID": 8,
+     "Modified": "2026-11-03T14:23:54+01:00",
+     "Created": "2026-11-03T14:23:54+01:00",
+     "Author": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     },
+     "Editor": {
+      "id": 6,
+      "email": "dev@example.mk",
+      "name": "dev"
+     }
+    }
+   ]
+  }
+ }
+}
