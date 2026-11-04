@@ -12,6 +12,8 @@ import { ClientSettings } from "./pages/ClientSettings";
 import { Clients } from "./pages/Clients";
 import { PartnerCard } from "./pages/PartnerCard";
 import { Followups } from "./pages/Followups";
+import { PurchaseEditor, Purchases } from "./pages/Purchases";
+import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 
 function Gate() {
   const { me } = useSession();
@@ -29,6 +31,14 @@ function Gate() {
         <Route path="partners" element={<Partners />} />
         <Route path="partners/:id" element={<PartnerCard />} />
         <Route path="followups" element={<Followups />} />
+        <Route path="purchases" element={<Purchases />} />
+        <Route path="purchases/new" element={<PurchaseEditor />} />
+        <Route path="purchases/:id" element={<PurchaseEditor />} />
+        <Route path="stock" element={<Stock />} />
+        <Route path="stock/card/:itemId" element={<StockCard />} />
+        <Route path="stock/docs" element={<StockDocs />} />
+        <Route path="stock/docs/new" element={<StockDocNew />} />
+        <Route path="stock/docs/:docId" element={<StockDocView />} />
         <Route path="items" element={<Items />} />
         <Route path="admin" element={<Admin />} />
         <Route path="settings" element={<ClientSettings />} />

@@ -235,3 +235,17 @@ label.check input { width: auto; min-height: 0; }
 .modules .chip { margin-left: 8px; }
 .user-mods { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
 .mods-link { display: block; margin: 2px auto 0; text-align: center; font-size: 0.75rem; }
+
+/* ------------------------------------------------------------- magacin */
+.tabs a { font: inherit; padding: 7px 14px; color: var(--muted); text-decoration: none; }
+.tabs a + a { border-left: 1px solid var(--line); }
+.tabs a.active { background: var(--ink); color: var(--paper); }
+.lots { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.lot-row { display: flex; gap: 6px; margin-top: 4px; }
+.lot-row input { min-width: 0; }
+.row-neg td { color: var(--err); }
+.grid.card td { white-space: nowrap; } .grid.card td.small { white-space: normal; }
+.lines label.check.small { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+.radio-set { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.radio-set legend { font-size: 0.86rem; color: var(--muted); margin-bottom: 6px; padding: 0; }
+.grid input[type=radio] { width: 18px; height: 18px; min-height: 0; }

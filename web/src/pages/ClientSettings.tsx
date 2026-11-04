@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useOutletContext } from "react-router-dom";
-import { api, ApiError, type ClientRef } from "../api";
+import { api, ApiError, type ClientRef, type Warehouse } from "../api";
 import { useSession } from "../session";
 
 interface Bank { account: string; bank: string }
@@ -8,7 +8,7 @@ interface Pdf { shortName?: string; tagline?: string; subtitle?: string; contact
   bankAccounts?: Bank[]; invoiceTitle?: string; signatory?: string; paymentNote?: string; clausesTitle?: string;
   receiverDeclaration?: string; showReceivedBy?: boolean }
 interface Client { id: number; name: string; edb: string; embs: string | null; vatNumber: string | null; address: string; city: string;
-  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null }
+  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn" }
 
 /** Izgled na PDF fakturata za klientot (format: UPSTREAM Фактура-Испратница). Samo administrator menuva. */
 export function ClientSettings() {
@@ -49,6 +49,7 @@ export function ClientSettings() {
         <div><dt>ЕМБС</dt><dd>{c.embs ?? "–"}</dd></div><div><dt>Адреса</dt><dd>{c.address}, {c.postalCode} {c.city}</dd></div>
       </dl>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
+      {ref.modules.includes("warehouse") && <WarehouseSettings client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />}
       <form className="panel form-grid" onSubmit={submit}>
         <h2 className="span-all">Заглавје (лево)</h2>
         <div className="span2"><label>Дејност (над називот)<input name="tagline" defaultValue={p.tagline} disabled={dis} placeholder="Друштво за производство, трговија и услуги" /></label></div>
@@ -82,5 +83,47 @@ export function ClientSettings() {
           : <p className="muted span-all">Само администратор може да ги менува поставките.</p>}
       </form>
     </>
+  );
+}
+
+/** Magacin: pravilo za zaliha vo minus i listata magacini (samo administrator menuva). */
+function WarehouseSettings({ client, admin, onSaved }: { client: Client; admin: boolean; onSaved: (c: Partial<Client>) => void }) {
+  const [whs, setWhs] = useState<Warehouse[]>([]);
+  const [err, setErr] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const load = () => api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs);
+  useEffect(() => { void load(); }, [client.id]);
+  const run = async (f: () => Promise<unknown>) => { setErr(null); try { await f(); await load(); } catch (x) { setErr((x as ApiError).message); } };
+  async function add(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    await run(() => api.post(`/api/clients/${client.id}/warehouses`, { code: f.code, name: f.name }));
+    setAdding(false);
+  }
+  return (
+    <section className="panel stack">
+      <h2>Магацин</h2>
+      <fieldset className="radio-set" disabled={!admin}>
+        <legend>Кога нема доволно залиха за фактура или отпис</legend>
+        <label className="check"><input type="radio" name="neg" checked={client.negativeStock === "block"} onChange={() => run(async () => onSaved(await api.patch<Client>(`/api/clients/${client.id}`, { negativeStock: "block" })))} />
+          Одбиј го документот (препорака)</label>
+        <label className="check"><input type="radio" name="neg" checked={client.negativeStock === "warn"} onChange={() => run(async () => onSaved(await api.patch<Client>(`/api/clients/${client.id}`, { negativeStock: "warn" })))} />
+          Дозволи со предупредување (залихата оди во минус)</label>
+      </fieldset>
+      <div className="table-wrap"><table className="grid compact">
+        <thead><tr><th>Шифра</th><th>Назив</th><th>Главен</th><th>Активен</th></tr></thead>
+        <tbody>{whs.map((w) => (
+          <tr key={w.id} className={w.isActive ? "" : "row-inactive"}><td>{w.code}</td><td>{w.name}</td>
+            <td><input type="radio" name="defwh" checked={w.isDefault} disabled={!admin || !w.isActive} onChange={() => run(() => api.patch(`/api/clients/${client.id}/warehouses/${w.id}`, { isDefault: true }))} aria-label={`${w.name} главен`} /></td>
+            <td><input type="checkbox" checked={w.isActive} disabled={!admin || w.isDefault} onChange={(e) => run(() => api.patch(`/api/clients/${client.id}/warehouses/${w.id}`, { isActive: e.target.checked }))} aria-label={`${w.name} активен`} /></td></tr>))}
+        </tbody></table></div>
+      {admin && (adding
+        ? <form className="row-actions" onSubmit={add}><label>Шифра<input name="code" required maxLength={10} placeholder="PROD" /></label>
+            <label className="grow">Назив<input name="name" required minLength={2} placeholder="Продавница" /></label>
+            <button className="btn btn-primary">Додај</button><button type="button" className="link" onClick={() => setAdding(false)}>Откажи</button></form>
+        : <button className="btn add-line" onClick={() => setAdding(true)}>Нов магацин</button>)}
+      <p className="muted small">Со еден магацин изборот не се прикажува никаде. Фактурите и влезните фактури стандардно користат главен магацин.</p>
+      {err && <p className="alert">{err}</p>}
+    </section>
   );
 }
