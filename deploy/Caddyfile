@@ -1,16 +1,13 @@
 {$DOMAIN} {
-	encode gzip
+	encode zstd gzip
 	header {
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://login.microsoftonline.com"
 		-Server
 	}
-	handle /api/* {
-		reverse_proxy api:8080
-	}
-	handle {
-		respond "eFaktura TEST - HTTPS OK (веб-апликацијата е во изработка)" 200
-	}
+	reverse_proxy api:8080
 }

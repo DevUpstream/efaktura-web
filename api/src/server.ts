@@ -11,6 +11,7 @@ await migrate();                       // migraciite se idempotentni; se izvrsuv
 const app = await buildApp({
   db, version: cfg.version, logLevel: cfg.logLevel, publicUrl: cfg.publicUrl, appKey: cfg.appKey,
   bootstrapAdminEmail: cfg.bootstrapAdminEmail,
+  webDir: process.env.WEB_DIR ?? "/app/public",
   entra: cfg.entra ? { provider: entraProvider(cfg.entra), tenantId: cfg.entra.tenantId } : undefined,
 });
 app.log.info({ version: cfg.version, entra: !!cfg.entra }, "migracii OK");

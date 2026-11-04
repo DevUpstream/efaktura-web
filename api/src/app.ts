@@ -1,6 +1,9 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
+import fastifyStatic from "@fastify/static";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import { ZodError } from "zod";
 import type { Db } from "./db/types.js";
@@ -10,11 +13,14 @@ import { registerAuthContext } from "./auth/context.js";
 import type { OidcProvider } from "./auth/entra.js";
 import { authRoutes } from "./routes/auth.js";
 import { userRoutes } from "./routes/users.js";
+import { masterRoutes } from "./routes/master.js";
+import { invoiceRoutes } from "./routes/invoices.js";
 
 export interface AppDeps {
   db: Db; version: string; logLevel?: string;
   publicUrl: string; appKey: string; bootstrapAdminEmail?: string;
   entra?: { provider: OidcProvider; tenantId: string };
+  webDir?: string;      // izgradenata React aplikacija (index.html + assets)
 }
 
 export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
@@ -50,5 +56,18 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await authRoutes(app, { db: d.db, appKey: parseKey(d.appKey), publicUrl: d.publicUrl,
     bootstrapAdminEmail: d.bootstrapAdminEmail, entra: d.entra });
   await userRoutes(app, { db: d.db, publicUrl: d.publicUrl });
+  await masterRoutes(app, { db: d.db });
+  await invoiceRoutes(app, { db: d.db });
+  // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
+  if (d.webDir && existsSync(d.webDir)) {
+    await app.register(fastifyStatic, {
+      root: resolve(d.webDir), wildcard: false, index: false,
+      setHeaders: (res, path) => res.setHeader("cache-control", path.includes("/assets/") ? "public, max-age=31536000, immutable" : "no-cache"),
+    });
+    app.setNotFoundHandler((req, reply) => {
+      if (req.method !== "GET" || req.url.startsWith("/api/")) return reply.status(404).send({ error: "not_found", message: "Не постои." });
+      return reply.header("cache-control", "no-cache").sendFile("index.html");
+    });
+  }
   return app;
 }

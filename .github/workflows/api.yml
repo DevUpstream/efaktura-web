@@ -3,9 +3,9 @@ name: api
 on:
   push:
     branches: [main]
-    paths: ["api/**", ".github/workflows/api.yml"]
+    paths: ["api/**", "web/**", ".github/workflows/api.yml"]
   pull_request:
-    paths: ["api/**"]
+    paths: ["api/**", "web/**"]
   workflow_dispatch:
 
 permissions:
@@ -27,6 +27,9 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
       - run: npm test
+      - name: web
+        working-directory: web
+        run: npm ci --no-audit --no-fund && npm run build
 
   image:
     needs: test
@@ -46,7 +49,8 @@ jobs:
           echo "version=$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
-          context: api
+          context: .
+          file: api/Dockerfile
           platforms: linux/amd64
           push: true
           build-args: APP_VERSION=${{ steps.meta.outputs.version }}

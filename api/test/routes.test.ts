@@ -1,0 +1,112 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { randomBytes } from "node:crypto";
+import { eq } from "drizzle-orm";
+import type { FastifyInstance } from "fastify";
+import { testDb } from "./helpers.js";
+import { buildApp } from "../src/app.js";
+import { clientAccess, invoices, items, partnerPrices, partners, users } from "../src/db/schema.js";
+import { createSession, SESSION_COOKIE } from "../src/auth/sessions.js";
+
+let t: Awaited<ReturnType<typeof testDb>>;
+let app: FastifyInstance;
+let admin: string, ana: string;   // kolacinja
+
+beforeEach(async () => {
+  t = await testDb();
+  app = await buildApp({ db: t.db, version: "t", logLevel: "silent", publicUrl: "https://ef.test", appKey: randomBytes(32).toString("base64") });
+  await t.db.update(users).set({ provider: "entra", passwordHash: null }).where(eq(users.id, t.user.id));
+  admin = `${SESSION_COOKIE}=${await createSession(t.db, t.user.id, true, {})}`;
+  const [a] = await t.db.insert(users).values({ email: "ana@x.mk", displayName: "Ана", provider: "entra", role: "accountant" }).returning();
+  await t.db.insert(clientAccess).values({ clientId: t.c1.id, userId: a!.id });
+  ana = `${SESSION_COOKIE}=${await createSession(t.db, a!.id, true, {})}`;
+});
+
+const call = async (cookie: string, method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: unknown) => {
+  const r = await app.inject({ method, url, payload: payload as never, headers: { cookie, ...(method === "GET" ? {} : { "x-efaktura": "1" }) } });
+  return { status: r.statusCode, body: r.body ? r.json() : null };
+};
+
+describe("pristap po klient", () => {
+  it("smetkovoditelot ne gi gleda tugite klienti (404, ne 403)", async () => {
+    expect((await call(ana, "GET", `/api/clients/${t.c1.id}/partners`)).status).toBe(200);
+    expect((await call(ana, "GET", `/api/clients/${t.c2.id}/partners`)).status).toBe(404);
+    expect((await call(ana, "GET", `/api/clients/${t.c2.id}/invoices`)).status).toBe(404);
+  });
+});
+
+describe("kupuvaci i artikli", () => {
+  it("dodavanje, dupli EDB, zakluceni polinja po UJP ✓", async () => {
+    const p = await call(ana, "POST", `/api/clients/${t.c1.id}/partners`, { name: "Нов купувач", edb: "4001235555679", city: "Скопје" });
+    expect(p.status).toBe(201);
+    expect((await call(ana, "POST", `/api/clients/${t.c1.id}/partners`, { name: "Друг", edb: "4001235555679" })).status).toBe(409);
+    expect((await call(ana, "POST", `/api/clients/${t.c1.id}/partners`, { name: "Лош", edb: "123" })).status).toBe(400);
+    await t.db.update(partners).set({ ujpRegistryAt: new Date() }).where(eq(partners.id, p.body.id));
+    expect((await call(ana, "PATCH", `/api/clients/${t.c1.id}/partners/${p.body.id}`, { name: "Сменето" })).status).toBe(409);
+    expect((await call(ana, "PATCH", `/api/clients/${t.c1.id}/partners/${p.body.id}`, { email: "a@b.mk" })).status).toBe(200);
+  });
+
+  it("artikl: cena na 4 decimali, dupla shifra", async () => {
+    const r = await call(ana, "POST", `/api/clients/${t.c1.id}/items`, { code: "U1", name: "Услуга", unit: "час", unitPrice: 1500.5, vatRateId: t.vat18.id });
+    expect(r.body.unitPrice).toBe("1500.5000");
+    expect((await call(ana, "POST", `/api/clients/${t.c1.id}/items`, { code: "U1", name: "Друго", unit: "час", unitPrice: 1, vatRateId: t.vat18.id })).status).toBe(409);
+  });
+});
+
+describe("fakturi preku API", () => {
+  async function item(code = "U1", price = "100") {
+    const [it] = await t.db.insert(items).values({ clientId: t.c1.id, code, name: "Услуга " + code, unit: "ком", unitPrice: price, vatRateId: t.vat18.id }).returning();
+    return it!;
+  }
+  const line = (itemId: number, qty = 3, unitPrice = 100, discountPct = 10) =>
+    ({ itemId, description: "Тест", unit: "ком", qty, unitPrice, discountPct, vatRateId: t.vat18.id });
+
+  it("nacrt -> zacuvaj -> izdaj: serverot presmetuva (DryRun MC: 3 x 100, -10% = 270 + 48,60 = 319)", async () => {
+    const it = await item();
+    const c = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [line(it.id, 1, 50, 0)] });
+    expect(c.status).toBe(201);
+    let d = (await call(ana, "GET", `/api/invoices/${c.body.id}`)).body;
+    expect(d).toMatchObject({ status: "draft", netTotal: "50.00", supplyDate: "2026-11-05", number: null });
+
+    // zacuvaj so pogresna verzija -> konflikt
+    expect((await call(ana, "PUT", `/api/invoices/${d.id}`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [line(it.id)], version: 99 })).status).toBe(409);
+    expect((await call(ana, "PUT", `/api/invoices/${d.id}`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [line(it.id)], version: d.version })).status).toBe(200);
+    d = (await call(ana, "GET", `/api/invoices/${d.id}`)).body;
+    expect(d).toMatchObject({ netTotal: "270.00", vatTotal: "48.60", grossTotal: "318.60", payableAmount: "319.00", lineCount: 1 });
+    expect(d.lines[0]).toMatchObject({ netAmount: "270.0000", vatAmount: "48.6000", vatRatePct: "18.00" });
+
+    const iss = await call(ana, "POST", `/api/invoices/${d.id}/issue`);
+    expect(iss.body).toMatchObject({ number: "MC-2026-00001", status: "issued" });
+    expect((await call(ana, "PUT", `/api/invoices/${d.id}`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [] })).status).toBe(409);
+    expect((await call(ana, "POST", `/api/invoices/${d.id}/cancel`)).status).toBe(409);
+
+    const list = (await call(ana, "GET", `/api/clients/${t.c1.id}/invoices?year=2026`)).body;
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ number: "MC-2026-00001", buyerName: "Купувач А", grossTotal: "318.60" });
+  });
+
+  it("kupuvac ili artikl od drug klient e odbien", async () => {
+    const it = await item();
+    expect((await call(admin, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p2.id, issueDate: "2026-11-05", lines: [] })).status).toBe(422);
+    const [foreign] = await t.db.insert(items).values({ clientId: t.c2.id, code: "Z", name: "Туѓ", unit: "ком", unitPrice: "1", vatRateId: t.vat18.id }).returning();
+    expect((await call(admin, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [line(foreign!.id)] })).status).toBe(422);
+    expect(it.id).toBeGreaterThan(0);
+  });
+
+  it("otkazuvanje nacrt", async () => {
+    const c = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-05", lines: [] });
+    expect((await call(ana, "POST", `/api/invoices/${c.body.id}/cancel`)).status).toBe(200);
+    const [inv] = await t.db.select().from(invoices).where(eq(invoices.id, c.body.id));
+    expect(inv!.status).toBe("cancelled_draft");
+  });
+
+  it("predlog-cena: dogovorena > posledna > standardna", async () => {
+    const it = await item("U2", "100");
+    const url = `/api/clients/${t.c1.id}/price?partnerId=${t.p1.id}&itemId=${it.id}&date=2026-11-05`;
+    expect((await call(ana, "GET", url)).body).toEqual({ price: "100.0000", source: "Стандардна цена" });
+    const c = await call(ana, "POST", `/api/clients/${t.c1.id}/invoices`, { partnerId: t.p1.id, issueDate: "2026-11-01", lines: [line(it.id, 1, 95, 0)] });
+    await call(ana, "POST", `/api/invoices/${c.body.id}/issue`);
+    expect((await call(ana, "GET", url)).body).toEqual({ price: "95.0000", source: "Последна цена за купувачот (01.11.2026)" });
+    await t.db.insert(partnerPrices).values({ clientId: t.c1.id, partnerId: t.p1.id, itemId: it.id, price: "90", validFrom: "2026-11-02" });
+    expect((await call(ana, "GET", url)).body).toEqual({ price: "90.0000", source: "Договорена цена (од 02.11.2026)" });
+  });
+});
