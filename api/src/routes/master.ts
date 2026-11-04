@@ -28,7 +28,8 @@ const REGISTRY_LOCKED = ["name", "edb", "embs", "vatNumber", "address", "city", 
 const ItemIn = z.object({
   code: z.string().trim().min(1).max(30),
   name: z.string().trim().min(2).max(300),
-  type: z.enum(["goods", "service"]).default("service"),
+  type: z.enum(["goods", "service", "material", "product"]).default("service"),
+  trackLots: z.boolean().default(false),
   unit: z.string().trim().min(1).max(10),
   unitPrice: z.coerce.number().min(0).max(1e12).transform((n) => n.toFixed(4)),
   vatRateId: Id,
@@ -69,6 +70,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     iban: z.string().trim().max(34).optional().nullable(), bankName: z.string().trim().max(200).optional().nullable(),
     email: z.string().trim().max(254).optional().nullable(), phone: z.string().trim().max(50).optional().nullable(),
     invoiceClauses: z.string().max(4000).optional().nullable(),
+    negativeStock: z.enum(["block", "warn"]).optional(),
     pdfSettings: z.object({
       shortName: Txt(60), tagline: Txt(150), subtitle: Txt(150), contactLine: Txt(200),
       addressLines: z.array(z.string().trim().max(200)).max(6).optional(),

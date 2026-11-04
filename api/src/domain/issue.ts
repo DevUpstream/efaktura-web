@@ -5,8 +5,9 @@
  * Brojacot e atomski (INSERT ... ON CONFLICT DO UPDATE), a unikatniot indeks (klient, vid, godina, broj)
  * e dopolnitelna zastita - dupli broj e nevozmozen i pri paralelno izdavanje.
  */
-import { and, eq, inArray, ne, sql, sum } from "drizzle-orm";
-import { clients, counters, invoiceLines, invoices, partners } from "../db/schema.js";
+import { and, eq, inArray, isNull, ne, sql, sum } from "drizzle-orm";
+import { clients, counters, invoiceLines, invoices, items, partners, STOCK_ITEM_TYPES, stockDocs } from "../db/schema.js";
+import { defaultWarehouse, postStockDoc, reverseStockDoc } from "./stock.js";
 import type { Db } from "../db/types.js";
 import { calcTotals, round } from "./calc.js";
 import { DomainError } from "./errors.js";
@@ -117,10 +118,38 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
       await tx.update(invoices).set({ status: inv.docType === "ST" ? "voided" : "corrected", version: sql`${invoices.version} + 1` })
         .where(eq(invoices.id, related.id));
     }
+    // Magacin (docs/07): izdavanje -> ispratnica; storno/korekcija -> tocno vrakjanje na ispratnicata od originalot.
+    // Knizno odobrenie/zadolzuvanje i avans ne ja menuvaat zalihata.
+    const stockWarnings: string[] = [];
+    let stockDocNumber: string | null = null;
+    if (client!.modules.includes("warehouse")) {
+      const stx = tx as unknown as Db;
+      const docDate = inv.supplyDate ?? inv.issueDate;
+      if (related && (inv.docType === "ST" || inv.docType === "KR")) {
+        const prev = await stx.select().from(stockDocs).where(and(eq(stockDocs.invoiceId, related.id), eq(stockDocs.kind, "issue"), isNull(stockDocs.reversesDocId)));
+        for (const d of prev) {
+          const [rev] = await stx.select({ id: stockDocs.id }).from(stockDocs).where(eq(stockDocs.reversesDocId, d.id));
+          if (!rev) stockWarnings.push(...(await reverseStockDoc(stx, d.id, { docDate, createdBy: actor.userId, note: `${number}: враќање на ${d.number}` })).warnings);
+        }
+      }
+      if (inv.docType === "INV" || inv.docType === "KR") {
+        const ids = [...new Set(lines.map((l) => l.itemId).filter((x): x is number => !!x))];
+        const its = ids.length ? await stx.select().from(items).where(inArray(items.id, ids)) : [];
+        const stockIds = new Set(its.filter((i) => (STOCK_ITEM_TYPES as readonly string[]).includes(i.type)).map((i) => i.id));
+        const moves = lines.filter((l) => l.itemId && stockIds.has(l.itemId));
+        if (moves.length) {
+          const wh = inv.warehouseId ?? (await defaultWarehouse(stx, inv.clientId)).id;
+          const r = await postStockDoc(stx, { clientId: inv.clientId, kind: "issue", warehouseId: wh, docDate, invoiceId: inv.id,
+            note: `${number}, ${partner!.name}`, createdBy: actor.userId,
+            moves: moves.map((l) => ({ warehouseId: wh, itemId: l.itemId!, qty: `-${String(l.qty).replace("-", "")}` })) });
+          stockWarnings.push(...r.warnings); stockDocNumber = r.doc.number;
+        }
+      }
+    }
     await audit(tx as unknown as Db, actor, {
       clientId: inv.clientId, entity: "invoice", entityId: inv.id, action: "issue",
-      changes: { number, seqNo, totals: { net: totals.netTotal, vat: totals.vatTotal, gross: totals.grossTotal } },
+      changes: { number, seqNo, totals: { net: totals.netTotal, vat: totals.vatTotal, gross: totals.grossTotal }, stockDocNumber, stockWarnings },
     });
-    return issued!;
+    return { ...issued!, stockDocNumber, stockWarnings };
   });
 }

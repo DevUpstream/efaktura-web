@@ -37,7 +37,14 @@ export const INVOICE_STATUS_LABEL: Record<(typeof invoiceStatus.enumValues)[numb
 
 export const authProvider = pgEnum("auth_provider", ["entra", "local"]);
 export const userRole = pgEnum("user_role", ["admin", "accountant"]);
-export const itemType = pgEnum("item_type", ["goods", "service"]);
+export const itemType = pgEnum("item_type", ["goods", "service", "material", "product"]);
+/** Vidovi artikli sto vodat zaliha (docs/07). */
+export const STOCK_ITEM_TYPES = ["goods", "material", "product"] as const;
+export const negativeStock = pgEnum("negative_stock", ["block", "warn"]);
+export const stockDocKind = pgEnum("stock_doc_kind", ["receipt", "issue", "writeoff", "inventory", "transfer"]);
+export const STOCK_DOC_CODE: Record<(typeof stockDocKind.enumValues)[number], string> = {
+  receipt: "PR", issue: "IS", writeoff: "OT", inventory: "PO", transfer: "PN" };
+export const purchaseStatus = pgEnum("purchase_status", ["draft", "posted", "voided"]);
 export const paymentMethod = pgEnum("payment_method", ["bank", "cash", "card", "compensation", "other"]);
 export const vatGroup = pgEnum("vat_group", ["DDV-A", "DDV-B", "DDV-V", "DDV-G"]);
 export const vatImpact = pgEnum("vat_impact", ["STANDARD", "NULA", "OSLOBODEN", "PRENESEN"]);
@@ -109,7 +116,8 @@ export const clients = pgTable("clients", {
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
   invoiceClauses: text("invoice_clauses"),
   pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
-  modules: text("modules").array().notNull().default(sql`'{invoices,crm}'::text[]`),  // vkluceni moduli (src/domain/modules.ts)  // izgled na PDF fakturata (docs: Poставки на klientot)
+  modules: text("modules").array().notNull().default(sql`'{invoices,crm}'::text[]`),
+  negativeStock: negativeStock("negative_stock").notNull().default("block"),  // zaliha vo minus (docs/07)  // vkluceni moduli (src/domain/modules.ts)  // izgled na PDF fakturata (docs: Poставки на klientot)
   logoFileId: uuid("logo_file_id"),
   ujpRegistryAt: ts("ujp_registry_at"),              // "UJP ✓": polinjata od registarot se zaklucheni
   ujpRegistryNote: text("ujp_registry_note"),
@@ -186,6 +194,7 @@ export const items = pgTable("items", {
   code: varchar("code", { length: 30 }).notNull(),
   name: text("name").notNull(),
   type: itemType("type").notNull().default("service"),
+  trackLots: boolean("track_lots").notNull().default(false),  // lot / rok na traenje
   unit: varchar("unit", { length: 10 }).notNull(),
   unitPrice: amount4("unit_price").notNull(),
   vatRateId: integer("vat_rate_id").notNull().references(() => vatRates.id, { onDelete: "restrict" }),
@@ -230,6 +239,7 @@ export const invoices = pgTable("invoices", {
   id: serial("id").primaryKey(),
   legacySpId: integer("legacy_sp_id").unique(),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  warehouseId: integer("warehouse_id"),  // od koj magacin (null = glavniot); FK vo 0007
   partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
   docType: docType("doc_type").notNull().default("INV"),
   status: invoiceStatus("status").notNull().default("draft"),
@@ -468,3 +478,151 @@ export const partnerNotes = pgTable("partner_notes", {
   index("partner_notes_partner_ix").on(t.partnerId, t.createdAt),
   index("partner_notes_followup_ix").on(t.clientId, t.followUpAt).where(sql`${t.followUpAt} is not null and ${t.followUpDoneAt} is null`),
 ]);
+
+/* ------------------------------------------------- magacin (docs/07) */
+
+export const warehouses = pgTable("warehouses", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  code: varchar("code", { length: 10 }).notNull(),
+  name: text("name").notNull(),
+  isDefault: boolean("is_default").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: created(),
+}, (t) => [
+  uniqueIndex("warehouses_client_code_uq").on(t.clientId, t.code),
+  uniqueIndex("warehouses_id_client_uq").on(t.id, t.clientId),
+  uniqueIndex("warehouses_default_uq").on(t.clientId).where(sql`${t.isDefault}`),
+]);
+
+export const lots = pgTable("lots", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  lotNo: varchar("lot_no", { length: 50 }).notNull(),
+  expiryDate: date("expiry_date"),
+  createdAt: created(),
+}, (t) => [uniqueIndex("lots_item_no_uq").on(t.itemId, t.lotNo)]);
+
+/** Vlezni fakturi (od dobavuvaci). Knizenje -> priemnica (ako e vkluchen Magacin). */
+export const purchaseInvoices = pgTable("purchase_invoices", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  warehouseId: integer("warehouse_id").references(() => warehouses.id, { onDelete: "restrict" }),
+  status: purchaseStatus("status").notNull().default("draft"),
+  year: smallint("year").notNull(),
+  seqNo: integer("seq_no"),
+  number: varchar("number", { length: 30 }),            // nas broj vo knigata na vlezni fakturi
+  supplierNumber: varchar("supplier_number", { length: 60 }).notNull(),
+  issueDate: date("issue_date").notNull(),
+  receivedDate: date("received_date").notNull(),
+  dueDate: date("due_date"),
+  netTotal: money("net_total").notNull().default("0"),
+  vatTotal: money("vat_total").notNull().default("0"),
+  grossTotal: money("gross_total").notNull().default("0"),
+  note: text("note"),
+  version: integer("version").notNull().default(1),
+  createdBy: integer("created_by").references(() => users.id),
+  postedBy: integer("posted_by").references(() => users.id),
+  postedAt: ts("posted_at"),
+  voidedAt: ts("voided_at"),
+  voidReason: text("void_reason"),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [
+  index("purchase_client_ix").on(t.clientId, t.receivedDate),
+  uniqueIndex("purchase_seq_uq").on(t.clientId, t.year, t.seqNo),
+  uniqueIndex("purchase_supplier_no_uq").on(t.clientId, t.partnerId, t.supplierNumber).where(sql`${t.status} <> 'voided'`),
+]);
+
+export const purchaseLines = pgTable("purchase_lines", {
+  id: serial("id").primaryKey(),
+  purchaseInvoiceId: integer("purchase_invoice_id").notNull().references(() => purchaseInvoices.id, { onDelete: "cascade" }),
+  lineNo: smallint("line_no").notNull(),
+  itemId: integer("item_id").references(() => items.id, { onDelete: "restrict" }),
+  description: text("description").notNull(),
+  unit: varchar("unit", { length: 10 }).notNull(),
+  qty: amount4("qty").notNull(),
+  unitPrice: amount4("unit_price").notNull(),
+  discountPct: numeric("discount_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+  vatRateId: integer("vat_rate_id").notNull().references(() => vatRates.id, { onDelete: "restrict" }),
+  vatRatePct: numeric("vat_rate_pct", { precision: 5, scale: 2 }).notNull(),
+  netAmount: amount4("net_amount").notNull(),
+  vatAmount: amount4("vat_amount").notNull(),
+  allocate: boolean("allocate").notNull().default(false),   // zavisen trosok -> vo nabavnata cena
+  lotNo: varchar("lot_no", { length: 50 }),
+  expiryDate: date("expiry_date"),
+  unitCost: amount4("unit_cost"),                            // presmetana pri knizenje
+}, (t) => [
+  uniqueIndex("purchase_lines_no_uq").on(t.purchaseInvoiceId, t.lineNo),
+  check("purchase_lines_qty_ck", sql`${t.qty} > 0`),
+  check("purchase_lines_price_ck", sql`${t.unitPrice} >= 0`),
+]);
+
+/** Magacinski dokumenti. Ne se menuvaat i ne se brisat - ispravka so nov (storno) dokument. */
+export const stockDocs = pgTable("stock_docs", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  kind: stockDocKind("kind").notNull(),
+  warehouseId: integer("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  toWarehouseId: integer("to_warehouse_id").references(() => warehouses.id, { onDelete: "restrict" }),
+  year: smallint("year").notNull(),
+  seqNo: integer("seq_no").notNull(),
+  number: varchar("number", { length: 30 }).notNull(),
+  docDate: date("doc_date").notNull(),
+  purchaseInvoiceId: integer("purchase_invoice_id").references(() => purchaseInvoices.id, { onDelete: "restrict" }),
+  invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
+  reversesDocId: integer("reverses_doc_id"),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [
+  uniqueIndex("stock_docs_seq_uq").on(t.clientId, t.kind, t.year, t.seqNo),
+  uniqueIndex("stock_docs_reverses_uq").on(t.reversesDocId).where(sql`${t.reversesDocId} is not null`),
+  index("stock_docs_client_ix").on(t.clientId, t.docDate),
+  index("stock_docs_invoice_ix").on(t.invoiceId),
+]);
+
+/** Kniga na dvizenja: zalihata e zbir od ovie zapisi. qty i value so znak (+ vlez, - izlez). */
+export const stockMoves = pgTable("stock_moves", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  docId: integer("doc_id").notNull().references(() => stockDocs.id, { onDelete: "restrict" }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  warehouseId: integer("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  lotId: integer("lot_id").references(() => lots.id, { onDelete: "restrict" }),
+  qty: amount4("qty").notNull(),
+  unitCost: amount4("unit_cost").notNull(),
+  value: amount4("value").notNull(),
+  balanceQty: amount4("balance_qty").notNull(),     // sostojba po dvizenjeto (za kartica)
+  balanceValue: amount4("balance_value").notNull(),
+  createdAt: created(),
+}, (t) => [
+  index("stock_moves_card_ix").on(t.warehouseId, t.itemId, t.id),
+  index("stock_moves_doc_ix").on(t.docId),
+  check("stock_moves_qty_ck", sql`${t.qty} <> 0`),
+]);
+
+/** Momentalna sostojba po magacin i artikl (se azurira vo istata transakcija so dvizenjeto). */
+export const stockBalances = pgTable("stock_balances", {
+  warehouseId: integer("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  qty: amount4("qty").notNull().default("0"),
+  value: amount4("value").notNull().default("0"),
+  lastCost: amount4("last_cost").notNull().default("0"),
+}, (t) => [primaryKey({ columns: [t.warehouseId, t.itemId] }), index("stock_balances_client_ix").on(t.clientId)]);
+
+export const lotBalances = pgTable("lot_balances", {
+  lotId: integer("lot_id").notNull().references(() => lots.id, { onDelete: "restrict" }),
+  warehouseId: integer("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  qty: amount4("qty").notNull().default("0"),
+}, (t) => [primaryKey({ columns: [t.lotId, t.warehouseId] })]);
+
+export const stockCounters = pgTable("stock_counters", {
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  kind: varchar("kind", { length: 20 }).notNull(),   // stock_doc_kind ili "purchase"
+  year: smallint("year").notNull(),
+  lastNo: integer("last_no").notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.clientId, t.kind, t.year] })]);
