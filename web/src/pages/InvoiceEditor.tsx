@@ -27,7 +27,7 @@ export function InvoiceEditor() {
   const [items, setItems] = useState<Item[]>([]);
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
-  const [head, setHead] = useState<Head>({ partnerId: "", docType: "INV", issueDate: today(), supplyDate: today(),
+  const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: "INV", issueDate: today(), supplyDate: today(),
     dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "" });
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [advances, setAdvances] = useState<Advance[]>([]);

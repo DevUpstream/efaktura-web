@@ -1,4 +1,6 @@
-import { NavLink, Outlet, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
+import { api, type FollowUp } from "../api";
 import { useSession } from "../session";
 
 export function Layout() {
@@ -6,6 +8,17 @@ export function Layout() {
   const { clientId } = useParams();
   const nav = useNavigate();
   const client = me?.clients?.find((c) => String(c.id) === clientId);
+  const crm = !!client?.modules.includes("crm");
+  const loc = useLocation();
+  const [fu, setFu] = useState<{ n: number; late: boolean }>({ n: 0, late: false });
+  useEffect(() => {
+    if (!client || !crm) return setFu({ n: 0, late: false });
+    const get = () => api.get<FollowUp[]>(`/api/clients/${client.id}/followups?days=0`)
+      .then((r) => setFu({ n: r.length, late: r.some((x) => x.overdue) }), () => undefined);
+    void get();
+    window.addEventListener("followups-changed", get);
+    return () => window.removeEventListener("followups-changed", get);
+  }, [client?.id, crm, loc.pathname]);
   if (!client) return <div className="center-card"><h1>Клиентот не е достапен</h1><p>Немате пристап или клиентот не постои.</p></div>;
 
   return (
@@ -25,6 +38,7 @@ export function Layout() {
         <nav className="menu">
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
           <NavLink to={`/c/${client.id}/partners`}>Купувачи</NavLink>
+          {crm && <NavLink to={`/c/${client.id}/followups`}>Потсетници{fu.n > 0 && <span className={`badge ${fu.late ? "late" : ""}`} aria-label={`${fu.n} за денес`}>{fu.n}</span>}</NavLink>}
           <NavLink to={`/c/${client.id}/items`}>Артикли и услуги</NavLink>
           <NavLink to={`/c/${client.id}/settings`}>Поставки и PDF</NavLink>
           {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/clients`} className="menu-admin">Клиенти (фирми)</NavLink>}

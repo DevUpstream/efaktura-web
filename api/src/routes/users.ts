@@ -7,6 +7,7 @@ import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { randomToken, sha256 } from "../auth/crypto.js";
+import { MODULE_KEYS, MODULES, normalizeClientModules } from "../domain/modules.js";
 import { accessibleClients, requireAdmin, requireUser } from "../auth/context.js";
 import { destroyUserSessions } from "../auth/sessions.js";
 
@@ -25,7 +26,7 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
 
   app.get("/api/clients", async (req) => {
     const u = requireUser(req);
-    return (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, isActive: c.isActive,
+    return (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, isActive: c.isActive, modules: c.modules,
       city: c.city, vatNumber: c.vatNumber, ujpRegistryAt: c.ujpRegistryAt, ujpRegistryNote: c.ujpRegistryNote }));
   });
 
@@ -33,7 +34,11 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
     requireAdmin(req);
     const list = await db.select().from(users).orderBy(users.displayName);
     const access = await db.select().from(clientAccess).where(eq(clientAccess.isActive, true));
-    return list.map((u) => ({ ...publicUser(u), clientIds: access.filter((a) => a.userId === u.id).map((a) => a.clientId) }));
+    return list.map((u) => {
+      const mine = access.filter((a) => a.userId === u.id);
+      return { ...publicUser(u), clientIds: mine.map((a) => a.clientId),
+        clientModules: Object.fromEntries(mine.map((a) => [a.clientId, a.modules ?? null])) as Record<number, string[] | null> };
+    });
   });
 
   app.post("/api/users", async (req, reply) => {
@@ -86,14 +91,34 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
   app.put("/api/clients/:clientId/access/:userId", async (req) => {
     const me = requireAdmin(req);
     const p = z.object({ clientId: Id, userId: Id }).parse(req.params);
-    const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
+    const b = z.object({ isActive: z.boolean().optional(), modules: z.array(z.enum(MODULE_KEYS)).max(20).nullable().optional() }).parse(req.body);
     const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, p.clientId));
     const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, p.userId));
     if (!c || !u) throw new DomainError("not_found", "Клиентот или корисникот не постои.", 404);
-    await db.insert(clientAccess).values({ clientId: p.clientId, userId: p.userId, isActive })
-      .onConflictDoUpdate({ target: [clientAccess.clientId, clientAccess.userId], set: { isActive } });
+    const set: { isActive?: boolean; modules?: string[] | null } = {};
+    if (b.isActive !== undefined) set.isActive = b.isActive;
+    if (b.modules !== undefined) set.modules = b.modules;
+    if (!Object.keys(set).length) throw new DomainError("validation", "Нема промена.", 422);
+    await db.insert(clientAccess).values({ clientId: p.clientId, userId: p.userId, isActive: b.isActive ?? true, modules: b.modules ?? null })
+      .onConflictDoUpdate({ target: [clientAccess.clientId, clientAccess.userId], set });
     await audit(db, { userId: me.id, ip: req.ip }, { clientId: p.clientId, entity: "client_access", entityId: `${p.clientId}:${p.userId}`,
-      action: isActive ? "grant" : "revoke" });
+      action: b.isActive === undefined ? "modules" : b.isActive ? "grant" : "revoke", changes: set });
     return { ok: true };
+  });
+
+  /** Katalog na moduli (za ekranite na administratorot). */
+  app.get("/api/modules", async (req) => { requireUser(req); return MODULES; });
+
+  /** Koi moduli gi ima firmata (samo administrator). */
+  app.put("/api/clients/:clientId/modules", async (req) => {
+    const me = requireAdmin(req);
+    const clientId = Id.parse((req.params as { clientId: string }).clientId);
+    const { modules } = z.object({ modules: z.array(z.enum(MODULE_KEYS)).max(20) }).parse(req.body);
+    const n = normalizeClientModules(modules);
+    if (n.error) throw new DomainError("validation", n.error, 422);
+    const [c] = await db.update(clients).set({ modules: n.modules }).where(eq(clients.id, clientId)).returning({ id: clients.id, modules: clients.modules });
+    if (!c) throw new DomainError("not_found", "Клиентот не постои.", 404);
+    await audit(db, { userId: me.id, ip: req.ip }, { clientId, entity: "client", entityId: clientId, action: "modules", changes: { modules: n.modules } });
+    return c;
   });
 }

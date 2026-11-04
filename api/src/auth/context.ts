@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { clientAccess, clients } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
+import { effectiveModules, MODULES, type ModuleKey } from "../domain/modules.js";
 import { loadSession, SESSION_COOKIE, type SessionUser } from "./sessions.js";
 
 declare module "fastify" {
@@ -38,14 +39,32 @@ export function requireAdmin(req: FastifyRequest): SessionUser {
   return u;
 }
 
-/** Klienti do koi korisnikot ima pristap (admin gi gleda site). */
+/** Klienti do koi korisnikot ima pristap (admin gi gleda site), so modulite sto gi gleda. */
 export async function accessibleClients(db: Db, u: SessionUser) {
-  if (u.role === "admin") return db.select().from(clients).orderBy(clients.name);
-  const rows = await db.select({ c: clients }).from(clientAccess)
+  if (u.role === "admin") {
+    const rows = await db.select().from(clients).orderBy(clients.name);
+    return rows.map((c) => ({ ...c, modules: effectiveModules(c.modules, "admin", null) }));
+  }
+  const rows = await db.select({ c: clients, m: clientAccess.modules }).from(clientAccess)
     .innerJoin(clients, eq(clients.id, clientAccess.clientId))
     .where(and(eq(clientAccess.userId, u.id), eq(clientAccess.isActive, true)))
     .orderBy(clients.name);
-  return rows.map((r) => r.c);
+  return rows.map((r) => ({ ...r.c, modules: effectiveModules(r.c.modules, u.role, r.m) }));
+}
+
+/** Pristap do klientot i do modulot (404 za klient, 403 za modul). */
+export async function assertModule(db: Db, u: SessionUser, clientId: number, mod: ModuleKey) {
+  await assertClientAccess(db, u, clientId);
+  const [c] = await db.select({ modules: clients.modules }).from(clients).where(eq(clients.id, clientId));
+  let userMods: string[] | null = null;
+  if (u.role !== "admin") {
+    const [a] = await db.select({ m: clientAccess.modules }).from(clientAccess)
+      .where(and(eq(clientAccess.clientId, clientId), eq(clientAccess.userId, u.id)));
+    userMods = a?.m ?? null;
+  }
+  if (!effectiveModules(c!.modules, u.role, userMods).includes(mod)) {
+    throw new DomainError("module_disabled", `Модулот „${MODULES.find((m) => m.key === mod)!.name}“ не е вклучен за оваа фирма или за вас.`, 403);
+  }
 }
 
 /** Frla 404 (ne 403) za da ne se otkriva postoenjeto na tugi klienti. */

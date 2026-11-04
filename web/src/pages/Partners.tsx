@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
 import { date } from "../format";
 import { CompanyCard, DiffTable, UjpPullStatus, useUjpPull } from "../components/UjpPull";
@@ -12,6 +12,7 @@ export function Partners() {
   const [edit, setEdit] = useState<Partner | "new" | "ujp" | null>(null);
   const [check, setCheck] = useState<Partner | null>(null);
   const [q, setQ] = useState("");
+  const nav = useNavigate();
   const load = () => api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setRows);
   useEffect(() => { setRows(null); setEdit(null); void load(); }, [client.id]);
 
@@ -32,8 +33,9 @@ export function Partners() {
         <div className="table-wrap"><table className="grid">
           <thead><tr><th>Назив</th><th>ЕДБ</th><th>ДДВ број</th><th>Град</th><th>Регистар</th></tr></thead>
           <tbody>{shown.map((p) => (
-            <tr key={p.id} onClick={() => setEdit(p)} className={p.isActive ? "" : "row-inactive"}>
-              <td><button className="link" onClick={() => setEdit(p)}>{p.name}</button>{!p.isActive && <span className="doctype">неактивен</span>}</td>
+            <tr key={p.id} onClick={() => (client.modules.includes("crm") ? nav(`/c/${client.id}/partners/${p.id}`) : setEdit(p))} className={p.isActive ? "" : "row-inactive"}>
+              <td>{client.modules.includes("crm") ? <Link className="docno" to={`/c/${client.id}/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{p.name}</Link>
+                : <button className="link" onClick={() => setEdit(p)}>{p.name}</button>}{!p.isActive && <span className="doctype">неактивен</span>}</td>
               <td>{p.edb ?? "–"}</td><td>{p.vatNumber ?? "–"}</td><td>{p.city ?? "–"}</td>
               <td>{p.ujpRegistryAt ? <span className="chip ok" title={`Проверено ${date(p.ujpRegistryAt.slice(0, 10))}`}>УЈП ✓</span> : <span className="muted">–</span>}</td>
             </tr>))}
@@ -73,7 +75,7 @@ function NewFromUjp({ client, onDone }: { client: ClientRef; onDone: () => void 
   );
 }
 
-function CheckPartner({ client, p, onDone }: { client: ClientRef; p: Partner; onDone: () => void }) {
+export function CheckPartner({ client, p, onDone }: { client: ClientRef; p: Partner; onDone: () => void }) {
   const pull = useUjpPull();
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { void pull.start({ clientId: client.id, partnerId: p.id }); }, [p.id]);
@@ -94,7 +96,7 @@ function CheckPartner({ client, p, onDone }: { client: ClientRef; p: Partner; on
   );
 }
 
-function PartnerForm({ client, p, onDone, onCheck }: { client: ClientRef; p: Partner | null; onDone: () => void; onCheck?: () => void }) {
+export function PartnerForm({ client, p, onDone, onCheck }: { client: ClientRef; p: Partner | null; onDone: () => void; onCheck?: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   const locked = !!p?.ujpRegistryAt;
   async function submit(e: FormEvent<HTMLFormElement>) {
