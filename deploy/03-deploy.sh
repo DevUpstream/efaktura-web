@@ -8,6 +8,7 @@ DST=/opt/efaktura
 TAG="${1:-latest}"
 
 echo "== 1/4 Datoteki =="
+old_caddy=$(sha256sum "$DST/Caddyfile" 2>/dev/null | cut -d' ' -f1 || true)
 install -m 644 "$SRC/docker-compose.yml" "$SRC/Caddyfile" "$DST/"
 grep -q '^DOMAIN=' "$DST/.env" || install -m 644 "$SRC/.env" "$DST/"
 sed -i '/^API_TAG=/d' "$DST/.env"; echo "API_TAG=$TAG" >> "$DST/.env"
@@ -22,6 +23,10 @@ fi
 
 echo "== 3/4 Start =="
 docker compose up -d --remove-orphans
+# Caddyfile e bind-mount na edna datoteka: po zamena kontejnerot ja gleda starata -> restart samo ako e promeneta
+if [ "$old_caddy" != "$(sha256sum Caddyfile | cut -d' ' -f1)" ]; then
+  echo "Caddyfile e promenet -> restart na caddy"; docker compose restart caddy; sleep 3
+fi
 for i in $(seq 1 30); do
   st=$(docker inspect -f '{{.State.Health.Status}}' efaktura-api-1 2>/dev/null || echo none)
   [ "$st" = healthy ] && break; sleep 3
