@@ -5,7 +5,7 @@ export const MODULES = [
   { key: "payments", name: "Плаќања и наплата", core: false, ready: false, requires: [] },
   { key: "incoming", name: "Влезни фактури", core: false, ready: true, requires: [] },
   { key: "warehouse", name: "Магацин", core: false, ready: true, requires: [] },
-  { key: "production", name: "Производство", core: false, ready: false, requires: ["warehouse"] },
+  { key: "production", name: "Производство", core: false, ready: true, requires: ["warehouse"] },
 ] as const;
 export type ModuleKey = (typeof MODULES)[number]["key"];
 export const MODULE_KEYS = MODULES.map((m) => m.key) as [ModuleKey, ...ModuleKey[]];

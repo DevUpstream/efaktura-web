@@ -82,3 +82,23 @@ describe("API: vlezni fakturi i magacin", () => {
     expect(r.body).toMatchObject({ number: "MC-2026-00001", stockDocNumber: "MC-IS-2026-00001", stockWarnings: [] });
   });
 });
+
+describe("API: proizvodstvo", () => {
+  it("normativ -> nalog (planirano so otpad) -> knizenje; bez modul 403", async () => {
+    expect((await call(ana, "GET", `${C()}/boms`)).status).toBe(403);
+    await t.db.update(clients).set({ modules: ["invoices", "warehouse", "production"],
+      productionSettings: { useWaste: true, labor: "hour", laborRate: 300, overhead: "percent", overheadValue: 10 } }).where(eq(clients.id, t.c1.id));
+    const prod = (await t.db.insert(items).values({ clientId: t.c1.id, code: "M1", name: "Маса", type: "product", unit: "ком", unitPrice: "5000", vatRateId: t.vat18.id }).returning())[0]!.id;
+    expect((await call(ana, "GET", `${C()}/boms`)).body.map((x: { code: string }) => x.code)).toEqual(["M1"]);
+    expect((await call(ana, "PUT", `${C()}/boms/${prod}`, { outputQty: 1, laborHours: 1.5, lines: [{ itemId: svc, qty: 1 }] })).status).toBe(422);
+    expect((await call(ana, "PUT", `${C()}/boms/${prod}`, { outputQty: 1, laborHours: 1.5, lines: [{ itemId: goods, qty: 4, wastePct: 20 }] })).status).toBe(200);
+    await call(ana, "POST", `${C()}/stock-docs`, { kind: "receipt", warehouseId: wh, docDate: "2026-11-01", lines: [{ itemId: goods, qty: 100, unitCost: 10 }] });
+    const w = await call(ana, "POST", `${C()}/work-orders`, { productItemId: prod, qty: 2, docDate: "2026-11-05" });
+    const d = (await call(ana, "GET", `${C()}/work-orders/${w.body.id}`)).body;
+    expect(d.lines[0]).toMatchObject({ plannedQty: "10.0000", qty: "10.0000" });          // 2 x 4 / 0.8
+    expect(d.estimate).toMatchObject({ material: "100.00", labor: "900.00", overhead: "10.00", total: "1010.00", laborHours: "3.0000" });
+    const r = await call(ana, "POST", `${C()}/work-orders/${w.body.id}/post`);
+    expect(r.body).toMatchObject({ number: "MC-RN-2026-00001", totalCost: "1010.0000", unitCost: "505.0000" });
+    expect((await call(ana, "DELETE", `${C()}/work-orders/${w.body.id}`)).status).toBe(409);
+  });
+});

@@ -57,6 +57,13 @@
       "when": 1793818228032,
       "tag": "0007_warehouse",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793828522426,
+      "tag": "0008_production",
+      "breakpoints": true
     }
   ]
 }
