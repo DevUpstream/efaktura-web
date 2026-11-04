@@ -55,7 +55,8 @@ function Invoke-Server([string]$Method, [string]$Path, $Body) {
 Write-Host "Сервер: $ServerUrl   УЈП: $($cfg.ApiBaseUrl)   $(if ($Watch) { "(следи $Minutes мин., Ctrl+C за крај)" })" -ForegroundColor Cyan
 $end = (Get-Date).AddMinutes($Minutes); $done = 0; $lastErr = ""
 do {
-    try { $reqs = @(Invoke-Server GET "/api/agent/registry-requests" $null); $lastErr = "" }
+    # Invoke-RestMethod ja vrakja JSON listata kako EDEN objekt -> se razviva i se filtrira (prazno [] = nema baranja)
+    try { $reqs = @((Invoke-Server GET "/api/agent/registry-requests" $null) | ForEach-Object { $_ } | Where-Object { $_ -and $_.id }); $lastErr = "" }
     catch {
         $m = $_.Exception.Message
         if ($m -ne $lastErr) { Write-Host "  ! Серверот: $m" -ForegroundColor Red; $lastErr = $m }
