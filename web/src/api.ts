@@ -41,4 +41,7 @@ export interface Line { id?: number; itemId: number | null; description: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null }
 export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; supplyDate: string | null; paymentMethod: string;
   note: string | null; clauses: string | null; version: number; lines: Line[]; advanceAmount: string | null; issuedAt: string | null;
-  byRate: { vatRatePct: string; net: string; vat: string }[] }
+  byRate: { vatRatePct: string; net: string; vat: string }[];
+  relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;
+  correctionReason: string | null; voidReasonCode: string | null; correctionReasonCode: string | null;
+  derived?: { id: number; number: string | null; docType: DocType; status: Status }[] }

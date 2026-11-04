@@ -55,8 +55,27 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
         errors.push("Корекција бара C-шифра и опис.");
     }
 
-    // Odbivanje avans (docs/04): samo INV/KR, ist kupuvac, izdadena avansna, najmnogu neiskoristeniot del
+    // Pravila od tekot v5: znak na iznosot, pricina, storno tocno ja ponistuva fakturata, odobrenija <= faktura
     const totals = calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })), inv.advanceAmount ?? 0);
+    const gross = Number(totals.grossTotal);
+    if (["OD", "ST"].includes(inv.docType) ? gross >= 0 : gross <= 0)
+      errors.push(["OD", "ST"].includes(inv.docType) ? "Износот мора да е негативен (намалување)." : "Износот мора да е поголем од 0.");
+    if (NEEDS_RELATED.includes(inv.docType) && !inv.correctionReason?.trim()) errors.push("Внесете причина.");
+    if (related && (inv.docType === "OD" || inv.docType === "ST")) {
+      const [od] = await tx.select({ s: sum(invoices.grossTotal) }).from(invoices).where(and(
+        eq(invoices.relatedInvoiceId, related.id), eq(invoices.docType, "OD"), ne(invoices.id, inv.id),
+        inArray(invoices.status, [...ISSUED_LIKE])));
+      const priorOd = Number(od?.s ?? 0);
+      if (inv.docType === "OD" && Number(related.grossTotal) + priorOd + gross < -0.005)
+        errors.push("Вкупните одобренија се поголеми од фактурата.");
+      if (inv.docType === "ST") {
+        if (priorOd < -0.001) errors.push("Фактурата има издадени книжни одобренија: наместо сторно направете книжно одобрение за остатокот.");
+        else if (Math.abs(gross + Number(related.grossTotal)) > 0.005 || Math.abs(Number(totals.vatTotal) + Number(related.vatTotal)) > 0.005)
+          errors.push("Сторното мора точно да ја поништи фактурата (ист износ со минус).");
+      }
+    }
+
+    // Odbivanje avans (docs/04): samo INV/KR, ist kupuvac, izdadena avansna, najmnogu neiskoristeniot del
     if (inv.advanceInvoiceId) {
       const [adv] = await tx.select().from(invoices).where(eq(invoices.id, inv.advanceInvoiceId)).for("update");
       if (!["INV", "KR"].includes(inv.docType)) errors.push("Аванс се одбива само кај фактура или корекција.");

@@ -38,6 +38,7 @@ a { color: var(--accent); }
 .menu { display: flex; flex-direction: column; gap: 2px; }
 .menu a { color: rgba(255,255,255,.82); text-decoration: none; padding: 8px 10px; border-radius: var(--r); }
 .menu a:hover { background: rgba(255,255,255,.08); color: #fff; }
+.menu .menu-admin { margin-top: 10px; }
 .menu a.active { background: rgba(255,255,255,.14); color: #fff; font-weight: 500; }
 .who { margin-top: auto; display: flex; flex-direction: column; font-size: 0.88rem; gap: 2px; }
 .who .muted { color: rgba(255,255,255,.6); }
@@ -132,6 +133,10 @@ label.check input { width: auto; min-height: 0; }
 .lines td.num input { text-align: right; }
 .src { display: block; font-size: 0.72rem; color: var(--muted); text-align: right; white-space: normal; line-height: 1.2; margin-top: 2px; }
 .add-line { align-self: flex-start; }
+.doc-head.related, .doc-head.advance { padding: 14px; background: var(--paper); border-radius: var(--r); }
+.doc-head .span-all { grid-column: 1 / -1; margin: 0; }
+.after { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.row-actions.wrap { flex-wrap: wrap; }
 .doc-foot { display: grid; grid-template-columns: 1fr minmax(280px, 380px); gap: 24px; align-items: start; }
 
 /* „За плаќање“ - единствениот истакнат елемент */
@@ -173,3 +178,9 @@ label.check input { width: auto; min-height: 0; }
 .secret { font-size: 0.85rem; word-break: break-all; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.grid.users td { vertical-align: middle; }
+.grid.users select { width: auto; min-height: 32px; padding: 4px 6px; }
+.grid .center { text-align: center; }
+.grid input[type=checkbox] { width: 18px; height: 18px; min-height: 0; }
+.row-actions input { flex: 1; }

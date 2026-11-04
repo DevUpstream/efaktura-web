@@ -50,7 +50,7 @@ describe("izdavanje i numeracija", () => {
   it("posledovatelni broevi, poseben brojac po vid i po klient", async () => {
     const a = await issueInvoice(t.db, (await draft()).id, actor());
     const b = await issueInvoice(t.db, (await draft()).id, actor());
-    const od = await issueInvoice(t.db, (await draft({ docType: "OD", relatedInvoiceId: a.id }, 1, 10, -1)).id, actor());
+    const od = await issueInvoice(t.db, (await draft({ docType: "OD", relatedInvoiceId: a.id, correctionReason: "Попуст" }, 1, 10, -1)).id, actor());
     expect([a.number, b.number, od.number]).toEqual(["MC-2026-00001", "MC-2026-00002", "MC-OD-2026-00001"]);
   });
 
@@ -64,10 +64,10 @@ describe("izdavanje i numeracija", () => {
 
   it("storno ja oznacuva originalnata kako storniranа; vtoro storno ne e mozno", async () => {
     const a = await issueInvoice(t.db, (await draft()).id, actor());
-    await issueInvoice(t.db, (await draft({ docType: "ST", relatedInvoiceId: a.id, voidReasonCode: "S-1" }, 1, 270, -1)).id, actor());
+    await issueInvoice(t.db, (await draft({ docType: "ST", relatedInvoiceId: a.id, voidReasonCode: "S-1", correctionReason: "Погрешен купувач" }, 1, 270, -1)).id, actor());
     const [orig] = await t.db.select().from(invoices).where(eq(invoices.id, a.id));
     expect(orig!.status).toBe("voided");
-    const st2 = await draft({ docType: "ST", relatedInvoiceId: a.id, voidReasonCode: "S-1" }, 1, 270, -1);
+    const st2 = await draft({ docType: "ST", relatedInvoiceId: a.id, voidReasonCode: "S-1", correctionReason: "Погрешен купувач" }, 1, 270, -1);
     await expect(issueInvoice(t.db, st2.id, actor())).rejects.toThrow(/сторнирана/);
   });
 
