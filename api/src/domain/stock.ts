@@ -22,11 +22,12 @@ export interface MoveIn {
   warehouseId: number; itemId: number;
   qty: Decimal.Value;                // + vlez, - izlez
   unitCost?: Decimal.Value;          // zadolzitelno kaj vlez; kaj izlez samo za tocno storno
+  value?: Decimal.Value;             // tocna vrednost na vlezot (bez razlika od zaokruzuvanje), samo bez lot-delenje
   lotId?: number | null; lotNo?: string | null; expiryDate?: string | null;
 }
 export interface StockDocIn {
   clientId: number; kind: Kind; warehouseId: number; toWarehouseId?: number | null; docDate: string;
-  purchaseInvoiceId?: number | null; invoiceId?: number | null; reversesDocId?: number | null; note?: string | null;
+  purchaseInvoiceId?: number | null; invoiceId?: number | null; workOrderId?: number | null; reversesDocId?: number | null; note?: string | null;
   createdBy?: number | null; moves: MoveIn[];
 }
 
@@ -83,7 +84,7 @@ async function createDoc(tx: Tx, client: StockClient, d: Omit<StockDocIn, "moves
   const [doc] = await tx.insert(stockDocs).values({
     clientId: d.clientId, kind: d.kind, warehouseId: d.warehouseId, toWarehouseId: d.toWarehouseId ?? null, year, seqNo,
     number: formatStockNumber(client.invoicePrefix, STOCK_DOC_CODE[d.kind], year, seqNo), docDate: d.docDate,
-    purchaseInvoiceId: d.purchaseInvoiceId ?? null, invoiceId: d.invoiceId ?? null, reversesDocId: d.reversesDocId ?? null,
+    purchaseInvoiceId: d.purchaseInvoiceId ?? null, invoiceId: d.invoiceId ?? null, workOrderId: d.workOrderId ?? null, reversesDocId: d.reversesDocId ?? null,
     note: d.note ?? null, createdBy: d.createdBy ?? null,
   }).returning();
   return doc!;
@@ -126,7 +127,7 @@ async function applyMoves(tx: Tx, client: StockClient, doc: StockDoc, moves: Mov
 
     for (const [lotId, q] of parts) {
       let cost: Decimal, value: Decimal;
-      if (m.unitCost !== undefined) { cost = r4(m.unitCost); value = r4(q.times(cost)); }   // vlez ili tocno storno
+      if (m.unitCost !== undefined) { cost = r4(m.unitCost); value = m.value !== undefined && parts.length === 1 ? r4(m.value) : r4(q.times(cost)); }   // vlez ili tocno storno
       else if (q.gt(0)) { errors.push(`Недостасува набавна цена за „${it.name}“.`); continue; }
       else {
         const avg = bq.gt(0) ? bv.div(bq) : lastCost;
@@ -185,10 +186,10 @@ export async function reverseStockDoc(tx: Tx, docId: number, opts: { docDate: st
   const moves = await tx.select().from(stockMoves).where(eq(stockMoves.docId, orig.id)).orderBy(asc(stockMoves.id));
   return postStockDoc(tx, {
     clientId: orig.clientId, kind: orig.kind, warehouseId: orig.warehouseId, toWarehouseId: orig.toWarehouseId, docDate: opts.docDate,
-    purchaseInvoiceId: orig.purchaseInvoiceId, invoiceId: orig.invoiceId, reversesDocId: orig.id,
+    purchaseInvoiceId: orig.purchaseInvoiceId, invoiceId: orig.invoiceId, workOrderId: orig.workOrderId, reversesDocId: orig.id,
     note: opts.note ?? `Сторно на ${orig.number}`, createdBy: opts.createdBy,
     // obraten redosled: prvo se vrakja izlezot (kaj prenos), pa vlezot
-    moves: moves.reverse().map((m) => ({ warehouseId: m.warehouseId, itemId: m.itemId, qty: new D(m.qty).neg(), unitCost: m.unitCost, lotId: m.lotId })),
+    moves: moves.reverse().map((m) => ({ warehouseId: m.warehouseId, itemId: m.itemId, qty: new D(m.qty).neg(), unitCost: m.unitCost, value: new D(m.value).neg(), lotId: m.lotId })),
   });
 }
 

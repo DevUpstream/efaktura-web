@@ -23,5 +23,5 @@ export const dateTime = (iso: string) => {
 };
 export const ITEM_TYPE: Record<string, string> = { service: "Услуга", goods: "Стока", material: "Материјал / дел", product: "Готов производ" };
 export const STOCK_TYPES = ["goods", "material", "product"];
-export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос" };
+export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос", consumption: "Издатница за производство", output: "Готов производ" };
 export const qtyFmt = (v: string | number | null | undefined) => (v === null || v === undefined ? "–" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(Number(v)));

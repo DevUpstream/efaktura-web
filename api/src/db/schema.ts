@@ -40,10 +40,20 @@ export const userRole = pgEnum("user_role", ["admin", "accountant"]);
 export const itemType = pgEnum("item_type", ["goods", "service", "material", "product"]);
 /** Vidovi artikli sto vodat zaliha (docs/07). */
 export const STOCK_ITEM_TYPES = ["goods", "material", "product"] as const;
+/** Kako firmata ja presmetuva cenata na cinenje (docs/07). */
+export interface ProductionSettings {
+  useWaste: boolean;                          // otpad (%) po del vo normativot
+  labor: "none" | "hour" | "piece";           // trud: ne / casovi x cena / fiksno po parce
+  laborRate: number;                          // cena na cas ili po parce (MKD)
+  overhead: "none" | "percent" | "piece";     // struja i opsti troshoci: ne / % od materijalite / fiksno po parce
+  overheadValue: number;
+}
+export const DEFAULT_PRODUCTION: ProductionSettings = { useWaste: false, labor: "none", laborRate: 0, overhead: "none", overheadValue: 0 };
 export const negativeStock = pgEnum("negative_stock", ["block", "warn"]);
-export const stockDocKind = pgEnum("stock_doc_kind", ["receipt", "issue", "writeoff", "inventory", "transfer"]);
+export const stockDocKind = pgEnum("stock_doc_kind", ["receipt", "issue", "writeoff", "inventory", "transfer", "consumption", "output"]);
 export const STOCK_DOC_CODE: Record<(typeof stockDocKind.enumValues)[number], string> = {
-  receipt: "PR", issue: "IS", writeoff: "OT", inventory: "PO", transfer: "PN" };
+  receipt: "PR", issue: "IS", writeoff: "OT", inventory: "PO", transfer: "PN", consumption: "PI", output: "GP" };
+export const workOrderStatus = pgEnum("work_order_status", ["draft", "posted", "voided"]);
 export const purchaseStatus = pgEnum("purchase_status", ["draft", "posted", "voided"]);
 export const paymentMethod = pgEnum("payment_method", ["bank", "cash", "card", "compensation", "other"]);
 export const vatGroup = pgEnum("vat_group", ["DDV-A", "DDV-B", "DDV-V", "DDV-G"]);
@@ -116,6 +126,7 @@ export const clients = pgTable("clients", {
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
   invoiceClauses: text("invoice_clauses"),
   pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
+  productionSettings: jsonb("production_settings").$type<ProductionSettings>(),  // docs/07
   modules: text("modules").array().notNull().default(sql`'{invoices,crm}'::text[]`),
   negativeStock: negativeStock("negative_stock").notNull().default("block"),  // zaliha vo minus (docs/07)  // vkluceni moduli (src/domain/modules.ts)  // izgled na PDF fakturata (docs: Poставки на klientot)
   logoFileId: uuid("logo_file_id"),
@@ -573,6 +584,7 @@ export const stockDocs = pgTable("stock_docs", {
   docDate: date("doc_date").notNull(),
   purchaseInvoiceId: integer("purchase_invoice_id").references(() => purchaseInvoices.id, { onDelete: "restrict" }),
   invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
+  workOrderId: integer("work_order_id"),  // FK vo 0008
   reversesDocId: integer("reverses_doc_id"),
   note: text("note"),
   createdBy: integer("created_by").references(() => users.id),
@@ -626,3 +638,81 @@ export const stockCounters = pgTable("stock_counters", {
   year: smallint("year").notNull(),
   lastNo: integer("last_no").notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.clientId, t.kind, t.year] })]);
+
+/* ------------------------------------------------- proizvodstvo (docs/07) */
+
+/** Normativ: od sto e napraven proizvodot (za outputQty parcinja). Eden aktiven normativ po proizvod. */
+export const boms = pgTable("boms", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  productItemId: integer("product_item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  outputQty: amount4("output_qty").notNull().default("1"),
+  laborHours: amount4("labor_hours").notNull().default("0"),   // casovi trud za outputQty (rezim "hour")
+  laborCost: amount4("labor_cost"),                            // trud po parce, ako se razlikuva od postavkata (rezim "piece")
+  note: text("note"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [
+  uniqueIndex("boms_product_uq").on(t.productItemId),
+  check("boms_output_ck", sql`${t.outputQty} > 0`),
+]);
+
+export const bomLines = pgTable("bom_lines", {
+  id: serial("id").primaryKey(),
+  bomId: integer("bom_id").notNull().references(() => boms.id, { onDelete: "cascade" }),
+  lineNo: smallint("line_no").notNull(),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  qty: amount4("qty").notNull(),
+  wastePct: numeric("waste_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+}, (t) => [
+  uniqueIndex("bom_lines_no_uq").on(t.bomId, t.lineNo),
+  check("bom_lines_qty_ck", sql`${t.qty} > 0`),
+  check("bom_lines_waste_ck", sql`${t.wastePct} >= 0 and ${t.wastePct} < 100`),
+]);
+
+/** Raboten nalog: trosenje delovi (izdatnica PI) -> gotov proizvod (GP) po cena na cinenje. */
+export const workOrders = pgTable("work_orders", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  status: workOrderStatus("status").notNull().default("draft"),
+  year: smallint("year").notNull(),
+  seqNo: integer("seq_no"),
+  number: varchar("number", { length: 30 }),
+  productItemId: integer("product_item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  qty: amount4("qty").notNull(),
+  docDate: date("doc_date").notNull(),
+  warehouseId: integer("warehouse_id").references(() => warehouses.id, { onDelete: "restrict" }),        // od kade delovite
+  outputWarehouseId: integer("output_warehouse_id").references(() => warehouses.id, { onDelete: "restrict" }), // kade gotoviot proizvod
+  laborHours: amount4("labor_hours"),
+  laborCost: amount4("labor_cost"),          // null = presmetaj od postavkite; vrednost = racno
+  overheadCost: amount4("overhead_cost"),    // null = presmetaj od postavkite; vrednost = racno
+  materialCost: amount4("material_cost"),    // pri knizenje
+  totalCost: amount4("total_cost"),
+  unitCost: amount4("unit_cost"),
+  note: text("note"),
+  version: integer("version").notNull().default(1),
+  createdBy: integer("created_by").references(() => users.id),
+  postedBy: integer("posted_by").references(() => users.id),
+  postedAt: ts("posted_at"),
+  voidedAt: ts("voided_at"),
+  voidReason: text("void_reason"),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [
+  uniqueIndex("work_orders_seq_uq").on(t.clientId, t.year, t.seqNo),
+  index("work_orders_client_ix").on(t.clientId, t.docDate),
+  check("work_orders_qty_ck", sql`${t.qty} > 0`),
+]);
+
+export const workOrderLines = pgTable("work_order_lines", {
+  id: serial("id").primaryKey(),
+  workOrderId: integer("work_order_id").notNull().references(() => workOrders.id, { onDelete: "cascade" }),
+  lineNo: smallint("line_no").notNull(),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  plannedQty: amount4("planned_qty").notNull(),   // od normativot (so otpad)
+  qty: amount4("qty").notNull(),                  // realno potroseno
+}, (t) => [
+  uniqueIndex("work_order_lines_no_uq").on(t.workOrderId, t.lineNo),
+  check("work_order_lines_qty_ck", sql`${t.qty} >= 0`),
+]);

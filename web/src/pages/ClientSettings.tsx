@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Warehouse } from "../api";
+import type { ProductionSettings } from "./Production";
 import { useSession } from "../session";
 
 interface Bank { account: string; bank: string }
@@ -8,7 +9,7 @@ interface Pdf { shortName?: string; tagline?: string; subtitle?: string; contact
   bankAccounts?: Bank[]; invoiceTitle?: string; signatory?: string; paymentNote?: string; clausesTitle?: string;
   receiverDeclaration?: string; showReceivedBy?: boolean }
 interface Client { id: number; name: string; edb: string; embs: string | null; vatNumber: string | null; address: string; city: string;
-  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn" }
+  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn"; productionSettings: ProductionSettings | null }
 
 /** Izgled na PDF fakturata za klientot (format: UPSTREAM Фактура-Испратница). Samo administrator menuva. */
 export function ClientSettings() {
@@ -50,6 +51,7 @@ export function ClientSettings() {
       </dl>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
       {ref.modules.includes("warehouse") && <WarehouseSettings client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />}
+      {ref.modules.includes("production") && <ProductionSettingsForm client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />}
       <form className="panel form-grid" onSubmit={submit}>
         <h2 className="span-all">Заглавје (лево)</h2>
         <div className="span2"><label>Дејност (над називот)<input name="tagline" defaultValue={p.tagline} disabled={dis} placeholder="Друштво за производство, трговија и услуги" /></label></div>
@@ -124,6 +126,37 @@ function WarehouseSettings({ client, admin, onSaved }: { client: Client; admin: 
         : <button className="btn add-line" onClick={() => setAdding(true)}>Нов магацин</button>)}
       <p className="muted small">Со еден магацин изборот не се прикажува никаде. Фактурите и влезните фактури стандардно користат главен магацин.</p>
       {err && <p className="alert">{err}</p>}
+    </section>
+  );
+}
+
+/** Proizvodstvo: kako firmata ja presmetuva cenata na cinenje. */
+function ProductionSettingsForm({ client, admin, onSaved }: { client: Client; admin: boolean; onSaved: (c: Partial<Client>) => void }) {
+  const [v, setV] = useState<ProductionSettings>({ useWaste: false, labor: "none", laborRate: 0, overhead: "none", overheadValue: 0, ...(client.productionSettings ?? {}) });
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  async function save() {
+    try { onSaved(await api.patch<Client>(`/api/clients/${client.id}`, { productionSettings: v })); setMsg({ kind: "ok", text: "Зачувано. Важи за новите работни налози." }); }
+    catch (x) { setMsg({ kind: "err", text: (x as ApiError).message }); }
+  }
+  return (
+    <section className="panel stack">
+      <h2>Производство: цена на чинење</h2>
+      <fieldset className="prod-set" disabled={!admin}>
+        <label className="check"><input type="checkbox" checked={v.useWaste} onChange={(e) => setV({ ...v, useWaste: e.target.checked })} /> Користи отпад (% по дел во нормативот)</label>
+        <div className="row-actions">
+          <label>Труд<select value={v.labor} onChange={(e) => setV({ ...v, labor: e.target.value as ProductionSettings["labor"] })}>
+            <option value="none">Не влегува</option><option value="hour">Часови × цена на час</option><option value="piece">Фиксно по парче</option></select></label>
+          {v.labor !== "none" && <label>{v.labor === "hour" ? "Цена на час (ден.)" : "Труд по парче (ден.)"}<input inputMode="decimal" value={v.laborRate} onChange={(e) => setV({ ...v, laborRate: Number(e.target.value.replace(",", ".")) || 0 })} /></label>}
+        </div>
+        <div className="row-actions">
+          <label>Струја и општи трошоци<select value={v.overhead} onChange={(e) => setV({ ...v, overhead: e.target.value as ProductionSettings["overhead"] })}>
+            <option value="none">Не влегуваат</option><option value="percent">Процент од материјалите</option><option value="piece">Фиксно по парче</option></select></label>
+          {v.overhead !== "none" && <label>{v.overhead === "percent" ? "Процент (%)" : "Износ по парче (ден.)"}<input inputMode="decimal" value={v.overheadValue} onChange={(e) => setV({ ...v, overheadValue: Number(e.target.value.replace(",", ".")) || 0 })} /></label>}
+        </div>
+      </fieldset>
+      <p className="muted small">Цена на чинење = материјали (по просечна набавна цена) + труд + струја и општи. Во секој налог трудот и општите трошоци може да се внесат и рачно.</p>
+      {msg && <p className={msg.kind === "ok" ? "notice" : "alert"}>{msg.text}</p>}
+      {admin && <div><button className="btn btn-primary" onClick={save}>Зачувај</button></div>}
     </section>
   );
 }

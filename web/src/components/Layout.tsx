@@ -39,6 +39,7 @@ export function Layout() {
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
           {client.modules.includes("incoming") && <NavLink to={`/c/${client.id}/purchases`}>Влезни фактури</NavLink>}
           {client.modules.includes("warehouse") && <NavLink to={`/c/${client.id}/stock`}>Магацин</NavLink>}
+          {client.modules.includes("production") && <NavLink to={`/c/${client.id}/production`}>Производство</NavLink>}
           <NavLink to={`/c/${client.id}/partners`}>{client.modules.includes("incoming") ? "Купувачи и добавувачи" : "Купувачи"}</NavLink>
           {crm && <NavLink to={`/c/${client.id}/followups`}>Потсетници{fu.n > 0 && <span className={`badge ${fu.late ? "late" : ""}`} aria-label={`${fu.n} за денес`}>{fu.n}</span>}</NavLink>}
           <NavLink to={`/c/${client.id}/items`}>Артикли и услуги</NavLink>
