@@ -24,7 +24,7 @@ export const api = {
 /* --------------------------------------------------------------- tipovi */
 export type DocType = "INV" | "AV" | "OD" | "KZ" | "ST" | "KR";
 export type Status = "draft" | "to_issue" | "issued" | "json_exported" | "sent_to_ujp" | "rejected" | "voided" | "corrected" | "cancelled_draft";
-export interface ClientRef { id: number; name: string; edb: string; prefix: string }
+export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[] }
 export interface Me {
   authenticated: boolean; entra?: boolean; pending?: "totp" | "totp_setup" | null;
   user?: { id: number; email: string; displayName: string; role: "admin" | "accountant"; provider: "entra" | "local" };
@@ -45,3 +45,12 @@ export interface Invoice extends InvoiceRow { clientId: number; partnerId: numbe
   relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;
   correctionReason: string | null; voidReasonCode: string | null; correctionReasonCode: string | null;
   derived?: { id: number; number: string | null; docType: DocType; status: Status }[] }
+export type NoteKind = "call" | "meeting" | "email" | "note";
+export interface Contact { id: number; partnerId: number; name: string; role: string | null; phone: string | null; mobile: string | null;
+  email: string | null; isPrimary: boolean; isActive: boolean }
+export interface Note { id: number; kind: NoteKind; text: string; contactId: number | null; followUpAt: string | null;
+  followUpDoneAt: string | null; createdAt: string; author: string | null }
+export interface PartnerCardData { partner: Partner & { note?: string | null }; contacts: Contact[]; notes: Note[];
+  invoices: { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; grossTotal: string; payableAmount: string | null }[] }
+export interface FollowUp { id: number; partnerId: number; partnerName: string; kind: NoteKind; text: string; followUpAt: string;
+  createdAt: string; author: string | null; overdue: boolean; isToday: boolean }

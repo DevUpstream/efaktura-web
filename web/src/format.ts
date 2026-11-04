@@ -16,3 +16,8 @@ export const STATUS: Record<Status, string> = { draft: "Нацрт", to_issue: "
   corrected: "Корегирана", cancelled_draft: "Откажан нацрт" };
 export const PAYMENT: Record<string, string> = { bank: "Трансакциска сметка", cash: "Готовина", card: "Платежна картичка",
   compensation: "Компензација", other: "Друго" };
+export const NOTE_KIND: Record<string, string> = { call: "Телефонски разговор", meeting: "Состанок", email: "Е-пошта", note: "Белешка" };
+export const dateTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${date(d.toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" }))} ${d.toLocaleTimeString("en-GB", { timeZone: "Europe/Skopje", hour: "2-digit", minute: "2-digit" })}`;
+};

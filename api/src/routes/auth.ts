@@ -33,7 +33,7 @@ export async function authRoutes(app: FastifyInstance, d: AuthDeps) {
     return {
       authenticated: true, pending,
       user: { id: u.id, email: u.email, displayName: u.displayName, role: u.role, provider: u.provider },
-      clients: pending ? [] : (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix })),
+      clients: pending ? [] : (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, modules: c.modules })),
     };
   });
 

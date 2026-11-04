@@ -10,6 +10,8 @@ import { Items } from "./pages/Items";
 import { Admin } from "./pages/Admin";
 import { ClientSettings } from "./pages/ClientSettings";
 import { Clients } from "./pages/Clients";
+import { PartnerCard } from "./pages/PartnerCard";
+import { Followups } from "./pages/Followups";
 
 function Gate() {
   const { me } = useSession();
@@ -25,6 +27,8 @@ function Gate() {
         <Route path="invoices/new" element={<InvoiceEditor />} />
         <Route path="invoices/:id" element={<InvoiceEditor />} />
         <Route path="partners" element={<Partners />} />
+        <Route path="partners/:id" element={<PartnerCard />} />
+        <Route path="followups" element={<Followups />} />
         <Route path="items" element={<Items />} />
         <Route path="admin" element={<Admin />} />
         <Route path="settings" element={<ClientSettings />} />

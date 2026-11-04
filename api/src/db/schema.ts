@@ -108,7 +108,8 @@ export const clients = pgTable("clients", {
   phone: varchar("phone", { length: 50 }),
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
   invoiceClauses: text("invoice_clauses"),
-  pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),  // izgled na PDF fakturata (docs: Poставки на klientot)
+  pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
+  modules: text("modules").array().notNull().default(sql`'{invoices,crm}'::text[]`),  // vkluceni moduli (src/domain/modules.ts)  // izgled na PDF fakturata (docs: Poставки на klientot)
   logoFileId: uuid("logo_file_id"),
   ujpRegistryAt: ts("ujp_registry_at"),              // "UJP ✓": polinjata od registarot se zaklucheni
   ujpRegistryNote: text("ujp_registry_note"),
@@ -125,6 +126,7 @@ export const clientAccess = pgTable("client_access", {
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
   isActive: boolean("is_active").notNull().default(true),
   note: text("note"),
+  modules: text("modules").array(),  // null = site moduli na klientot; inaku samo ovie
   createdAt: created(),
 }, (t) => [primaryKey({ columns: [t.clientId, t.userId] }), index("client_access_user_ix").on(t.userId)]);
 

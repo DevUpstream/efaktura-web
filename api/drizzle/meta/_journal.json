@@ -43,6 +43,13 @@
       "when": 1793812158186,
       "tag": "0005_partner_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793813649481,
+      "tag": "0006_client_modules",
+      "breakpoints": true
     }
   ]
 }

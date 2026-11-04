@@ -6,7 +6,7 @@ import { invoices, partnerContacts, partnerNotes, partners, users } from "../db/
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
-import { assertClientAccess, requireUser } from "../auth/context.js";
+import { assertModule, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
 const opt = (max: number) => z.string().trim().max(max).optional().nullable().transform((v) => (v ? v : null));
@@ -28,7 +28,7 @@ export async function crmRoutes(app: FastifyInstance, { db }: { db: Db }) {
   const ctx = async (req: FastifyRequest) => {
     const u = requireUser(req);
     const p = z.object({ clientId: Id, id: Id }).parse(req.params);
-    await assertClientAccess(db, u, p.clientId);
+    await assertModule(db, u, p.clientId, "crm");
     const [partner] = await db.select().from(partners).where(and(eq(partners.id, p.id), eq(partners.clientId, p.clientId)));
     if (!partner) throw new DomainError("not_found", "Купувачот не постои.", 404);
     return { u, clientId: p.clientId, partner };
@@ -101,7 +101,7 @@ export async function crmRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.get("/api/clients/:clientId/followups", async (req) => {
     const u = requireUser(req);
     const clientId = Id.parse((req.params as { clientId: string }).clientId);
-    await assertClientAccess(db, u, clientId);
+    await assertModule(db, u, clientId, "crm");
     const { days } = z.object({ days: z.coerce.number().int().min(0).max(60).default(7) }).parse(req.query);
     const until = new Date(Date.now() + days * 864e5).toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" });
     const rows = await db.select({ id: partnerNotes.id, partnerId: partnerNotes.partnerId, partnerName: partners.name, kind: partnerNotes.kind,
