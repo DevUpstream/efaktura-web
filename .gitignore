@@ -1,0 +1,16 @@
+# Tajni - nikogas vo Git
+deploy/secrets/
+*.key
+*.pfx
+*.p12
+agent.config.psd1
+.env.local
+
+# .NET / Node
+bin/
+obj/
+node_modules/
+dist/
+*.user
+.vs/
+.vscode/

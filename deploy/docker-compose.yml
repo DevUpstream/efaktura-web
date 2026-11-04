@@ -1,0 +1,42 @@
+# eFaktura - osnovni servisi (Faza 0). API i web se dodavaat vo sledni cekori.
+name: efaktura
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 96m
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: efaktura
+      POSTGRES_USER: efaktura
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      TZ: Europe/Skopje
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=30", "-c", "work_mem=4MB"]
+    secrets: [db_password]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U efaktura -d efaktura"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NEMA ports: bazata ne e dostapna od internet, samo od drugite kontejneri
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
