@@ -1,4 +1,4 @@
-# eFaktura - osnovni servisi (Faza 0). API i web se dodavaat vo sledni cekori.
+# eFaktura - servisi na serverot. Slikite se gradat na GitHub Actions (ghcr.io).
 name: efaktura
 services:
   caddy:
@@ -31,6 +31,19 @@ services:
       timeout: 5s
       retries: 5
     # NEMA ports: bazata ne e dostapna od internet, samo od drugite kontejneri
+
+  api:
+    image: ghcr.io/devupstream/efaktura-api:${API_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://efaktura@db:5432/efaktura
+      DATABASE_PASSWORD_FILE: /run/secrets/db_password
+      TZ: Europe/Skopje
+    secrets: [db_password]
+    depends_on:
+      db: { condition: service_healthy }
+    mem_limit: 256m
+    # NEMA ports: dostapno samo preku Caddy (/api/*)
 
 secrets:
   db_password:
