@@ -29,6 +29,13 @@
       "when": 1793804032518,
       "tag": "0003_pdf_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793810011565,
+      "tag": "0004_registry",
+      "breakpoints": true
     }
   ]
 }

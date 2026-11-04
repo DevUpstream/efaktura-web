@@ -405,3 +405,29 @@ export const userTokens = pgTable("user_tokens", {
   createdBy: integer("created_by").references(() => users.id),
   createdAt: created(),
 });
+
+/* --------------------------------------------- registar na UJP (preku agentot) */
+
+/** UJP e dostapen samo od dozvoleni IP adresi (ne od serverot) -> baranjata gi izvrsuva lokalniot agent. */
+export const registryKind = pgEnum("registry_kind", ["lookup", "client", "partner"]);
+export const registryStatus = pgEnum("registry_status", ["pending", "done", "error"]);
+
+export interface UjpCompany {
+  name: string; address: string; city: string; postalCode: string; vatNumber: string; embs: string; countryCode: string;
+}
+
+export const registryRequests = pgTable("ujp_registry_requests", {
+  id: serial("id").primaryKey(),
+  kind: registryKind("kind").notNull(),
+  edb: varchar("edb", { length: 13 }).notNull(),             // koj se bara
+  sellerEdb: varchar("seller_edb", { length: 13 }).notNull(), // X-EDB vo baranjeto kon UJP
+  clientId: integer("client_id").references(() => clients.id, { onDelete: "cascade" }),
+  partnerId: integer("partner_id").references(() => partners.id, { onDelete: "cascade" }),
+  status: registryStatus("status").notNull().default("pending"),
+  result: jsonb("result").$type<UjpCompany>(),
+  error: text("error"),
+  requestedBy: integer("requested_by").references(() => users.id),
+  agentKeyId: integer("agent_key_id").references(() => agentKeys.id),
+  createdAt: created(),
+  doneAt: ts("done_at"),
+}, (t) => [index("ujp_registry_pending_ix").on(t.status, t.createdAt)]);
