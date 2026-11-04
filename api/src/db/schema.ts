@@ -56,6 +56,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash"),               // argon2id (samo za provider=local)
   totpSecretEnc: text("totp_secret_enc"),            // enkriptiran so klucot od serverot
   totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpLastCounter: integer("totp_last_counter").notNull().default(-1),   // ist kod ne se koristi dvapati
   role: userRole("role").notNull().default("accountant"),
   isActive: boolean("is_active").notNull().default(true),
   failedLogins: smallint("failed_logins").notNull().default(0),
@@ -66,8 +67,9 @@ export const users = pgTable("users", {
 }, (t) => [
   uniqueIndex("users_email_uq").on(sql`lower(${t.email})`),
   uniqueIndex("users_entra_oid_uq").on(t.entraOid).where(sql`${t.entraOid} is not null`),
-  check("users_provider_ck", sql`(${t.provider} = 'entra' and ${t.entraOid} is not null)
-                              or (${t.provider} = 'local' and ${t.passwordHash} is not null)`),
+  // entra: bez lozinka (oid se vrzuva pri prva najava); local: bez oid (lozinkata se postavuva preku pokana)
+  check("users_provider_ck", sql`(${t.provider} = 'entra' and ${t.passwordHash} is null and ${t.totpSecretEnc} is null)
+                              or (${t.provider} = 'local' and ${t.entraOid} is null)`),
 ]);
 
 /* ------------------------------------------------------------- klienti */
@@ -359,3 +361,30 @@ export const auditLog = pgTable("audit_log", {
   changes: jsonb("changes"),
   ip: varchar("ip", { length: 45 }),
 }, (t) => [index("audit_log_entity_ix").on(t.entity, t.entityId), index("audit_log_client_ix").on(t.clientId, t.at)]);
+
+/* ------------------------------------------------------------- sesii */
+
+/** Sesija: vo kolaceto e slucaen token, vo bazata samo negoviot SHA-256. */
+export const sessions = pgTable("sessions", {
+  idHash: char("id_hash", { length: 64 }).primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  mfaOk: boolean("mfa_ok").notNull().default(false),   // local: TOTP e potvrden; entra: MFA ja pravi Microsoft
+  createdAt: created(),
+  lastSeenAt: ts("last_seen_at").notNull().defaultNow(),
+  expiresAt: ts("expires_at").notNull(),               // apsoluten rok
+  ip: varchar("ip", { length: 45 }),
+  userAgent: varchar("user_agent", { length: 300 }),
+}, (t) => [index("sessions_user_ix").on(t.userId)]);
+
+export const tokenPurpose = pgEnum("token_purpose", ["invite", "reset"]);
+
+/** Ednokratni tokeni (pokana / reset na lozinka). Se cuva samo SHA-256. */
+export const userTokens = pgTable("user_tokens", {
+  idHash: char("id_hash", { length: 64 }).primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  purpose: tokenPurpose("purpose").notNull(),
+  expiresAt: ts("expires_at").notNull(),
+  usedAt: ts("used_at"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+});

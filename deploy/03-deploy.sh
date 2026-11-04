@@ -10,10 +10,15 @@ TAG="${1:-latest}"
 echo "== 1/4 Datoteki =="
 old_caddy=$(sha256sum "$DST/Caddyfile" 2>/dev/null | cut -d' ' -f1 || true)
 install -m 644 "$SRC/docker-compose.yml" "$SRC/Caddyfile" "$DST/"
-grep -q '^DOMAIN=' "$DST/.env" || install -m 644 "$SRC/.env" "$DST/"
-sed -i '/^API_TAG=/d' "$DST/.env"; echo "API_TAG=$TAG" >> "$DST/.env"
+# .env: vrednostite od repoto (ne-tajni) + API_TAG
+install -m 644 "$SRC/.env" "$DST/.env"; echo "API_TAG=$TAG" >> "$DST/.env"
+# app_key (kolacinja, TOTP): se generira EDNAS na serverot
+[ -s "$DST/secrets/app_key" ] || { openssl rand -base64 32 > "$DST/secrets/app_key"; echo "   nov app_key generiran"; }
+# entra tajnata ja vnesuva administratorot so set-secret.sh; prazna datoteka = najava so Microsoft isklucena
+[ -e "$DST/secrets/entra_client_secret" ] || : > "$DST/secrets/entra_client_secret"
+for f in "$DST"/secrets/*; do chown root:root "$f"; chmod 444 "$f"; done
 # lozinkata ja citaat postgres (uid 70) i api (uid 1000); papkata secrets e 700 root, pa ne e vidliva za drugi korisnici
-chown root:root "$DST/secrets/db_password"; chmod 444 "$DST/secrets/db_password"; chmod 700 "$DST/secrets"
+chmod 700 "$DST/secrets"
 
 echo "== 2/4 Sliki =="
 cd "$DST"

@@ -38,8 +38,14 @@ services:
     environment:
       DATABASE_URL: postgres://efaktura@db:5432/efaktura
       DATABASE_PASSWORD_FILE: /run/secrets/db_password
+      PUBLIC_URL: https://${DOMAIN}
+      APP_KEY_FILE: /run/secrets/app_key
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET_FILE: /run/secrets/entra_client_secret
       TZ: Europe/Skopje
-    secrets: [db_password]
+    secrets: [db_password, app_key, entra_client_secret]
     depends_on:
       db: { condition: service_healthy }
     mem_limit: 256m
@@ -48,6 +54,10 @@ services:
 secrets:
   db_password:
     file: ./secrets/db_password
+  app_key:
+    file: ./secrets/app_key
+  entra_client_secret:
+    file: ./secrets/entra_client_secret
 
 volumes:
   caddy_data:
