@@ -84,15 +84,15 @@ describe("uvoz, prepoznavanje i knizenje", () => {
       { name: "Шпаркасе Банка А.Д. Скопје", acc: "250-0000033333-22", amount: -10, code: "666", purpose: "[AutoProv]Провизија" },
     ]);
     const r = (await call("POST", `${C()}/bank-statements`, { text: st, fileName: "30.txt" })).body;
-    expect(r).toMatchObject({ lines: 4, booked: 1 });
+    expect(r).toMatchObject({ lines: 4, booked: 1, categorized: 2 });
     const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
     expect(d.lines[0]).toMatchObject({ status: "booked", booking: { documents: a.number } });
     expect(d.lines[1].suggestion).toMatchObject({ partnerId: t.p1.id, partnerBy: "name", confidence: "likely" });
-    expect(d.lines[2].suggestion).toMatchObject({ partnerId: null, hint: "јавни давачки (Трезор)" });
-    expect(d.lines[3].suggestion).toMatchObject({ partnerId: null, hint: "банкарска провизија или систем" });
-    expect(d.counts).toMatchObject({ booked: 1, open: 3 });
+    expect(d.lines[2]).toMatchObject({ status: "ignored", category: "tax", categorySource: "auto" });
+    expect(d.lines[3]).toMatchObject({ status: "ignored", category: "fee", categorySource: "auto" });
+    expect(d.counts).toMatchObject({ booked: 1, open: 1, ignored: 2 });
     const list = (await call("GET", `${C()}/bank-statements`)).body;
-    expect(list[0]).toMatchObject({ statementNo: "30", lines: 4, open: 3, inflow: "1480.00", outflow: "535.00" });
+    expect(list[0]).toMatchObject({ statementNo: "30", lines: 4, open: 1, inflow: "1480.00", outflow: "535.00" });
   });
 
   it("racno knizenje ja ucи smetkata; sledniot izvod e sigurен po smetka + tocen iznos", async () => {
@@ -134,7 +134,7 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     expect(r.booked).toBe(1);
     const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
     expect(d.lines[0].booking.documents).toMatch(/\(25-1200-230\)/);
-    expect(d.lines[1].status).toBe("open");   // provizija
+    expect(d.lines[1]).toMatchObject({ status: "ignored", category: "fee" });   // provizija - avtomatski
   });
 
   it("zastita: pogresna firma, dupli izvod, ignoriraj, storno ja otvora stavkata", async () => {
@@ -144,7 +144,7 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     const r = (await call("POST", `${C()}/bank-statements`, { text: st })).body;
     expect((await call("POST", `${C()}/bank-statements`, { text: st })).status).toBe(409);
     const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
-    expect((await call("POST", `${C()}/bank-lines/${d.lines[0].id}/ignore`, { ignored: true })).status).toBe(422);   // proknizena
+    expect((await call("POST", `${C()}/bank-lines/${d.lines[0].id}/category`, { category: "skip" })).status).toBe(422);   // proknizena
     await call("POST", `${C()}/payments/${d.lines[0].booking.paymentId}/void`, { reason: "Погрешно" });
     expect((await call("GET", `${C()}/bank-statements/${r.id}`)).body.lines[0].status).toBe("open");
     expect((await call("POST", `${C()}/bank-statements/${r.id}/book-sure`)).body.booked).toBe(1);   // povtorno knizenje
@@ -158,6 +158,32 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     const { normalizeName } = await import("../src/domain/bank-import.js");
     expect(normalizeName("ELEKTRO LINK DOO SKOPJE")).toBe(normalizeName("ЕЛЕКТРО ЛИНК ДОО Скопје"));
     expect(normalizeName("Kjumbe Gjorgjievski DOOEL")).toBe("ЌУМБЕ ЃОРЃИЕВСКИ");
+  });
+
+  it("prenos megju sopstveni smetki i trosoci: ne vleguvaat vo trosocite; pregled i CSV", async () => {
+    await t.db.update(clients).set({ pdfSettings: { bankAccounts: [{ account: "210-0000000777-11", bank: "НЛБ" }] } }).where(eq(clients.id, t.c1.id));
+    const r = (await call("POST", `${C()}/bank-statements`, { text: txt(40, "05.11.2026", OWN, 50000, [
+      { name: "МАКЕДОНСКИ ЦЕНТАР", acc: "210-0000000777-11", amount: -20000, purpose: "Пренос меѓу сметки" },
+      { name: "Шпаркасе Банка", acc: "250-0000033333-22", amount: -141, code: "666", purpose: "[AutoProv]Провизија за налози" },
+      { name: "ШПАРКАСЕ БАНКА-ПЛАТЕЖНИ КАРТИЧКИ", acc: "250-0010022085-73", amount: -720, purpose: "TINEKS MT [Плаќање со Виза к.]" },
+      { name: "Вработен", acc: "210-0000000002-22", amount: -9594, code: "188", purpose: "Дневници и трошоци за службени патување" },
+    ]) })).body;
+    expect(r).toMatchObject({ booked: 0, categorized: 2 });
+    const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
+    expect(d.lines.map((l: { category: string | null; suggestion: { category: string } | null }) => l.category ?? l.suggestion?.category)).toEqual(["transfer", "fee", "card", "salary"]);
+    expect(d.lines[2].status).toBe("open");   // kartica i plata: samo predlog
+    await call("POST", `${C()}/bank-lines/${d.lines[2].id}/category`, { category: "card" });
+    await call("POST", `${C()}/bank-lines/${d.lines[3].id}/category`, { category: "salary" });
+    const e = (await call("GET", `${C()}/bank-expenses?from=2026-11-01&to=2026-11-30`)).body;
+    const by = Object.fromEntries(e.byMonth.map((g: { category: string; out: string }) => [g.category, g.out]));
+    expect(by).toEqual({ transfer: "20000.00", fee: "141.00", card: "720.00", salary: "9594.00" });
+    expect(e.categories.transfer.expense).toBe(false);
+    const csv = await app.inject({ method: "GET", url: `${C()}/bank-expenses?format=csv`, headers: { cookie: ana } });
+    expect(csv.headers["content-type"]).toMatch(/text\/csv/);
+    expect(csv.body).toContain("Пренос меѓу сопствени сметки");
+    // vrati vo obrabotka
+    await call("POST", `${C()}/bank-lines/${d.lines[3].id}/category`, { category: null });
+    expect((await call("GET", `${C()}/bank-statements/${r.id}`)).body.lines[3].status).toBe("open");
   });
 
   it("matchLine: nashiot EDB (PP50) ne e partner", () => {

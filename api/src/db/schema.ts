@@ -771,6 +771,19 @@ export const paymentAllocations = pgTable("payment_allocations", {
 
 /* ------------------------------------------------- izvodi od banka (docs/08) */
 
+/** Vidovi na stavki od izvod sto ne se plakjanje po faktura. expense=false: ne e ni prihod ni trosok (prenos, pozajmica). */
+export const EXPENSE_CATEGORIES = {
+  fee: { name: "Банкарска провизија", expense: true },
+  tax: { name: "Јавни давачки (Трезор)", expense: true },
+  card: { name: "Плаќање со картичка", expense: true },
+  salary: { name: "Плати и дневници", expense: true },
+  other: { name: "Друг трошок", expense: true },
+  transfer: { name: "Пренос меѓу сопствени сметки", expense: false },
+  loan: { name: "Позајмица (основач / поврзано лице)", expense: false },
+  skip: { name: "Не се книжи", expense: false },
+} as const;
+export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
+
 /** Uvezen izvod. Ist izvod (ista datoteka ili ista smetka+broj+datum) ne se uvezuva dvapati. */
 export const bankStatements = pgTable("bank_statements", {
   id: serial("id").primaryKey(),
@@ -809,8 +822,10 @@ export const bankStatementLines = pgTable("bank_statement_lines", {
   refDebit: varchar("ref_debit", { length: 60 }),
   refCredit: varchar("ref_credit", { length: 60 }),
   extra: varchar("extra", { length: 60 }),
-  ignored: boolean("ignored").notNull().default(false),
+  ignored: boolean("ignored").notNull().default(false),        // true = trosok (ne e plakjanje po faktura) - vidot e vo category
   ignoreReason: varchar("ignore_reason", { length: 200 }),
+  category: varchar("category", { length: 20 }),              // EXPENSE_CATEGORIES (docs/08)
+  categorySource: varchar("category_source", { length: 10 }),  // auto | manual
   paymentId: integer("payment_id").references(() => payments.id, { onDelete: "restrict" }),
 }, (t) => [
   uniqueIndex("bank_lines_key_uq").on(t.clientId, t.lineKey),

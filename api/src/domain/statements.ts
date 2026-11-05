@@ -3,7 +3,7 @@
  */
 import { createHash } from "node:crypto";
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
-import { bankStatementLines, bankStatements, clients, type BankImportMapping, partnerAccounts, partners, payments } from "../db/schema.js";
+import { bankStatementLines, bankStatements, clients, EXPENSE_CATEGORIES, type BankImportMapping, type ExpenseCategory, partnerAccounts, partners, payments } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
@@ -109,19 +109,20 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
     return s!;
   });
 
-  let booked = 0; const errors: string[] = [];
+  let booked = 0, categorized = 0; const errors: string[] = [];
   if (opts.autoBook) {
     // ednа po edna: sekoe knizenje go menuva "otvoreno", pa prepoznavanjeto se pravi odnovo
     const lines = await db.select().from(bankStatementLines).where(eq(bankStatementLines.statementId, st.id)).orderBy(asc(bankStatementLines.lineNo));
     for (const l of lines) {
       const m = matchLine(lineInput(l), await matchContext(db, (await db.select().from(clients).where(eq(clients.id, clientId)))[0]!));
+      if (m.category && m.categorySure) { await setCategory(db, clientId, l.id, m.category, "auto"); categorized++; continue; }
       if (m.confidence !== "sure") continue;
       try { await bookLine(db, clientId, l.id, { partnerId: m.partnerId!, allocations: m.allocations?.map((a) => ({ id: a.id, amount: a.amount })) ?? null }, actor); booked++; }
       catch (e) { errors.push(`Ставка ${l.lineNo}: ${(e as Error).message}`); }
     }
   }
   return { id: st.id, statementNo: st.statementNo, lines: (await db.select({ n: sql<number>`count(*)::int` }).from(bankStatementLines).where(eq(bankStatementLines.statementId, st.id)))[0]!.n,
-    booked, warnings: [...warnings, ...errors] };
+    booked, categorized, warnings: [...warnings, ...errors] };
 }
 
 export type LineStatus = "booked" | "ignored" | "open";
@@ -142,11 +143,13 @@ export async function statementDetail(db: Db, clientId: number, statementId: num
     const suggestion: MatchResult | null = status === "open" ? matchLine(lineInput(r.l), ctx) : null;
     const openForPartner = suggestion?.partnerId ? (r.l.direction === "in" ? ctx.openIn : ctx.openOut).filter((o) => o.partnerId === suggestion.partnerId)
       .map((o) => ({ id: o.id, number: o.number, remaining: o.remaining, dueDate: o.dueDate })) : [];
+    // stari "ne se knizi" bez vid -> prikaz kako "Не се книжи"
     return { ...r.l, status, suggestion, openForPartner,
       booking: status === "booked" ? { paymentId: r.l.paymentId, partnerId: r.pPartner, partnerName: r.pName, allocated: r.allocated, documents: r.docs } : null };
   });
   const sum = (st: LineStatus) => lines.filter((l) => l.status === st).length;
-  return { ...s, lines, counts: { open: sum("open"), booked: sum("booked"), ignored: sum("ignored"), sure: lines.filter((l) => l.suggestion?.confidence === "sure").length } };
+  return { ...s, lines, counts: { open: sum("open"), booked: sum("booked"), ignored: sum("ignored"),
+    sure: lines.filter((l) => l.suggestion?.confidence === "sure" || (l.suggestion?.category && l.suggestion.categorySure)).length } };
 }
 
 /** Knizenje na site sigurni otvoreni stavki. */
@@ -154,6 +157,9 @@ export async function bookSure(db: Db, clientId: number, statementId: number, ac
   let booked = 0; const errors: string[] = [];
   for (;;) {
     const d = await statementDetail(db, clientId, statementId);
+    for (const l of d.lines.filter((x) => x.status === "open" && x.suggestion?.category && x.suggestion.categorySure)) {
+      await setCategory(db, clientId, l.id, l.suggestion!.category!, "auto"); booked++;
+    }
     const next = d.lines.find((l) => l.status === "open" && l.suggestion?.confidence === "sure" && !errors.some((e) => e.startsWith(`Ставка ${l.lineNo}:`)));
     if (!next) break;
     try {
@@ -162,4 +168,16 @@ export async function bookSure(db: Db, clientId: number, statementId: number, ac
     } catch (e) { errors.push(`Ставка ${next.lineNo}: ${(e as Error).message}`); }
   }
   return { booked, errors };
+}
+
+/** Vid na stavka sto ne e plakjanje po faktura (trosok, prenos, pozajmica) ili null = vrati vo obrabotka. */
+export async function setCategory(db: Db, clientId: number, lineId: number, category: ExpenseCategory | null, source: "auto" | "manual") {
+  const [l] = await db.select().from(bankStatementLines).where(and(eq(bankStatementLines.id, lineId), eq(bankStatementLines.clientId, clientId)));
+  if (!l) throw new DomainError("not_found", "Ставката не постои.", 404);
+  if (category && l.paymentId) {
+    const [p] = await db.select({ v: payments.voidedAt }).from(payments).where(eq(payments.id, l.paymentId));
+    if (p && !p.v) throw new DomainError("validation", "Ставката е прокнижена како уплата: прво сторнирајте ја уплатата.", 422);
+  }
+  await db.update(bankStatementLines).set({ ignored: !!category, category, categorySource: category ? source : null, ignoreReason: category ? EXPENSE_CATEGORIES[category].name : null })
+    .where(eq(bankStatementLines.id, l.id));
 }
