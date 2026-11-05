@@ -1,12 +1,12 @@
 /** Plakjanja i naplata (docs/08). Modulot "payments" se proveruva na sekoe baranje. */
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { bankStatementLines, bankStatements, clients, invoices, partnerAccounts, partners, paymentAllocations, payments, purchaseInvoices, type BankImportMapping } from "../db/schema.js";
+import { bankStatementLines, bankStatements, clients, EXPENSE_CATEGORIES, type ExpenseCategory, invoices, partnerAccounts, partners, paymentAllocations, payments, purchaseInvoices, type BankImportMapping } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { aging, allocateExisting, createPayment, openItems, unallocated, voidPayment } from "../domain/payments.js";
-import { bookLine, bookSure, clientOwnAccounts, importStatement, statementDetail } from "../domain/statements.js";
+import { bookLine, bookSure, clientOwnAccounts, importStatement, setCategory, statementDetail } from "../domain/statements.js";
 import { normAccount } from "../domain/bank-txt.js";
 import { assertModule, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
@@ -146,17 +146,45 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const r = await bookLine(db, clientId, id!, { partnerId: b.partnerId, allocations: b.allocations ?? null, learn: b.learn }, actor);
     return { paymentId: r.id, allocated: r.allocated, unallocated: r.unallocated, learned: r.learned };
   });
-  app.post("/api/clients/:clientId/bank-lines/:id/ignore", async (req) => {
+  /** Vid na stavka (trosok, prenos, pozajmica, ne se knizi) ili null = vrati vo obrabotka. */
+  app.post("/api/clients/:clientId/bank-lines/:id/category", async (req) => {
     const { clientId, id } = await ctx(req);
-    const b = z.object({ ignored: z.boolean(), reason: z.string().trim().max(200).optional().nullable() }).parse(req.body);
-    const [l] = await db.select().from(bankStatementLines).where(and(eq(bankStatementLines.id, id!), eq(bankStatementLines.clientId, clientId)));
-    if (!l) throw new DomainError("not_found", "Ставката не постои.", 404);
-    if (b.ignored && l.paymentId) {
-      const [p] = await db.select({ v: payments.voidedAt }).from(payments).where(eq(payments.id, l.paymentId));
-      if (p && !p.v) throw new DomainError("validation", "Ставката е прокнижена: прво сторнирајте ја уплатата.", 422);
-    }
-    await db.update(bankStatementLines).set({ ignored: b.ignored, ignoreReason: b.ignored ? b.reason ?? null : null }).where(eq(bankStatementLines.id, l.id));
+    const b = z.object({ category: z.enum(Object.keys(EXPENSE_CATEGORIES) as [ExpenseCategory, ...ExpenseCategory[]]).nullable() }).parse(req.body);
+    await setCategory(db, clientId, id!, b.category, "manual");
     return { ok: true };
+  });
+  app.get("/api/bank-expense-categories", async (req) => { requireUser(req); return EXPENSE_CATEGORIES; });
+
+  /** Trosoci od izvodi po mesec i vid (prenosite i pozajmicite se posebno - ne se trosok). */
+  app.get("/api/clients/:clientId/bank-expenses", async (req, reply) => {
+    const { clientId } = await ctx(req);
+    const q = z.object({ from: Day.optional(), to: Day.optional(), format: z.enum(["json", "csv"]).default("json") }).parse(req.query);
+    const conds = [eq(bankStatementLines.clientId, clientId), eq(bankStatementLines.ignored, true)];
+    if (q.from) conds.push(gte(bankStatementLines.valueDate, q.from));
+    if (q.to) conds.push(lte(bankStatementLines.valueDate, q.to));
+    const lines = await db.select({ id: bankStatementLines.id, valueDate: bankStatementLines.valueDate, category: bankStatementLines.category,
+      categorySource: bankStatementLines.categorySource, direction: bankStatementLines.direction, amount: bankStatementLines.amount,
+      counterpartyName: bankStatementLines.counterpartyName, counterpartyAccount: bankStatementLines.counterpartyAccount, purpose: bankStatementLines.purpose,
+      statementId: bankStatements.id, statementNo: bankStatements.statementNo, ownAccount: bankStatements.ownAccount })
+      .from(bankStatementLines).innerJoin(bankStatements, eq(bankStatements.id, bankStatementLines.statementId))
+      .where(and(...conds)).orderBy(asc(bankStatementLines.valueDate), asc(bankStatementLines.id)).limit(5000);
+    if (q.format === "csv") {
+      const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = [["Датум", "Извод", "Сметка", "Вид", "Трошок", "Насока", "Износ", "Налогодавач/примач", "Сметка на другата страна", "Цел"].map(esc).join(";"),
+        ...lines.map((l) => { const c = EXPENSE_CATEGORIES[l.category as ExpenseCategory];
+          return [l.valueDate, l.statementNo, l.ownAccount, c?.name, c?.expense ? "да" : "не", l.direction === "in" ? "прилив" : "одлив",
+            l.amount.replace(".", ","), l.counterpartyName, l.counterpartyAccount, l.purpose].map(esc).join(";"); })];
+      return reply.header("content-type", "text/csv; charset=utf-8").header("content-disposition", `attachment; filename="trosoci-izvodi-${q.from ?? "od"}-${q.to ?? "do"}.csv"`)
+        .send("\uFEFF" + rows.join("\r\n"));
+    }
+    const sums = new Map<string, { month: string; category: string; count: number; out: number; in: number }>();
+    for (const l of lines) {
+      const k = `${l.valueDate.slice(0, 7)}|${l.category}`;
+      const g = sums.get(k) ?? { month: l.valueDate.slice(0, 7), category: l.category ?? "skip", count: 0, out: 0, in: 0 };
+      g.count++; if (l.direction === "out") g.out += Number(l.amount); else g.in += Number(l.amount);
+      sums.set(k, g);
+    }
+    return { categories: EXPENSE_CATEGORIES, byMonth: [...sums.values()].map((g) => ({ ...g, out: g.out.toFixed(2), in: g.in.toFixed(2) })), lines };
   });
 
   /* ------------------------------------------- ziro-smetki na partner */

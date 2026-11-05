@@ -17,7 +17,8 @@ const AGING: [keyof Aging, string][] = [["current", "Не е доспеано"],
 function Tabs({ c }: { c: number }) {
   return <nav className="seg tabs" aria-label="Плаќања">
     <NavLink to={`/c/${c}/payments`} end>Наплата</NavLink><NavLink to={`/c/${c}/payments/out`}>Обврски</NavLink>
-    <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/statements`}>Изводи</NavLink></nav>;
+    <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/statements`}>Изводи</NavLink>
+    <NavLink to={`/c/${c}/payments/expenses`}>Трошоци</NavLink></nav>;
 }
 
 /* ------------------------------------------------- otvoreni stavki */
@@ -198,9 +199,9 @@ export function Statements() {
     const list = textOverride ? [textOverride] : await Promise.all([...files].map(async (f) => ({ text: await readText(f, enc), name: f.name })));
     for (const f of list) {
       try {
-        const r = await api.post<{ id: number; statementNo: string | null; lines: number; booked: number; warnings: string[] }>(`/api/clients/${client.id}/bank-statements`,
+        const r = await api.post<{ id: number; statementNo: string | null; lines: number; booked: number; categorized: number; warnings: string[] }>(`/api/clients/${client.id}/bank-statements`,
           { text: f.text, fileName: f.name, autoBook });
-        out.push({ file: f.name, ok: true, id: r.id, text: `Извод${r.statementNo ? ` бр. ${r.statementNo}` : ""}: ${r.lines} ставки, автоматски прокнижени ${r.booked}.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
+        out.push({ file: f.name, ok: true, id: r.id, text: `Извод${r.statementNo ? ` бр. ${r.statementNo}` : ""}: ${r.lines} ставки, автоматски прокнижени ${r.booked} уплати/плаќања и ${r.categorized} трошоци/преноси.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
       } catch (e) {
         const m = (e as ApiError).message;
         if (/CSV прво поставете/.test(m)) setCsv(f);
@@ -244,10 +245,18 @@ export function Statements() {
 }
 
 /* --------------------------------------------------------- eden izvod */
+type Cats = Record<string, { name: string; expense: boolean }>;
+let catsCache: Promise<Cats> | null = null;
+function useCats() {
+  const [c, setC] = useState<Cats>({});
+  useEffect(() => { (catsCache ??= api.get<Cats>("/api/bank-expense-categories")).then(setC, () => { catsCache = null; }); }, []);
+  return c;
+}
 interface Suggestion { partnerId: number | null; partnerBy: string | null; allocations: { id: number; number: string; amount: string }[] | null; allocBy: string | null;
-  confidence: "sure" | "likely" | "none"; hint: string | null }
+  confidence: "sure" | "likely" | "none"; hint: string | null; category: string | null; categorySure: boolean }
 interface Line { id: number; lineNo: number; direction: Dir; amount: string; counterpartyName: string | null; counterpartyAccount: string | null; counterpartyEdb: string | null;
   paymentCode: string | null; purpose: string | null; refDebit: string | null; refCredit: string | null; ignored: boolean; ignoreReason: string | null;
+  category: string | null; categorySource: string | null;
   status: "open" | "booked" | "ignored"; suggestion: Suggestion | null; openForPartner: { id: number; number: string; remaining: string; dueDate: string | null }[];
   booking: { paymentId: number; partnerName: string; allocated: string; documents: string | null } | null }
 interface Detail { id: number; statementNo: string | null; statementDate: string | null; ownAccount: string | null; openingBalance: string | null; closingBalance: string | null;
@@ -264,6 +273,7 @@ export function StatementView() {
   const [filter, setFilter] = useState<"open" | "all">("open");
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const cats = useCats();
   const load = () => api.get<Detail>(`/api/clients/${client.id}/bank-statements/${id}`).then(setD);
   useEffect(() => { void load(); api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners); }, [client.id, id]);
   async function act(f: () => Promise<string>) { setBusy(true); setMsg(null); try { setMsg({ kind: "ok", text: await f() }); } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } await load(); setBusy(false); }
@@ -283,13 +293,14 @@ export function StatementView() {
         </div></header>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
       {lines.length === 0 && <div className="empty"><p>Сите ставки се обработени. Прокнижени {d.counts.booked}, без книжење {d.counts.ignored}.</p></div>}
-      <div className="stmt-lines">{lines.map((l) => <LineCard key={l.id} l={l} client={client} partners={partners} busy={busy} act={act} />)}</div>
+      <div className="stmt-lines">{lines.map((l) => <LineCard key={l.id} l={l} client={client} partners={partners} busy={busy} act={act} cats={cats} />)}</div>
     </>
   );
 }
 
-function LineCard({ l, client, partners, busy, act }: { l: Line; client: ClientRef; partners: Partner[]; busy: boolean; act: (f: () => Promise<string>) => Promise<void> }) {
+function LineCard({ l, client, partners, busy, act, cats }: { l: Line; client: ClientRef; partners: Partner[]; busy: boolean; act: (f: () => Promise<string>) => Promise<void>; cats: Cats }) {
   const s = l.suggestion;
+  const setCat = (category: string) => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/category`, { category }); return `Ставка ${l.lineNo}: ${cats[category]?.name}.`; });
   const [pid, setPid] = useState<number | "">(s?.partnerId ?? "");
   const [open, setOpen] = useState<Line["openForPartner"]>(l.openForPartner);
   const [manual, setManual] = useState(false);
@@ -317,10 +328,12 @@ function LineCard({ l, client, partners, busy, act }: { l: Line; client: ClientR
       </div>
       <div className="sl-act">
         {l.status === "booked" && l.booking && <><span className="chip ok">прокнижено</span> {l.booking.partnerName}<div className="small">{l.booking.documents ?? "нераспоредено (преплата)"}</div></>}
-        {l.status === "ignored" && <><span className="chip">не се книжи</span> {l.ignoreReason}
-          <div><button className="link small" disabled={busy} onClick={() => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/ignore`, { ignored: false }); return "Вратено за обработка."; })}>Врати</button></div></>}
+        {l.status === "ignored" && <><span className={`chip ${cats[l.category ?? "skip"]?.expense ? "wait" : ""}`}>{cats[l.category ?? "skip"]?.name ?? "Не се книжи"}</span>
+          {l.categorySource === "auto" && <span className="muted small"> автоматски</span>}
+          {cats[l.category ?? "skip"] && !cats[l.category ?? "skip"]!.expense && <div className="muted small">Не е приход ни трошок.</div>}
+          <div><button className="link small" disabled={busy} onClick={() => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/category`, { category: null }); return "Вратено за обработка."; })}>Врати</button></div></>}
         {l.status === "open" && <>
-          <div className="sl-conf">{conf === "sure" ? <span className="chip ok">сигурно</span> : conf === "likely" ? <span className="chip wait">предлог</span> : conf === "manual" ? <span className="chip">рачно</span> : <span className="chip err">непознат</span>}
+          <div className="sl-conf">{s?.category && !changed ? <span className="chip wait">предлог: {cats[s.category]?.name}</span> : conf === "sure" ? <span className="chip ok">сигурно</span> : conf === "likely" ? <span className="chip wait">предлог</span> : conf === "manual" ? <span className="chip">рачно</span> : <span className="chip err">непознат</span>}
             {s?.partnerBy && !changed && <span className="muted small"> партнер по {BY[s.partnerBy]}{s.allocBy ? `, фактура по ${ALLOC[s.allocBy]}` : ""}</span>}
             {s?.hint && <span className="muted small"> {s.hint}</span>}</div>
           <select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")} aria-label={`Партнер за ставка ${l.lineNo}`}>
@@ -333,7 +346,12 @@ function LineCard({ l, client, partners, busy, act }: { l: Line; client: ClientR
           <div className="row-actions">
             <button className="btn btn-primary btn-small" disabled={busy || !pid} onClick={book}>Прокнижи</button>
             {pid !== "" && open.length > 0 && <button className="link small" onClick={() => setManual(!manual)}>{manual ? "Автоматски" : "Рачно по фактура"}</button>}
-            <button className="link small" disabled={busy} onClick={() => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/ignore`, { ignored: true, reason: s?.hint ?? null }); return `Ставка ${l.lineNo} не се книжи.`; })}>Не се книжи</button>
+          </div>
+          <div className="row-actions cat-row">
+            {s?.category && <button className="btn btn-small" disabled={busy} onClick={() => setCat(s.category!)}>Книжи како: {cats[s.category]?.name}</button>}
+            <select value="" disabled={busy} onChange={(e) => e.target.value && setCat(e.target.value)} aria-label={`Не е по фактура, ставка ${l.lineNo}`}>
+              <option value="">Не е по фактура…</option>
+              {Object.entries(cats).map(([k, c]) => <option key={k} value={k}>{c.name}{c.expense ? "" : " (не е трошок)"}</option>)}</select>
           </div>
         </>}
       </div>
@@ -377,5 +395,55 @@ function CsvMapping({ client, sample: text, onSaved, onCancel }: { client: Clien
       {err && <p className="alert">{err}</p>}
       <div className="row-actions"><button className="btn btn-primary" onClick={save}>Зачувај и увези</button><button className="link" onClick={onCancel}>Откажи</button></div>
     </section>
+  );
+}
+
+/* ------------------------------------------------- trosoci od izvodi */
+interface ExpLine { id: number; valueDate: string; category: string; categorySource: string | null; direction: Dir; amount: string; counterpartyName: string | null;
+  purpose: string | null; statementId: number; statementNo: string | null; ownAccount: string | null }
+export function BankExpenses() {
+  const client = useOutletContext<ClientRef>();
+  const y = today().slice(0, 4);
+  const [from, setFrom] = useState(`${y}-01-01`);
+  const [to, setTo] = useState(today());
+  const [d, setD] = useState<{ categories: Cats; byMonth: { month: string; category: string; count: number; out: string; in: string }[]; lines: ExpLine[] } | null>(null);
+  const [show, setShow] = useState<string | null>(null);
+  useEffect(() => { setD(null); api.get<typeof d>(`/api/clients/${client.id}/bank-expenses?from=${from}&to=${to}`).then(setD); }, [client.id, from, to]);
+  if (!d) return <p className="muted">Се вчитува…</p>;
+  const months = [...new Set(d.byMonth.map((g) => g.month))].sort();
+  const cats = Object.entries(d.categories);
+  const cell = (m: string, c: string) => { const g = d.byMonth.find((x) => x.month === m && x.category === c); return g ? Number(g.out) - Number(g.in) : 0; };
+  const total = (c: string) => months.reduce((s, m) => s + cell(m, c), 0);
+  const MON = ["јан", "фев", "мар", "апр", "мај", "јун", "јул", "авг", "сеп", "окт", "ное", "дек"];
+  const exp = cats.filter(([, c]) => c.expense), non = cats.filter(([, c]) => !c.expense);
+  const table = (list: typeof cats, title: string) => (
+    <div className="table-wrap"><table className="grid">
+      <thead><tr><th>{title}</th>{months.map((m) => <th key={m} className="num">{MON[Number(m.slice(5)) - 1]} {m.slice(2, 4)}</th>)}<th className="num">Вкупно</th></tr></thead>
+      <tbody>{list.map(([k, c]) => total(k) !== 0 && (
+        <tr key={k} onClick={() => setShow(show === k ? null : k)} aria-expanded={show === k}><td><button className="link">{c.name}</button></td>
+          {months.map((m) => <td key={m} className="num">{cell(m, k) ? money(cell(m, k)) : "–"}</td>)}<td className="num"><strong>{money(total(k))}</strong></td></tr>))}</tbody>
+      {list === exp && <tfoot><tr><td>Вкупно трошоци</td>{months.map((m) => <td key={m} className="num">{money(exp.reduce((s, [k]) => s + cell(m, k), 0))}</td>)}
+        <td className="num">{money(exp.reduce((s, [k]) => s + total(k), 0))}</td></tr></tfoot>}
+    </table></div>);
+  return (
+    <>
+      <header className="page-head"><h1>Трошоци од изводи</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
+      <div className="toolbar">
+        <label>Од<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label>До<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <a className="btn" href={`/api/clients/${client.id}/bank-expenses?from=${from}&to=${to}&format=csv`}>Преземи CSV (Excel)</a>
+      </div>
+      {d.lines.length === 0 ? <div className="empty"><p>Нема трошоци од изводи во овој период.</p>
+        <p className="small">Провизиите, Трезорот и преносите меѓу сопствени сметки се книжат автоматски при увоз на извод. Другите ги означувате во изводот со „Не е по фактура…“.</p></div> : <>
+        {table(exp, "Трошоци (одлив)")}
+        {non.some(([k]) => total(k) !== 0) && <><h2 className="sec-gap">Не се ни приход ни трошок</h2>{table(non, "Вид")}</>}
+        {show && <section className="panel stack"><h2>{d.categories[show]?.name}</h2>
+          <table className="grid compact"><thead><tr><th>Датум</th><th>Извод</th><th>Налогодавач / примач</th><th>Цел</th><th className="num">Износ</th></tr></thead>
+            <tbody>{d.lines.filter((l) => l.category === show).map((l) => (
+              <tr key={l.id}><td>{date(l.valueDate)}</td><td><Link to={`/c/${client.id}/payments/statements/${l.statementId}`}>бр. {l.statementNo ?? l.statementId}</Link></td>
+                <td>{l.counterpartyName}</td><td className="small">{l.purpose}{l.categorySource === "auto" && <span className="muted"> · автоматски</span>}</td>
+                <td className="num">{l.direction === "in" ? "+" : "−"}{money(l.amount)}</td></tr>))}</tbody></table></section>}
+      </>}
+    </>
   );
 }

@@ -23,6 +23,7 @@ import { Decimal } from "decimal.js";
 import { findInvoiceNumbers, normalizeName } from "./bank-import.js";
 import { normAccount } from "./bank-txt.js";
 import type { OpenItem } from "./payments.js";
+import type { ExpenseCategory } from "../db/schema.js";
 
 export type Confidence = "sure" | "likely" | "none";
 export interface MatchLine { direction: "in" | "out"; amount: string; name: string | null; account: string | null; edb: string | null;
@@ -38,6 +39,8 @@ export interface MatchResult {
   allocations: { id: number; number: string; amount: string }[] | null;   // null = od najstarata
   allocBy: "number" | "short-number" | "supplier-number" | "exact" | "combination" | "fifo" | null;
   confidence: Confidence; hint: string | null;
+  /** Vid trosok/prenos koga stavkata ne e plakjanje po faktura; categorySure = se knizi avtomatski. */
+  category: ExpenseCategory | null; categorySure: boolean;
 }
 
 const PARTNER_SURE = new Set(["edb", "account", "invoice"]);
@@ -73,8 +76,14 @@ export function matchLine(l: MatchLine, ctx: MatchContext): MatchResult {
   const text = [l.refCredit, l.refDebit, l.purpose].filter(Boolean).join(" ");
   const open = l.direction === "in" ? ctx.openIn : ctx.openOut;
   const active = ctx.partners.filter((p) => p.isActive);
-  const res: MatchResult = { partnerId: null, partnerBy: null, allocations: null, allocBy: null, confidence: "none", hint: null };
+  const res: MatchResult = { partnerId: null, partnerBy: null, allocations: null, allocBy: null, confidence: "none", hint: null, category: null, categorySure: false };
   const acc = normAccount(l.account);
+
+  // --- trosoci i prenosi (sigurni pravila, pred partnerot)
+  const cat = (c: ExpenseCategory, sure: boolean, hint: string) => ({ ...res, category: c, categorySure: sure, hint });
+  if (acc && ctx.ownAccounts.has(acc)) return cat("transfer", true, "сметката е на нашата фирма");
+  if (l.direction === "out" && /провизи/i.test(l.purpose ?? "") ) return cat("fee", true, "банката ја означила како провизија");
+  if (l.direction === "out" && acc.startsWith("100")) return cat("tax", true, "уплатна сметка на Трезор (100-…)");
 
   // --- partner
   const edb = l.edb && l.edb !== ctx.clientEdb ? l.edb : "";
@@ -95,8 +104,10 @@ export function matchLine(l: MatchLine, ctx: MatchContext): MatchResult {
     if (c.length === 1) { p = c[0]; res.partnerBy = "name"; }
   }
   if (!p) {
-    res.hint = /^\[/.test(l.purpose ?? "") ? "банкарска провизија или систем" : acc.startsWith("100") ? "јавни давачки (Трезор)"
-      : !l.edb && l.direction === "out" ? "физичко лице (плата, дневница)" : null;
+    const t = `${l.purpose ?? ""} ${l.refDebit ?? ""} ${l.refCredit ?? ""}`;
+    if (l.direction === "out" && /виза|visa|master|маестро|maestro|картичк/i.test(t)) return cat("card", false, "плаќање со платежна картичка");
+    if (l.direction === "out" && /дневниц|плата|плати|надомест|патни/i.test(t)) return cat("salary", false, "плата / дневница");
+    if (l.direction === "out" && !l.edb) res.hint = "физичко лице?";
     return res;
   }
   res.partnerId = p.id;
