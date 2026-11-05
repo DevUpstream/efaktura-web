@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
+import { GRADE, GradeChip, useScore } from "../components/Score";
 import { DOC, PAYMENT, STATUS, addDays, date, money, money0, parseNum, today } from "../format";
 import { UjpState } from "../components/UjpState";
 
@@ -173,6 +174,8 @@ export function InvoiceEditor() {
   }
 
   const partner = partners.find((p) => p.id === head.partnerId);
+  const newAmount = totals ? Number(totals.payableAmount ?? totals.grossTotal ?? 0) : 0;
+  const score = useScore(client.id, head.partnerId, inv?.status === "draft" || !inv ? newAmount : 0, client.modules.includes("payments") && ["INV", "AV", "KZ", "KR"].includes(head.docType));
   const isDerived = DERIVED.includes(head.docType);
   const canDerive = inv && !editable && (inv.docType === "INV" || inv.docType === "KR") && ["issued", "json_exported", "sent_to_ujp"].includes(inv.status);
   const shown = editable ? totals : inv && { netTotal: inv.netTotal, vatTotal: inv.vatTotal, grossTotal: inv.grossTotal,
@@ -189,6 +192,8 @@ export function InvoiceEditor() {
           <a className="btn" href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener" onClick={(e) => { if (dirty) { e.preventDefault(); setMsg({ kind: "err", text: "Прво зачувајте ги промените, па отворете PDF." }); } }}>PDF</a></div>}
       </header>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</p>}
+      {editable && score && score.warnings.length > 0 && <div className="alert" role="status"><strong>Внимание за купувачот:</strong> {score.warnings.join(" ")}
+        <span className="muted small"> Фактурата може да се издаде; ова е само предупредување.</span></div>}
       {inv?.ujpError && <p className="alert">УЈП: {inv.ujpError}</p>}
 
       <section className="doc">
@@ -203,6 +208,8 @@ export function InvoiceEditor() {
             {editable && !isDerived && loaded && !partners.some((p) => p.isActive) && (
               <small className="alert">Оваа фирма уште нема купувачи. <Link to={`/c/${client.id}/partners`}>Додајте купувач</Link> (од регистарот на УЈП или рачно), па вратете се тука.</small>)}
             {partner && <small className="muted">{[partner.address, partner.city].filter(Boolean).join(", ") || "без адреса"}{partner.vatNumber ? ` · ДДВ ${partner.vatNumber}` : ""}</small>}
+            {score && score.grade !== "-" && <small className="score-line"><GradeChip s={score} /> {GRADE[score.grade]!.text}
+              {score.avgDaysLate !== null ? `, просечно ${score.avgDaysLate} дена по рокот` : ""}</small>}
           </label>
           <label>Вид
             {editable && !isDerived ? (

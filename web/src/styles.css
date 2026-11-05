@@ -289,3 +289,10 @@ tr.sub .grid.compact { background: var(--surface); }
 .sl-act select { width: 100%; }
 @media (max-width: 900px) { .stmt-line { grid-template-columns: 1fr; } }
 .cat-row select { width: auto; flex: 1; } .sec-gap { margin: 24px 0 10px; font-size: 1.05rem; }
+/* platezhna disciplina */
+.chip.grade { min-width: 24px; text-align: center; font-weight: 700; }
+.score-row { display: flex; gap: 12px; align-items: center; }
+.grade-big { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 1.3rem; background: var(--paper); border: 2px solid var(--line); }
+.grade-big.ok { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); } .grade-big.wait { color: var(--wait); border-color: var(--wait); background: var(--wait-bg); }
+.grade-big.err { color: var(--err); border-color: var(--err); }
+.limit-edit { display: inline-flex; gap: 6px; } .score-line { display: flex; gap: 6px; align-items: center; margin-top: 4px; }

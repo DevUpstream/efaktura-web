@@ -3,6 +3,7 @@ import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Contact, type Note, type NoteKind, type PartnerCardData } from "../api";
 import { addDays, date, dateTime, DOC, money0, NOTE_KIND, STATUS, today } from "../format";
 import { CheckPartner, PartnerForm } from "./Partners";
+import { BiznisMrezaButton, GRADE, type PartnerScore } from "../components/Score";
 
 /** Kartica na kupuvac: podatoci, kontakt lica, istorija na komunikacija so potsetnici, fakturi. */
 export function PartnerCard() {
@@ -29,6 +30,7 @@ export function PartnerCard() {
             {p.ujpRegistryAt && <span className="chip ok" style={{ marginLeft: 10 }}>УЈП ✓</span>}</p></div>
         <div className="row-actions">
           <Link className="btn" to={`/c/${client.id}/invoices/new?partner=${p.id}`}>Нова фактура</Link>
+          <BiznisMrezaButton edb={p.edb} name={p.name} />
           <button className="btn" onClick={() => setMode("edit")}>Уреди податоци</button></div>
       </header>
       {mode === "edit" && <PartnerForm client={client} p={p} onDone={() => { setMode(null); void load(); }} onCheck={p.edb ? () => setMode("check") : undefined} />}
@@ -172,23 +174,39 @@ function ContactForm({ client, partnerId, c, onDone }: { client: ClientRef; part
 /** Salдо (modul Plakjanja): dolzi nam / mu dolzime, zadocneto. */
 function Balance({ client, partnerId }: { client: ClientRef; partnerId: number }) {
   type R = { aging: { total: string; current: string }; byPartner: { unallocated: string }[] };
-  const [d, setD] = useState<{ in: R; out: R } | null>(null);
-  useEffect(() => {
-    Promise.all([api.get<R>(`/api/clients/${client.id}/open-items?direction=in&partnerId=${partnerId}`), api.get<R>(`/api/clients/${client.id}/open-items?direction=out&partnerId=${partnerId}`)])
-      .then(([a, b]) => setD({ in: a, out: b }), () => setD(null));
-  }, [client.id, partnerId]);
+  const [d, setD] = useState<{ in: R; out: R; score: PartnerScore } | null>(null);
+  const [editLimit, setEditLimit] = useState(false);
+  const [limit, setLimit] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const load = () => Promise.all([api.get<R>(`/api/clients/${client.id}/open-items?direction=in&partnerId=${partnerId}`), api.get<R>(`/api/clients/${client.id}/open-items?direction=out&partnerId=${partnerId}`),
+    api.get<PartnerScore>(`/api/clients/${client.id}/partners/${partnerId}/score`)]).then(([a, b, s]) => { setD({ in: a, out: b, score: s }); setLimit(s.creditLimit ? String(Number(s.creditLimit)) : ""); }, () => setD(null));
+  useEffect(() => { void load(); }, [client.id, partnerId]);
   if (!d) return null;
   const late = (r: R) => Number(r.aging.total) - Number(r.aging.current);
   const free = (r: R) => Number(r.byPartner[0]?.unallocated ?? 0);
+  const s = d.score, g = GRADE[s.grade]!;
+  async function saveLimit() {
+    try { await api.put(`/api/clients/${client.id}/partners/${partnerId}/credit-limit`, { creditLimit: limit.trim() ? Number(limit.replace(/\./g, "").replace(",", ".")) : null }); setEditLimit(false); await load(); }
+    catch (x) { setErr((x as ApiError).message); }
+  }
   return (
     <section className="panel stack">
-      <div className="sec-head"><h2>Салдо</h2><Link className="link" to={`/c/${client.id}/payments`}>Наплата</Link></div>
+      <div className="sec-head"><h2>Салдо и плаќање</h2><Link className="link" to={`/c/${client.id}/payments`}>Наплата</Link></div>
+      <div className="score-row"><span className={`grade-big ${g.cls}`}>{g.label}</span>
+        <div><strong>{g.text}</strong>
+          <div className="muted small">{s.avgDaysLate !== null ? `Просечно ${s.avgDaysLate} дена по рокот (${s.paidCount} уплати во 12 мес.${s.lateShare !== null ? `, ${s.lateShare}% доцна` : ""})` : "Нема платени фактури во последните 12 месеци."}
+            {s.trend === "better" ? " · се подобрува" : s.trend === "worse" ? " · се влошува" : ""}</div></div></div>
       <dl className="totals small-totals">
         <div><dt>Ни должи</dt><dd>{money0(d.in.aging.total)}</dd></div>
-        {late(d.in) > 0 && <div className="late-amt"><dt>од тоа задоцнето</dt><dd>{money0(late(d.in))}</dd></div>}
+        {late(d.in) > 0 && <div className="late-amt"><dt>од тоа задоцнето (најстаро {s.maxDaysOverdue} дена)</dt><dd>{money0(late(d.in))}</dd></div>}
         {free(d.in) > 0 && <div><dt>Нераспоредена уплата</dt><dd>{money0(free(d.in))}</dd></div>}
         {Number(d.out.aging.total) > 0 && <div><dt>Ние му должиме</dt><dd>{money0(d.out.aging.total)}</dd></div>}
+        <div><dt>Кредитен лимит</dt><dd>{editLimit
+          ? <span className="limit-edit"><input className="amt-in" inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="без лимит" autoFocus aria-label="Кредитен лимит" />
+              <button className="btn btn-small" onClick={saveLimit}>Зачувај</button></span>
+          : <button className="link" onClick={() => setEditLimit(true)}>{s.creditLimit ? `${money0(s.creditLimit)}${s.limitUsed !== null ? ` (искористено ${s.limitUsed}%)` : ""}` : "без лимит – постави"}</button>}</dd></div>
       </dl>
+      {err && <p className="alert">{err}</p>}
     </section>
   );
 }

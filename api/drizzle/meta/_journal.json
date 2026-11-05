@@ -85,6 +85,13 @@
       "when": 1793903611008,
       "tag": "0011_bank_expenses",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793904582029,
+      "tag": "0012_credit_limit",
+      "breakpoints": true
     }
   ]
 }

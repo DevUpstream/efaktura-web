@@ -8,6 +8,8 @@ import { DomainError } from "../domain/errors.js";
 import { aging, allocateExisting, createPayment, openItems, unallocated, voidPayment } from "../domain/payments.js";
 import { bookLine, bookSure, clientOwnAccounts, importStatement, setCategory, statementDetail } from "../domain/statements.js";
 import { normAccount } from "../domain/bank-txt.js";
+import { partnerScores } from "../domain/score.js";
+import { audit } from "../domain/audit.js";
 import { assertModule, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
@@ -185,6 +187,28 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
       sums.set(k, g);
     }
     return { categories: EXPENSE_CATEGORIES, byMonth: [...sums.values()].map((g) => ({ ...g, out: g.out.toFixed(2), in: g.in.toFixed(2) })), lines };
+  });
+
+  /* ------------------------------------------ platezhna disciplina (docs/08) */
+  app.get("/api/clients/:clientId/partner-scores", async (req) => {
+    const { clientId } = await ctx(req);
+    return partnerScores(db, clientId);
+  });
+  app.get("/api/clients/:clientId/partners/:id/score", async (req) => {
+    const { clientId, id } = await ctx(req);
+    const q = z.object({ extra: z.coerce.number().min(0).max(1e12).optional() }).parse(req.query);
+    const [r] = await partnerScores(db, clientId, { partnerId: id!, extra: q.extra });
+    if (!r) throw new DomainError("not_found", "Партнерот не постои.", 404);
+    return r;
+  });
+  app.put("/api/clients/:clientId/partners/:id/credit-limit", async (req) => {
+    const { clientId, id, actor } = await ctx(req);
+    const { creditLimit } = z.object({ creditLimit: z.coerce.number().min(0).max(1e12).nullable() }).parse(req.body);
+    const [p] = await db.update(partners).set({ creditLimit: creditLimit === null ? null : creditLimit.toFixed(2) })
+      .where(and(eq(partners.id, id!), eq(partners.clientId, clientId))).returning({ id: partners.id, creditLimit: partners.creditLimit });
+    if (!p) throw new DomainError("not_found", "Партнерот не постои.", 404);
+    await audit(db, actor, { clientId, entity: "partner", entityId: p.id, action: "credit_limit", changes: { creditLimit } });
+    return p;
   });
 
   /* ------------------------------------------- ziro-smetki na partner */
