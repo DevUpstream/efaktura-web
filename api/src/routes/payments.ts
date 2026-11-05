@@ -120,11 +120,11 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
     return db.select({ id: bankStatements.id, format: bankStatements.format, ownAccount: bankStatements.ownAccount, statementNo: bankStatements.statementNo,
       statementDate: bankStatements.statementDate, openingBalance: bankStatements.openingBalance, closingBalance: bankStatements.closingBalance,
       fileName: bankStatements.fileName, createdAt: bankStatements.createdAt,
-      lines: sql<number>`(select count(*)::int from bank_statement_lines l where l.statement_id = ${bankStatements.id})`,
+      lines: sql<number>`(select count(*)::int from bank_statement_lines l where l.statement_id = bank_statements.id)`,
       open: sql<number>`(select count(*)::int from bank_statement_lines l left join payments y on y.id = l.payment_id
-        where l.statement_id = ${bankStatements.id} and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
-      inflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = ${bankStatements.id} and l.direction = 'in')`,
-      outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = ${bankStatements.id} and l.direction = 'out')` })
+        where l.statement_id = bank_statements.id and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
+      inflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'in')`,
+      outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'out')` })
       .from(bankStatements).where(eq(bankStatements.clientId, clientId)).orderBy(desc(bankStatements.statementDate), desc(bankStatements.id)).limit(500);
   });
   app.post("/api/clients/:clientId/bank-statements", async (req, reply) => {

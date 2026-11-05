@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, NavLink, useOutletContext } from "react-router-dom";
+import { Link, NavLink, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
 import { date, money, today } from "../format";
 
@@ -17,7 +17,7 @@ const AGING: [keyof Aging, string][] = [["current", "Не е доспеано"],
 function Tabs({ c }: { c: number }) {
   return <nav className="seg tabs" aria-label="Плаќања">
     <NavLink to={`/c/${c}/payments`} end>Наплата</NavLink><NavLink to={`/c/${c}/payments/out`}>Обврски</NavLink>
-    <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/import`}>Увоз на извод</NavLink></nav>;
+    <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/statements`}>Изводи</NavLink></nav>;
 }
 
 /* ------------------------------------------------- otvoreni stavki */
@@ -172,120 +172,210 @@ export function PaymentsList() {
   );
 }
 
-/* ---------------------------------------------------- uvoz na izvod */
+/* ------------------------------------------------------------ izvodi */
 interface Mapping { delimiter: string; skipRows: number; dateCol: number; dateFormat: string; amountMode: "signed" | "split"; amountCol?: number; creditCol?: number; debitCol?: number;
   decimal: "," | "."; nameCol?: number; accountCol?: number; referenceCols: number[] }
-interface PreviewRow { line: number; key: string; date: string; amount: string; direction: Dir; name: string; account: string; reference: string; imported: boolean;
-  partnerId: number | null; partnerName: string | null; matchedBy: string; allocations: { id: number; number: string; amount: string }[] | null;
-  openForPartner: { id: number; number: string; remaining: string }[] }
 const DEFAULT_MAP: Mapping = { delimiter: ";", skipRows: 1, dateCol: 0, dateFormat: "dd.MM.yyyy", amountMode: "split", creditCol: 1, debitCol: 2, decimal: ",", referenceCols: [] };
+interface StatementRow { id: number; format: string; ownAccount: string | null; statementNo: string | null; statementDate: string | null; openingBalance: string | null;
+  closingBalance: string | null; fileName: string | null; createdAt: string; lines: number; open: number; inflow: string; outflow: string }
 
-export function StatementImport() {
+/** Cita datoteka so izbranoto kodiranje (izvodite od bankite se UTF-8 ili Windows-1251). */
+const readText = (f: File, enc: string) => new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = bad; r.readAsText(f, enc); });
+
+export function Statements() {
   const client = useOutletContext<ClientRef>();
-  const [text, setText] = useState("");
+  const [rows, setRows] = useState<StatementRow[] | null>(null);
   const [enc, setEnc] = useState("utf-8");
-  const [map, setMap] = useState<Mapping | null>(null);
-  const [editMap, setEditMap] = useState(false);
-  const [rows, setRows] = useState<(PreviewRow & { use: boolean })[] | null>(null);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [autoBook, setAutoBook] = useState(true);
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    api.get<Mapping | null>(`/api/clients/${client.id}/bank-mapping`).then((m) => { setMap(m ?? DEFAULT_MAP); setEditMap(!m); });
-    api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners);
-  }, [client.id]);
-  const sample = useMemo(() => {
-    const delim = map?.delimiter === "\\t" ? "\t" : map?.delimiter ?? ";";
-    return text.split(/\r?\n/).filter((l) => l.trim()).slice(0, 6).map((l) => l.split(delim).map((c) => c.replace(/^"|"$/g, "").trim()));
-  }, [text, map?.delimiter]);
-  const cols = Math.max(0, ...sample.map((r) => r.length));
-  function readFile(file: File) {
-    const r = new FileReader();
-    r.onload = () => { setText(String(r.result)); setRows(null); };
-    r.readAsText(file, enc);
-  }
-  async function preview() {
-    if (!map) return;
-    setBusy(true); setMsg(null);
-    try {
-      if (editMap) { await api.put(`/api/clients/${client.id}/bank-mapping`, map); setEditMap(false); }
-      const r = await api.post<{ rows: PreviewRow[]; skipped: { line: number; reason: string }[] }>(`/api/clients/${client.id}/payments/import/preview`, { text, mapping: map });
-      setRows(r.rows.map((x) => ({ ...x, use: !x.imported && !!x.partnerId })));
-      if (r.skipped.length) setMsg({ kind: "err", text: `Прескокнати редови: ${r.skipped.map((s) => `${s.line} (${s.reason})`).join(", ")}.` });
-    } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } finally { setBusy(false); }
-  }
-  async function commit() {
-    const chosen = (rows ?? []).filter((r) => r.use && r.partnerId);
+  const [results, setResults] = useState<{ file: string; ok: boolean; text: string; id?: number }[]>([]);
+  const [csv, setCsv] = useState<{ text: string; name: string } | null>(null);
+  const load = () => api.get<StatementRow[]>(`/api/clients/${client.id}/bank-statements`).then(setRows);
+  useEffect(() => { setRows(null); setResults([]); void load(); }, [client.id]);
+  async function upload(files: FileList | File[], textOverride?: { text: string; name: string }) {
     setBusy(true);
-    try {
-      const r = await api.post<{ imported: number; results: { key: string; ok: boolean; message?: string }[] }>(`/api/clients/${client.id}/payments/import/commit`, {
-        rows: chosen.map((x) => ({ key: x.key, payDate: x.date, amount: Number(x.amount), direction: x.direction, partnerId: x.partnerId, reference: `${x.name} ${x.reference}`.trim().slice(0, 200),
-          allocations: x.allocations ? x.allocations.map((a) => ({ id: a.id, amount: Number(a.amount) })) : null })) });
-      const bad = r.results.filter((x) => !x.ok);
-      setMsg({ kind: bad.length ? "err" : "ok", text: `Увезени ${r.imported} од ${chosen.length}.${bad.length ? ` Не се увезени: ${bad.map((b) => `ред ${rows!.find((x) => x.key === b.key)?.line}: ${b.message}`).join("; ")}` : ""}` });
-      await preview();
-    } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } finally { setBusy(false); }
+    const out: typeof results = [];
+    const list = textOverride ? [textOverride] : await Promise.all([...files].map(async (f) => ({ text: await readText(f, enc), name: f.name })));
+    for (const f of list) {
+      try {
+        const r = await api.post<{ id: number; statementNo: string | null; lines: number; booked: number; warnings: string[] }>(`/api/clients/${client.id}/bank-statements`,
+          { text: f.text, fileName: f.name, autoBook });
+        out.push({ file: f.name, ok: true, id: r.id, text: `Извод${r.statementNo ? ` бр. ${r.statementNo}` : ""}: ${r.lines} ставки, автоматски прокнижени ${r.booked}.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
+      } catch (e) {
+        const m = (e as ApiError).message;
+        if (/CSV прво поставете/.test(m)) setCsv(f);
+        out.push({ file: f.name, ok: false, text: m });
+      }
+    }
+    setResults(out); setBusy(false); await load();
   }
-  const setRow = (i: number, p: Partial<PreviewRow & { use: boolean }>) => setRows((rs) => rs!.map((r, j) => (j === i ? { ...r, ...p } : r)));
-  const colSel = (label: string, v: number | undefined, on: (n: number | undefined) => void, optional = true) => (
-    <label>{label}<select value={v ?? ""} onChange={(e) => on(e.target.value === "" ? undefined : Number(e.target.value))}>
-      {optional && <option value="">—</option>}{Array.from({ length: Math.max(cols, 8) }, (_, i) => <option key={i} value={i}>Колона {i + 1}{sample[map!.skipRows] ? `: ${(sample[Math.min(map!.skipRows, sample.length - 1)]![i] ?? "").slice(0, 18)}` : ""}</option>)}</select></label>);
   return (
     <>
-      <header className="page-head"><h1>Увоз на извод</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
+      <header className="page-head"><h1>Изводи од банка</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
       <section className="panel stack">
-        <p className="muted small">Извезете го изводот од е-банкарство како CSV. Секоја банка има свој распоред на колони: поставете го еднаш, се памти за оваа фирма. Ист ред не се увезува двапати.</p>
-        <div className="row-actions">
-          <label>Датотека<input type="file" accept=".csv,.txt,text/csv" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} /></label>
-          <label>Кодирање<select value={enc} onChange={(e) => setEnc(e.target.value)}><option value="utf-8">UTF-8</option><option value="windows-1251">Windows-1251 (кирилица)</option></select></label>
-          {map && !editMap && <button className="link" onClick={() => setEditMap(true)}>Промени ги колоните</button>}
+        <div className="row-actions upload-row">
+          <label className="drop">Изберете изводи (TXT од е-банкарство, може повеќе одеднаш)
+            <input type="file" multiple accept=".txt,.csv,text/plain,text/csv" disabled={busy} onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} /></label>
+          <label>Кодирање<select value={enc} onChange={(e) => setEnc(e.target.value)}><option value="utf-8">UTF-8</option><option value="windows-1251">Windows-1251</option></select></label>
+          <label className="check"><input type="checkbox" checked={autoBook} onChange={(e) => setAutoBook(e.target.checked)} /> Автоматски прокнижи ги сигурните</label>
         </div>
-        <label>или залепете ја содржината<textarea rows={4} value={text} onChange={(e) => { setText(e.target.value); setRows(null); }} spellCheck={false} className="mono-in" /></label>
-        {map && editMap && text && (
-          <div className="stack">
-            <div className="table-wrap"><table className="grid compact sample">
-              <thead><tr><th>Ред</th>{Array.from({ length: cols }, (_, i) => <th key={i}>Колона {i + 1}</th>)}</tr></thead>
-              <tbody>{sample.map((r, i) => <tr key={i} className={i < map.skipRows ? "row-inactive" : ""}><td>{i + 1}</td>{Array.from({ length: cols }, (_, j) => <td key={j}>{r[j]}</td>)}</tr>)}</tbody>
-            </table></div>
-            <div className="form-grid map-grid">
-              <label>Разделувач<select value={map.delimiter} onChange={(e) => setMap({ ...map, delimiter: e.target.value })}><option value=";">;</option><option value=",">,</option><option value="\t">Tab</option><option value="|">|</option></select></label>
-              <label>Прескокни редови (заглавје)<input type="number" min={0} max={50} value={map.skipRows} onChange={(e) => setMap({ ...map, skipRows: Number(e.target.value) })} /></label>
-              {colSel("Датум", map.dateCol, (n) => setMap({ ...map, dateCol: n ?? 0 }), false)}
-              <label>Формат на датум<select value={map.dateFormat} onChange={(e) => setMap({ ...map, dateFormat: e.target.value })}><option>dd.MM.yyyy</option><option>dd/MM/yyyy</option><option>yyyy-MM-dd</option></select></label>
-              <label>Износ<select value={map.amountMode} onChange={(e) => setMap({ ...map, amountMode: e.target.value as Mapping["amountMode"] })}><option value="split">Посебни колони прилив / одлив</option><option value="signed">Една колона (минус = одлив)</option></select></label>
-              {map.amountMode === "signed" ? colSel("Колона износ", map.amountCol, (n) => setMap({ ...map, amountCol: n }))
-                : <>{colSel("Прилив (уплата)", map.creditCol, (n) => setMap({ ...map, creditCol: n }))}{colSel("Одлив (плаќање)", map.debitCol, (n) => setMap({ ...map, debitCol: n }))}</>}
-              <label>Децимали<select value={map.decimal} onChange={(e) => setMap({ ...map, decimal: e.target.value as "," | "." })}><option value=",">1.234,56</option><option value=".">1,234.56</option></select></label>
-              {colSel("Назив на налогодавач / примач", map.nameCol, (n) => setMap({ ...map, nameCol: n }))}
-              {colSel("Жиро-сметка на партнерот", map.accountCol, (n) => setMap({ ...map, accountCol: n }))}
-              {colSel("Цел / опис (за број на фактура)", map.referenceCols[0], (n) => setMap({ ...map, referenceCols: n === undefined ? [] : [n, ...map.referenceCols.slice(1)] }))}
-              {colSel("Референца 2", map.referenceCols[1], (n) => setMap({ ...map, referenceCols: [map.referenceCols[0] ?? 0, ...(n === undefined ? [] : [n])] }))}
-            </div>
-          </div>
-        )}
-        <div className="row-actions"><button className="btn btn-primary" disabled={!text.trim() || busy} onClick={preview}>{editMap ? "Зачувај колони и прегледај" : "Прегледај"}</button></div>
+        <p className="muted small">Проверен формат: Халкбанк и Шпаркасе (TXT). Секој извод се проверува: дали сметката е на оваа фирма и дали претходна состојба + промет = нова состојба.
+          Сигурно е кога купувачот е препознаен по ЕДБ, жиро-сметка или број на фактура, <em>и</em> фактурата по број, точен износ или точен збир.</p>
+        {busy && <p className="muted">Се увезува…</p>}
+        {results.map((r, i) => <p key={i} className={r.ok ? "notice" : "alert"}><strong>{r.file}</strong>: {r.text} {r.id && <Link to={`/c/${client.id}/payments/statements/${r.id}`}>Отвори</Link>}</p>)}
       </section>
-      {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
-      {rows && (
-        <>
-          <div className="table-wrap"><table className="grid">
-            <thead><tr><th /><th>Датум</th><th>Од / до</th><th>Цел</th><th className="num">Износ</th><th>Партнер</th><th>Затвора</th></tr></thead>
-            <tbody>{rows.map((r, i) => (
-              <tr key={r.key} className={r.imported ? "row-inactive" : ""}>
-                <td><input type="checkbox" checked={r.use} disabled={r.imported || !r.partnerId} onChange={(e) => setRow(i, { use: e.target.checked })} aria-label={`Увези ред ${r.line}`} /></td>
-                <td>{date(r.date)}</td><td className="small">{r.name}<br /><span className="muted">{r.account}</span></td><td className="small">{r.reference}</td>
-                <td className="num"><span className={`chip ${r.direction === "in" ? "ok" : "wait"}`}>{r.direction === "in" ? "+" : "−"}</span> {money(r.amount)}</td>
-                <td>{r.imported ? <span className="chip">веќе увезено</span> : <>
-                  <select value={r.partnerId ?? ""} onChange={(e) => setRow(i, { partnerId: e.target.value ? Number(e.target.value) : null, allocations: null, use: !!e.target.value, matchedBy: "рачно" })} aria-label="Партнер">
-                    <option value="">— не е препознат —</option>{partners.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-                  {r.matchedBy && <div className="muted small">по {r.matchedBy}</div>}</>}</td>
-                <td className="small">{r.allocations?.length ? r.allocations.map((a) => `${a.number} (${money(a.amount)})`).join(", ") : r.partnerId ? <span className="muted">автоматски од најстарата</span> : "–"}</td>
-              </tr>))}</tbody>
-          </table></div>
-          <div className="actions"><button className="btn btn-primary" disabled={busy || !rows.some((r) => r.use)} onClick={commit}>Увези {rows.filter((r) => r.use).length} уплати</button>
-            <span className="muted small">Непрепознатите редови (на пр. кирија, плати) се прескокнуваат. Партнерот може да се избере рачно.</span></div>
-        </>
+      {csv && <CsvMapping client={client} sample={csv.text} onSaved={() => { const f = csv; setCsv(null); void upload([], f); }} onCancel={() => setCsv(null)} />}
+      {rows && rows.length === 0 && <div className="empty"><p>Сè уште нема увезени изводи.</p></div>}
+      {rows && rows.length > 0 && (
+        <div className="table-wrap"><table className="grid">
+          <thead><tr><th>Извод</th><th>Датум</th><th>Сметка</th><th className="num">Прилив</th><th className="num">Одлив</th><th className="num">Нова состојба</th><th>Ставки</th></tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.id}>
+              <td><Link className="docno" to={`/c/${client.id}/payments/statements/${r.id}`}>{r.statementNo ? `бр. ${r.statementNo}` : r.fileName ?? `#${r.id}`}</Link>
+                {r.format === "csv" && <span className="doctype">CSV</span>}</td>
+              <td>{date(r.statementDate)}</td><td className="small">{r.ownAccount ?? "–"}</td>
+              <td className="num">{money(r.inflow)}</td><td className="num">{money(r.outflow)}</td><td className="num">{r.closingBalance ? money(r.closingBalance) : "–"}</td>
+              <td>{r.open > 0 ? <span className="chip wait">{r.open} за обработка</span> : <span className="chip ok">готово</span>} <span className="muted small">од {r.lines}</span></td>
+            </tr>))}</tbody>
+        </table></div>
       )}
     </>
+  );
+}
+
+/* --------------------------------------------------------- eden izvod */
+interface Suggestion { partnerId: number | null; partnerBy: string | null; allocations: { id: number; number: string; amount: string }[] | null; allocBy: string | null;
+  confidence: "sure" | "likely" | "none"; hint: string | null }
+interface Line { id: number; lineNo: number; direction: Dir; amount: string; counterpartyName: string | null; counterpartyAccount: string | null; counterpartyEdb: string | null;
+  paymentCode: string | null; purpose: string | null; refDebit: string | null; refCredit: string | null; ignored: boolean; ignoreReason: string | null;
+  status: "open" | "booked" | "ignored"; suggestion: Suggestion | null; openForPartner: { id: number; number: string; remaining: string; dueDate: string | null }[];
+  booking: { paymentId: number; partnerName: string; allocated: string; documents: string | null } | null }
+interface Detail { id: number; statementNo: string | null; statementDate: string | null; ownAccount: string | null; openingBalance: string | null; closingBalance: string | null;
+  fileName: string | null; lines: Line[]; counts: { open: number; booked: number; ignored: number; sure: number } }
+const BY: Record<string, string> = { edb: "ЕДБ", account: "жиро-сметка", invoice: "број на фактура", "edb-text": "ЕДБ во целта", name: "назив" };
+const ALLOC: Record<string, string> = { number: "број на фактура", "short-number": "број/година", "supplier-number": "број кај добавувачот", exact: "точен износ",
+  combination: "точен збир на фактури", fifo: "од најстарата" };
+
+export function StatementView() {
+  const client = useOutletContext<ClientRef>();
+  const { id } = useParams();
+  const [d, setD] = useState<Detail | null>(null);
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [filter, setFilter] = useState<"open" | "all">("open");
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.get<Detail>(`/api/clients/${client.id}/bank-statements/${id}`).then(setD);
+  useEffect(() => { void load(); api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners); }, [client.id, id]);
+  async function act(f: () => Promise<string>) { setBusy(true); setMsg(null); try { setMsg({ kind: "ok", text: await f() }); } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } await load(); setBusy(false); }
+  if (!d) return <p className="muted">Се вчитува…</p>;
+  const lines = d.lines.filter((l) => filter === "all" || l.status === "open");
+  return (
+    <>
+      <Link className="back" to={`/c/${client.id}/payments/statements`}>← Изводи</Link>
+      <header className="page-head"><div><h1>Извод {d.statementNo ? `бр. ${d.statementNo}` : d.fileName}</h1>
+        <p className="muted small">{[d.statementDate && date(d.statementDate), d.ownAccount, d.openingBalance && `${money(d.openingBalance)} → ${money(d.closingBalance)}`].filter(Boolean).join(" · ")}</p></div>
+        <div className="row-actions">
+          <div className="seg" role="tablist" aria-label="Приказ"><button role="tab" aria-selected={filter === "open"} onClick={() => setFilter("open")}>За обработка ({d.counts.open})</button>
+            <button role="tab" aria-selected={filter === "all"} onClick={() => setFilter("all")}>Сите ({d.lines.length})</button></div>
+          {d.counts.sure > 0 && <button className="btn btn-primary" disabled={busy} onClick={() => act(async () => {
+            const r = await api.post<{ booked: number; errors: string[] }>(`/api/clients/${client.id}/bank-statements/${d.id}/book-sure`);
+            return `Прокнижени ${r.booked}.${r.errors.length ? ` ${r.errors.join(" ")}` : ""}`; })}>Прокнижи ги сигурните ({d.counts.sure})</button>}
+        </div></header>
+      {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
+      {lines.length === 0 && <div className="empty"><p>Сите ставки се обработени. Прокнижени {d.counts.booked}, без книжење {d.counts.ignored}.</p></div>}
+      <div className="stmt-lines">{lines.map((l) => <LineCard key={l.id} l={l} client={client} partners={partners} busy={busy} act={act} />)}</div>
+    </>
+  );
+}
+
+function LineCard({ l, client, partners, busy, act }: { l: Line; client: ClientRef; partners: Partner[]; busy: boolean; act: (f: () => Promise<string>) => Promise<void> }) {
+  const s = l.suggestion;
+  const [pid, setPid] = useState<number | "">(s?.partnerId ?? "");
+  const [open, setOpen] = useState<Line["openForPartner"]>(l.openForPartner);
+  const [manual, setManual] = useState(false);
+  const [alloc, setAlloc] = useState<Record<number, string>>({});
+  useEffect(() => { setPid(s?.partnerId ?? ""); setOpen(l.openForPartner); setManual(false); setAlloc({}); }, [l.id, l.status, s?.partnerId]);
+  useEffect(() => {
+    if (!pid || pid === s?.partnerId) { setOpen(l.openForPartner); return; }
+    api.get<{ items: Line["openForPartner"] }>(`/api/clients/${client.id}/open-items?direction=${l.direction}&partnerId=${pid}`).then((x) => setOpen(x.items));
+  }, [pid]);
+  const changed = pid !== (s?.partnerId ?? "");
+  const conf = changed ? "manual" : s?.confidence ?? "none";
+  const book = () => act(async () => {
+    const allocations = manual ? Object.entries(alloc).filter(([, v]) => Number(v.replace(",", ".")) > 0).map(([i, v]) => ({ id: Number(i), amount: Number(v.replace(",", ".")) }))
+      : changed ? null : s?.allocations?.map((a) => ({ id: a.id, amount: Number(a.amount) })) ?? null;
+    const r = await api.post<{ allocated: { number: string; amount: string }[]; unallocated: string; learned: boolean }>(`/api/clients/${client.id}/bank-lines/${l.id}/book`, { partnerId: pid, allocations });
+    return `Ставка ${l.lineNo}: ${r.allocated.length ? r.allocated.map((a) => `${a.number} (${money(a.amount)})`).join(", ") : "нераспоредено"}${Number(r.unallocated) > 0 ? `, преплата ${money(r.unallocated)}` : ""}.${r.learned ? " Жиро-сметката е запаметена за следниот пат." : ""}`;
+  });
+  return (
+    <article className={`stmt-line st-${l.status} conf-${l.status === "open" ? conf : ""}`}>
+      <div className="sl-amount"><span className={l.direction === "in" ? "in" : "out"}>{l.direction === "in" ? "+" : "−"}{money(l.amount)}</span><span className="muted small">ставка {l.lineNo}</span></div>
+      <div className="sl-who">
+        <strong>{l.counterpartyName}</strong>
+        <div className="muted small">{[l.counterpartyAccount, l.counterpartyEdb && `ЕДБ ${l.counterpartyEdb}`, l.paymentCode && `шифра ${l.paymentCode}`].filter(Boolean).join(" · ")}</div>
+        <div className="small">{l.purpose}{(l.refCredit || l.refDebit) && <span className="muted"> · повик.: {[l.refDebit, l.refCredit].filter(Boolean).join(" / ")}</span>}</div>
+      </div>
+      <div className="sl-act">
+        {l.status === "booked" && l.booking && <><span className="chip ok">прокнижено</span> {l.booking.partnerName}<div className="small">{l.booking.documents ?? "нераспоредено (преплата)"}</div></>}
+        {l.status === "ignored" && <><span className="chip">не се книжи</span> {l.ignoreReason}
+          <div><button className="link small" disabled={busy} onClick={() => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/ignore`, { ignored: false }); return "Вратено за обработка."; })}>Врати</button></div></>}
+        {l.status === "open" && <>
+          <div className="sl-conf">{conf === "sure" ? <span className="chip ok">сигурно</span> : conf === "likely" ? <span className="chip wait">предлог</span> : conf === "manual" ? <span className="chip">рачно</span> : <span className="chip err">непознат</span>}
+            {s?.partnerBy && !changed && <span className="muted small"> партнер по {BY[s.partnerBy]}{s.allocBy ? `, фактура по ${ALLOC[s.allocBy]}` : ""}</span>}
+            {s?.hint && <span className="muted small"> {s.hint}</span>}</div>
+          <select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")} aria-label={`Партнер за ставка ${l.lineNo}`}>
+            <option value="">— изберете партнер —</option>{partners.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+          {pid !== "" && (manual
+            ? <table className="grid compact"><tbody>{open.map((o) => <tr key={o.id}><td>{o.number}</td><td className="num">{money(o.remaining)}</td>
+                <td className="num"><input className="amt-in" inputMode="decimal" value={alloc[o.id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [o.id]: e.target.value })} aria-label={`Износ за ${o.number}`} /></td></tr>)}</tbody></table>
+            : <div className="small">{!changed && s?.allocations?.length ? `Затвора: ${s.allocations.map((a) => `${a.number} (${money(a.amount)})`).join(", ")}`
+                : open.length ? `Од најстарата: ${open.slice(0, 3).map((o) => o.number).join(", ")}${open.length > 3 ? "…" : ""}` : "Нема отворени документи: останува како преплата."}</div>)}
+          <div className="row-actions">
+            <button className="btn btn-primary btn-small" disabled={busy || !pid} onClick={book}>Прокнижи</button>
+            {pid !== "" && open.length > 0 && <button className="link small" onClick={() => setManual(!manual)}>{manual ? "Автоматски" : "Рачно по фактура"}</button>}
+            <button className="link small" disabled={busy} onClick={() => act(async () => { await api.post(`/api/clients/${client.id}/bank-lines/${l.id}/ignore`, { ignored: true, reason: s?.hint ?? null }); return `Ставка ${l.lineNo} не се книжи.`; })}>Не се книжи</button>
+          </div>
+        </>}
+      </div>
+    </article>
+  );
+}
+
+/* -------------------------------------------- CSV: postavki na kolonite */
+function CsvMapping({ client, sample: text, onSaved, onCancel }: { client: ClientRef; sample: string; onSaved: () => void; onCancel: () => void }) {
+  const [map, setMap] = useState<Mapping>(DEFAULT_MAP);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { api.get<Mapping | null>(`/api/clients/${client.id}/bank-mapping`).then((m) => m && setMap(m)); }, [client.id]);
+  const delim = map.delimiter === "\\t" ? "\t" : map.delimiter;
+  const sample = text.split(/\r?\n/).filter((l) => l.trim()).slice(0, 6).map((l) => l.split(delim).map((c) => c.replace(/^"|"$/g, "").trim()));
+  const cols = Math.max(0, ...sample.map((r) => r.length));
+  const colSel = (label: string, v: number | undefined, on: (n: number | undefined) => void, optional = true) => (
+    <label>{label}<select value={v ?? ""} onChange={(e) => on(e.target.value === "" ? undefined : Number(e.target.value))}>
+      {optional && <option value="">—</option>}{Array.from({ length: Math.max(cols, 8) }, (_, i) => <option key={i} value={i}>Колона {i + 1}{sample[map.skipRows] ? `: ${(sample[Math.min(map.skipRows, sample.length - 1)]![i] ?? "").slice(0, 18)}` : ""}</option>)}</select></label>);
+  async function save() { try { await api.put(`/api/clients/${client.id}/bank-mapping`, map); onSaved(); } catch (e) { setErr((e as ApiError).message); } }
+  return (
+    <section className="panel stack">
+      <h2>CSV: кои колони што содржат</h2>
+      <p className="muted small">Датотеката не е TXT извод во проверениот формат. Поставете ги колоните еднаш; се паметат за оваа фирма.</p>
+      <div className="table-wrap"><table className="grid compact sample">
+        <thead><tr><th>Ред</th>{Array.from({ length: cols }, (_, i) => <th key={i}>Колона {i + 1}</th>)}</tr></thead>
+        <tbody>{sample.map((r, i) => <tr key={i} className={i < map.skipRows ? "row-inactive" : ""}><td>{i + 1}</td>{Array.from({ length: cols }, (_, j) => <td key={j}>{r[j]}</td>)}</tr>)}</tbody>
+      </table></div>
+      <div className="form-grid map-grid">
+        <label>Разделувач<select value={map.delimiter} onChange={(e) => setMap({ ...map, delimiter: e.target.value })}><option value=";">;</option><option value=",">,</option><option value="\t">Tab</option><option value="|">|</option></select></label>
+        <label>Прескокни редови<input type="number" min={0} max={50} value={map.skipRows} onChange={(e) => setMap({ ...map, skipRows: Number(e.target.value) })} /></label>
+        {colSel("Датум", map.dateCol, (n) => setMap({ ...map, dateCol: n ?? 0 }), false)}
+        <label>Формат на датум<select value={map.dateFormat} onChange={(e) => setMap({ ...map, dateFormat: e.target.value })}><option>dd.MM.yyyy</option><option>dd/MM/yyyy</option><option>yyyy-MM-dd</option></select></label>
+        <label>Износ<select value={map.amountMode} onChange={(e) => setMap({ ...map, amountMode: e.target.value as Mapping["amountMode"] })}><option value="split">Прилив / одлив посебно</option><option value="signed">Една колона (минус = одлив)</option></select></label>
+        {map.amountMode === "signed" ? colSel("Колона износ", map.amountCol, (n) => setMap({ ...map, amountCol: n }))
+          : <>{colSel("Прилив", map.creditCol, (n) => setMap({ ...map, creditCol: n }))}{colSel("Одлив", map.debitCol, (n) => setMap({ ...map, debitCol: n }))}</>}
+        <label>Децимали<select value={map.decimal} onChange={(e) => setMap({ ...map, decimal: e.target.value as "," | "." })}><option value=",">1.234,56</option><option value=".">1,234.56</option></select></label>
+        {colSel("Назив", map.nameCol, (n) => setMap({ ...map, nameCol: n }))}
+        {colSel("Жиро-сметка", map.accountCol, (n) => setMap({ ...map, accountCol: n }))}
+        {colSel("Цел / повикување", map.referenceCols[0], (n) => setMap({ ...map, referenceCols: n === undefined ? [] : [n] }))}
+      </div>
+      {err && <p className="alert">{err}</p>}
+      <div className="row-actions"><button className="btn btn-primary" onClick={save}>Зачувај и увези</button><button className="link" onClick={onCancel}>Откажи</button></div>
+    </section>
   );
 }

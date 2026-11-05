@@ -91,6 +91,8 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     expect(d.lines[2].suggestion).toMatchObject({ partnerId: null, hint: "јавни давачки (Трезор)" });
     expect(d.lines[3].suggestion).toMatchObject({ partnerId: null, hint: "банкарска провизија или систем" });
     expect(d.counts).toMatchObject({ booked: 1, open: 3 });
+    const list = (await call("GET", `${C()}/bank-statements`)).body;
+    expect(list[0]).toMatchObject({ statementNo: "30", lines: 4, open: 3, inflow: "1480.00", outflow: "535.00" });
   });
 
   it("racno knizenje ja ucи smetkata; sledniot izvod e sigurен po smetka + tocen iznos", async () => {
@@ -150,6 +152,12 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     await t.db.update(clients).set({ modules: ["invoices", "payments"], iban: null }).where(eq(clients.id, t.c2.id));
     await t.db.insert(clientAccess).values({ clientId: t.c2.id, userId: (await t.db.select().from(users).where(eq(users.email, "ana@x.mk")))[0]!.id });
     expect((await call("POST", `/api/clients/${t.c2.id}/bank-statements`, { text: txt(35, "06.11.2026", OWN, 1180, [{ name: "y", acc: "300-0000000222-22", amount: 5 }]) })).body.message).toMatch(/веќе има изводи/);
+  });
+
+  it("naziv na latinica = kirilica", async () => {
+    const { normalizeName } = await import("../src/domain/bank-import.js");
+    expect(normalizeName("ELEKTRO LINK DOO SKOPJE")).toBe(normalizeName("ЕЛЕКТРО ЛИНК ДОО Скопје"));
+    expect(normalizeName("Kjumbe Gjorgjievski DOOEL")).toBe("ЌУМБЕ ЃОРЃИЕВСКИ");
   });
 
   it("matchLine: nashiot EDB (PP50) ne e partner", () => {
