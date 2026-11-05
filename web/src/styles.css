@@ -288,3 +288,4 @@ tr.sub .grid.compact { background: var(--surface); }
 .sl-act { display: flex; flex-direction: column; gap: 6px; }
 .sl-act select { width: 100%; }
 @media (max-width: 900px) { .stmt-line { grid-template-columns: 1fr; } }
+.cat-row select { width: auto; flex: 1; } .sec-gap { margin: 24px 0 10px; font-size: 1.05rem; }

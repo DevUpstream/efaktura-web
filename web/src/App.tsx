@@ -13,7 +13,7 @@ import { Clients } from "./pages/Clients";
 import { PartnerCard } from "./pages/PartnerCard";
 import { Followups } from "./pages/Followups";
 import { PurchaseEditor, Purchases } from "./pages/Purchases";
-import { OpenItems, PaymentsList, Statements, StatementView } from "./pages/Payments";
+import { BankExpenses, OpenItems, PaymentsList, Statements, StatementView } from "./pages/Payments";
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
 import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 
@@ -46,6 +46,7 @@ function Gate() {
         <Route path="payments/list" element={<PaymentsList />} />
         <Route path="payments/statements" element={<Statements />} />
         <Route path="payments/statements/:id" element={<StatementView />} />
+        <Route path="payments/expenses" element={<BankExpenses />} />
         <Route path="production" element={<WorkOrders />} />
         <Route path="production/new" element={<WorkOrderEditor />} />
         <Route path="production/:id" element={<WorkOrderEditor />} />
