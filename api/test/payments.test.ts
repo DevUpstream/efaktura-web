@@ -122,24 +122,17 @@ describe("izvod od banka", () => {
     expect(findInvoiceNumbers("ф-ра MC-2026-1 и mc-od-2026-00012", ["MC"])).toEqual(["MC-2026-00001", "MC-OD-2026-00012"]);
   });
 
-  it("predlog (broj na faktura, ziro-smetka, naziv) -> uvoz -> vtor uvoz e odbien", async () => {
+  it("CSV preku izvod: mapiranje, prepoznavanje po smetka i broj, vtor uvoz odbien", async () => {
     await t.db.update(partners).set({ bankAccount: "300-0000000001-11" }).where(eq(partners.id, t.p1.id));
     const a = await inv(1000);
-    await inv(200);   // 236
-    expect((await call("POST", `${C()}/payments/import/preview`, { text: csv })).status).toBe(422);   // nema mapiranje
+    expect((await call("POST", `${C()}/bank-statements`, { text: csv })).status).toBe(422);   // nema mapiranje
     expect((await call("PUT", `${C()}/bank-mapping`, mapping)).status).toBe(200);
-    const pv = (await call("POST", `${C()}/payments/import/preview`, { text: csv })).body;
-    expect(pv.rows[0]).toMatchObject({ partnerId: t.p1.id, matchedBy: "жиро-сметка", allocations: [{ id: a.id, amount: "1180.00" }], imported: false });
-    expect(pv.rows[1].partnerId).toBeNull();
-    expect(pv.rows[2]).toMatchObject({ partnerId: t.p1.id, matchedBy: "назив", allocations: [{ amount: "236.00" }] });
-    const rows = pv.rows.filter((r: { partnerId: number | null }) => r.partnerId).map((r: Record<string, unknown>) => ({ key: r.key, payDate: r.date, amount: Number(r.amount),
-      direction: r.direction, partnerId: r.partnerId, reference: r.reference, allocations: (r.allocations as { id: number; amount: string }[]).map((x) => ({ id: x.id, amount: Number(x.amount) })) }));
-    expect((await call("POST", `${C()}/payments/import/commit`, { rows })).body.imported).toBe(2);
-    expect((await call("GET", `${C()}/open-items?direction=in`)).body.items).toHaveLength(0);
-    expect((await call("POST", `${C()}/payments/import/preview`, { text: csv })).body.rows[0].imported).toBe(true);
-    const again = (await call("POST", `${C()}/payments/import/commit`, { rows })).body;
-    expect(again.imported).toBe(0);
-    expect(again.results[0].message).toBe("Веќе увезено.");
-    expect(await t.db.select().from(paymentAllocations)).toHaveLength(2);
+    const r = (await call("POST", `${C()}/bank-statements`, { text: csv, fileName: "izvod.csv" })).body;
+    expect(r).toMatchObject({ lines: 3, booked: 1 });
+    const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
+    expect(d.lines[0]).toMatchObject({ status: "booked", booking: { documents: "MC-2026-00001" } });
+    void a;
+    expect((await call("POST", `${C()}/bank-statements`, { text: csv })).status).toBe(409);
+    expect(await t.db.select().from(paymentAllocations)).toHaveLength(1);
   });
 });

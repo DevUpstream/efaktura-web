@@ -81,6 +81,16 @@ export function findInvoiceNumbers(text: string, prefixes: string[]): string[] {
   }))];
 }
 
-/** Naziv za sporedba: golemi bukvi, bez interpunkcija i pravna forma (\b ne raboti so kirilica -> prazni mesta). */
-export const normalizeName = (s: string) => ` ${s.toUpperCase().replace(/["„“”'.,()]/g, " ")} `
-  .replace(/\s(ДООЕЛ|ДОО|АД|ТП|DOOEL|DOO|AD)(?=\s)/g, " ").replace(/\s+/g, " ").trim();
+/** Latinica -> kirilica (makedonska), za da se sporedat nazivi napishani razlicno (ELEKTRO LINK = ЕЛЕКТРО ЛИНК). */
+const LAT2: [string, string][] = [["DZH", "Џ"], ["DŽ", "Џ"], ["DZ", "Ѕ"], ["GJ", "Ѓ"], ["KJ", "Ќ"], ["LJ", "Љ"], ["NJ", "Њ"], ["CH", "Ч"], ["ZH", "Ж"], ["SH", "Ш"]];
+const LAT1: Record<string, string> = { A: "А", B: "Б", C: "Ц", Č: "Ч", Ć: "Ќ", D: "Д", Đ: "Ѓ", E: "Е", F: "Ф", G: "Г", H: "Х", I: "И", J: "Ј", K: "К", L: "Л", M: "М",
+  N: "Н", O: "О", P: "П", Q: "К", R: "Р", S: "С", Š: "Ш", T: "Т", U: "У", V: "В", W: "В", X: "КС", Y: "И", Z: "З", Ž: "Ж" };
+export function toCyrillic(s: string) {
+  let t = s.toUpperCase();
+  for (const [a, b] of LAT2) t = t.split(a).join(b);
+  return [...t].map((c) => LAT1[c] ?? c).join("");
+}
+
+/** Naziv za sporedba: kirilica, golemi bukvi, bez interpunkcija i pravna forma (\b ne raboti so kirilica -> prazni mesta). */
+export const normalizeName = (s: string) => ` ${toCyrillic(s).replace(/["„“”'.,()]/g, " ")} `
+  .replace(/\s(ДООЕЛ|ДОО|АД|ТП)(?=\s)/g, " ").replace(/\s+/g, " ").trim();

@@ -20,6 +20,7 @@ const RECV_SQL = sql.raw(RECEIVABLE_STATUSES.map((s) => `'${s}'`).join(","));
 export interface OpenItem {
   id: number; kind: "invoice" | "purchase"; number: string; docType: string; issueDate: string; dueDate: string | null;
   partnerId: number; partnerName: string; amount: string; credits: string; paid: string; remaining: string; daysOverdue: number;
+  supplierNumber?: string;
 }
 
 function daysBetween(a: string, b: string) { return Math.round((Date.parse(b) - Date.parse(a)) / 864e5); }
@@ -39,7 +40,7 @@ export async function openItems(db: Db, clientId: number, direction: "in" | "out
     where x.client_id = ${clientId} and x.doc_type in ('INV','AV','KZ','KR') and x.status in (${RECV_SQL}) ${partnerCond}`
     : sql`
     select x.id, coalesce(x.number, '') || ' (' || x.supplier_number || ')' as number, 'VF' as "docType", x.issue_date as "issueDate", x.due_date as "dueDate",
-      x.partner_id as "partnerId", p.name as "partnerName", x.gross_total as amount, 0 as credits,
+      x.partner_id as "partnerId", p.name as "partnerName", x.gross_total as amount, 0 as credits, x.supplier_number as "supplierNumber",
       coalesce((select sum(a.amount) from payment_allocations a join payments y on y.id = a.payment_id
         where a.purchase_invoice_id = x.id and y.voided_at is null), 0) as paid
     from purchase_invoices x join partners p on p.id = x.partner_id
@@ -52,7 +53,8 @@ export async function openItems(db: Db, clientId: number, direction: "in" | "out
     return { id: Number(r.id), kind: direction === "in" ? "invoice" as const : "purchase" as const, number: String(r.number), docType: String(r.docType),
       issueDate: String(r.issueDate), dueDate: (r.dueDate as string | null) ?? null, partnerId: Number(r.partnerId), partnerName: String(r.partnerName),
       amount: new D(String(r.amount)).toFixed(2), credits: new D(String(r.credits)).toFixed(2), paid: new D(String(r.paid)).toFixed(2),
-      remaining: D.max(remaining, 0).toFixed(2), daysOverdue: remaining.gt(0) ? Math.max(0, daysBetween(due, asOf)) : 0 };
+      remaining: D.max(remaining, 0).toFixed(2), daysOverdue: remaining.gt(0) ? Math.max(0, daysBetween(due, asOf)) : 0,
+      ...(r.supplierNumber ? { supplierNumber: String(r.supplierNumber) } : {}) };
   }).filter((i) => opts.includeClosed || new D(i.remaining).gt(0))
     .sort((a, b) => (a.dueDate ?? a.issueDate).localeCompare(b.dueDate ?? b.issueDate) || a.issueDate.localeCompare(b.issueDate) || a.id - b.id);
 }

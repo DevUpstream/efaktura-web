@@ -767,3 +767,62 @@ export const paymentAllocations = pgTable("payment_allocations", {
   check("payment_alloc_amount_ck", sql`${t.amount} > 0`),
   check("payment_alloc_target_ck", sql`(${t.invoiceId} is null) <> (${t.purchaseInvoiceId} is null)`),
 ]);
+
+/* ------------------------------------------------- izvodi od banka (docs/08) */
+
+/** Uvezen izvod. Ist izvod (ista datoteka ili ista smetka+broj+datum) ne se uvezuva dvapati. */
+export const bankStatements = pgTable("bank_statements", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  format: varchar("format", { length: 10 }).notNull(),           // mk-txt | csv
+  ownAccount: varchar("own_account", { length: 40 }),
+  statementNo: varchar("statement_no", { length: 20 }),
+  statementDate: date("statement_date"),
+  openingBalance: money("opening_balance"),
+  closingBalance: money("closing_balance"),
+  fileName: varchar("file_name", { length: 200 }),
+  fileHash: varchar("file_hash", { length: 64 }).notNull(),
+  importedBy: integer("imported_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [
+  uniqueIndex("bank_statements_file_uq").on(t.clientId, t.fileHash),
+  uniqueIndex("bank_statements_no_uq").on(t.clientId, t.ownAccount, t.statementDate, t.statementNo).where(sql`${t.ownAccount} is not null and ${t.statementNo} is not null`),
+  index("bank_statements_account_ix").on(t.ownAccount),
+]);
+
+/** Stavka od izvod: otvorena -> proknizena (uplata) ili ignorirana (provizija, plata...). */
+export const bankStatementLines = pgTable("bank_statement_lines", {
+  id: serial("id").primaryKey(),
+  statementId: integer("statement_id").notNull().references(() => bankStatements.id, { onDelete: "cascade" }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  lineNo: smallint("line_no").notNull(),
+  lineKey: varchar("line_key", { length: 64 }).notNull(),
+  direction: paymentDirection("direction").notNull(),
+  amount: money("amount").notNull(),
+  valueDate: date("value_date").notNull(),
+  counterpartyName: text("counterparty_name"),
+  counterpartyAccount: varchar("counterparty_account", { length: 40 }),
+  counterpartyEdb: varchar("counterparty_edb", { length: 13 }),
+  paymentCode: varchar("payment_code", { length: 10 }),
+  purpose: text("purpose"),
+  refDebit: varchar("ref_debit", { length: 60 }),
+  refCredit: varchar("ref_credit", { length: 60 }),
+  extra: varchar("extra", { length: 60 }),
+  ignored: boolean("ignored").notNull().default(false),
+  ignoreReason: varchar("ignore_reason", { length: 200 }),
+  paymentId: integer("payment_id").references(() => payments.id, { onDelete: "restrict" }),
+}, (t) => [
+  uniqueIndex("bank_lines_key_uq").on(t.clientId, t.lineKey),
+  index("bank_lines_statement_ix").on(t.statementId),
+  check("bank_lines_amount_ck", sql`${t.amount} > 0`),
+]);
+
+/** Ziro-smetki na partneri (racno vneseni ili naucheni od izvod) - za prepoznavanje. */
+export const partnerAccounts = pgTable("partner_accounts", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  account: varchar("account", { length: 40 }).notNull(),          // normalizirana (bez crticki)
+  source: varchar("source", { length: 10 }).notNull().default("learned"),   // learned | manual
+  createdAt: created(),
+}, (t) => [uniqueIndex("partner_accounts_uq").on(t.clientId, t.account)]);
