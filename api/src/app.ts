@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { sql } from "drizzle-orm";
 import { ZodError } from "zod";
 import type { Db } from "./db/types.js";
+import { zodMessage } from "./domain/zod-mk.js";
 import { DomainError } from "./domain/errors.js";
 import { parseKey } from "./auth/crypto.js";
 import { registerAuthContext } from "./auth/context.js";
@@ -37,7 +38,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof DomainError) return reply.status(err.status).send({ error: err.code, message: err.message });
-    if (err instanceof ZodError) return reply.status(400).send({ error: "bad_request", message: "Неисправни податоци.", issues: err.issues });
+    if (err instanceof ZodError) return reply.status(400).send({ error: "bad_request", message: zodMessage(err.issues), issues: err.issues });
     const e = err as Error & { statusCode?: number; validation?: unknown };
     if (e.statusCode === 429) return reply.status(429).send({ error: "rate_limited", message: "Премногу обиди. Почекајте една минута." });
     if (e.validation || e.statusCode === 400) return reply.status(400).send({ error: "bad_request", message: e.message });

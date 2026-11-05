@@ -25,3 +25,12 @@ export const ITEM_TYPE: Record<string, string> = { service: "Услуга", good
 export const STOCK_TYPES = ["goods", "material", "product"];
 export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос", consumption: "Издатница за производство", output: "Готов производ" };
 export const qtyFmt = (v: string | number | null | undefined) => (v === null || v === undefined ? "–" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(Number(v)));
+/** Broj od vnes: "1,5" / "1.234,56" / "1234.56" / "1 234" -> broj (NaN ako ne e broj). */
+export function parseNum(v: string | number | null | undefined): number {
+  if (typeof v === "number") return v;
+  let t = String(v ?? "").trim().replace(/\s|\u00a0/g, "");
+  if (!t) return 0;
+  if (t.includes(",") && t.includes(".")) t = t.lastIndexOf(",") > t.lastIndexOf(".") ? t.replace(/\./g, "").replace(",", ".") : t.replace(/,/g, "");
+  else if (t.includes(",")) t = t.replace(",", ".");
+  return /^[-+]?\d*\.?\d+$/.test(t) ? Number(t) : NaN;
+}

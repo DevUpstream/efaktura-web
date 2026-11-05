@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
-import { DOC, PAYMENT, STATUS, addDays, date, money, money0, today } from "../format";
+import { DOC, PAYMENT, STATUS, addDays, date, money, money0, parseNum, today } from "../format";
 import { UjpState } from "../components/UjpState";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
@@ -24,6 +24,7 @@ export function InvoiceEditor() {
   const { id } = useParams();
   const nav = useNavigate();
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
@@ -45,7 +46,7 @@ export function InvoiceEditor() {
       api.get<VatRate[]>("/api/vat-rates"), id ? api.get<Invoice>(`/api/invoices/${id}`) : Promise.resolve(null),
       api.get<Reason[]>("/api/ujp-reasons"),
     ]).then(([p, it, r, i, rs]) => {
-      setPartners(p); setItems(it); setRates(r); setInv(i); setReasons(rs);
+      setPartners(p); setItems(it); setRates(r); setInv(i); setReasons(rs); setLoaded(true);
       if (i) {
         setHead({ partnerId: i.partnerId, docType: i.docType, issueDate: i.issueDate,
           supplyDate: i.supplyDate ?? i.issueDate, dueDate: i.dueDate ?? "", paymentMethod: i.paymentMethod, note: i.note ?? "",
@@ -101,13 +102,32 @@ export function InvoiceEditor() {
       correctionReason: head.reason || null, voidReasonCode: head.voidCode || null, correctionReasonCode: head.corrCode || null,
       advanceInvoiceId: canAdvance && head.advanceId ? head.advanceId : null,
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
-      lines: lines.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Number(l.qty),
-        unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct || 0), vatRateId: l.vatRateId, priceSource: l.priceSource })),
+      lines: realLines().map((l) => ({ itemId: l.itemId, description: l.description.trim(), unit: l.unit, qty: parseNum(l.qty),
+        unitPrice: parseNum(l.unitPrice), discountPct: parseNum(l.discountPct || "0"), vatRateId: l.vatRateId, priceSource: l.priceSource })),
     };
   }
 
+  /** Prazni redovi (bez opis, artikl i cena) ne se prakjaat. */
+  const realLines = () => lines.filter((l) => l.description.trim() || l.itemId || parseNum(l.unitPrice) > 0);
+  /** Proverka pred zacuvuvanje, so jasna poraka po stavka (ne "Неисправни податоци"). */
+  function check(): string | null {
+    if (!head.partnerId) return partners.length ? "Изберете купувач." : "Оваа фирма уште нема купувачи. Додајте купувач во „Купувачи“ (од регистарот на УЈП или рачно).";
+    const errs: string[] = [];
+    realLines().forEach((l, i) => {
+      const n = `Ставка ${i + 1}`;
+      if (!l.description.trim()) errs.push(`${n}: внесете опис.`);
+      if (!l.unit.trim()) errs.push(`${n}: внесете единечна мерка.`);
+      if (!(parseNum(l.qty) > 0)) errs.push(`${n}: количината мора да е број поголем од 0 („${l.qty}“).`);
+      if (Number.isNaN(parseNum(l.unitPrice)) || parseNum(l.unitPrice) < 0) errs.push(`${n}: цената не е број („${l.unitPrice}“).`);
+      if (Number.isNaN(parseNum(l.discountPct || "0"))) errs.push(`${n}: попустот не е број.`);
+      if (!l.vatRateId) errs.push(`${n}: изберете ДДВ стапка.`);
+    });
+    return errs.length ? errs.join(" ") : null;
+  }
+
   async function save(): Promise<number | null> {
-    if (!head.partnerId) { setMsg({ kind: "err", text: "Изберете купувач." }); return null; }
+    const problem = check();
+    if (problem) { setMsg({ kind: "err", text: problem }); return null; }
     setBusy(true); setMsg(null);
     try {
       let invId = inv?.id;
@@ -115,7 +135,7 @@ export function InvoiceEditor() {
       else invId = (await api.post<{ id: number }>(`/api/clients/${client.id}/invoices`, payload())).id;
       const fresh = await api.get<Invoice>(`/api/invoices/${invId}`);
       setInv(fresh); setLines(fresh.lines.map(toEdit)); setDirty(false);
-      if (!inv) nav(`../invoices/${invId}`, { relative: "path", replace: true });
+      if (!inv) nav(`/c/${client.id}/invoices/${invId}`, { replace: true });
       setMsg({ kind: "ok", text: "Нацртот е зачуван." });
       return invId;
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); return null; }
@@ -136,9 +156,9 @@ export function InvoiceEditor() {
   }
 
   async function cancelDraft() {
-    if (!inv) return nav("../invoices", { relative: "path" });
+    if (!inv) return nav(`/c/${client.id}/invoices`);
     setBusy(true);
-    try { await api.post(`/api/invoices/${inv.id}/cancel`); nav("../../invoices", { relative: "path" }); }
+    try { await api.post(`/api/invoices/${inv.id}/cancel`); nav(`/c/${client.id}/invoices`); }
     catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); setBusy(false); }
   }
 
@@ -147,7 +167,7 @@ export function InvoiceEditor() {
     setBusy(true);
     try {
       const r = await api.post<{ id: number }>(`/api/invoices/${inv.id}/derive`, { docType });
-      nav(`../${r.id}`, { relative: "path" });
+      nav(`/c/${client.id}/invoices/${r.id}`);
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); }
     finally { setBusy(false); }
   }
@@ -180,6 +200,8 @@ export function InvoiceEditor() {
                 {partners.filter((p) => p.isActive || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{p.name}{p.edb ? ` (${p.edb})` : ""}</option>)}
               </select>
             ) : <output>{inv?.buyerName}</output>}
+            {editable && !isDerived && loaded && !partners.some((p) => p.isActive) && (
+              <small className="alert">Оваа фирма уште нема купувачи. <Link to={`/c/${client.id}/partners`}>Додајте купувач</Link> (од регистарот на УЈП или рачно), па вратете се тука.</small>)}
             {partner && <small className="muted">{[partner.address, partner.city].filter(Boolean).join(", ") || "без адреса"}{partner.vatNumber ? ` · ДДВ ${partner.vatNumber}` : ""}</small>}
           </label>
           <label>Вид

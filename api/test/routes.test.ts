@@ -212,3 +212,13 @@ describe("PDF i postavki na klientot", () => {
     expect((await app.inject({ method: "GET", url: `/api/invoices/${foreign!.id}/pdf`, headers: { cookie: ana } })).statusCode).toBe(404);
   });
 });
+
+describe("jasni poraki za greshki vo vnesot", () => {
+  it("zodMessage: pole i stavka namesto 'Неисправни податоци'", async () => {
+    const { zodMessage } = await import("../src/domain/zod-mk.js");
+    const { z } = await import("zod");
+    const S = z.object({ partnerId: z.coerce.number().int().positive(), lines: z.array(z.object({ description: z.string().min(1), qty: z.coerce.number().positive() })) });
+    const r = S.safeParse({ partnerId: "", lines: [{ description: "x", qty: 1 }, { description: "", qty: "1.234.5" }] });
+    expect(zodMessage(r.success ? [] : r.error.issues)).toBe("Проверете: Купувач / партнер: изберете / внесете вредност поголема од 0; Ставка 2: опис: задолжително; Ставка 2: количина: не е во добар облик.");
+  });
+});
