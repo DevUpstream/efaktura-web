@@ -112,6 +112,7 @@ export interface PdfSettings {
   clausesTitle?: string;         // "УПСТРЕАМ ДООЕЛ го задржува правото ..."
   receiverDeclaration?: string;  // izjava pod "Примил"
   showReceivedBy?: boolean;      // "Примил (Име и Презиме, Потпис)" - za faktura-ispratnica
+  showPaymentReference?: boolean; // "При плаќање повикајте се на број: ..." (stand. da) - za prepoznavanje vo izvod (docs/08)
 }
 
 export const clients = pgTable("clients", {

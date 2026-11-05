@@ -80,6 +80,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
       bankAccounts: z.array(z.object({ account: z.string().trim().min(3).max(40), bank: z.string().trim().max(120) })).max(5).optional(),
       invoiceTitle: Txt(40), signatory: Txt(120), paymentNote: Txt(300), clausesTitle: Txt(300), receiverDeclaration: Txt(500),
       showReceivedBy: z.boolean().optional(),
+      showPaymentReference: z.boolean().optional(),
     }).optional(),
   });
   /** Samo administrator. Nazivot, EDB, adresata i DDV brojot doagjaat od registarot na UJP i ne se menuvaat tuka. */

@@ -28,6 +28,16 @@ const nf2 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFr
 const nfP = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 const nfQ = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 });
 const m2 = (v: string | number | null | undefined) => nf2.format(Number(v ?? 0));
+/**
+ * Broj za povikuvanje pri plakjanje (docs/08): brojot na fakturata, samo za izdadeni dokumenti sto se plakjaat.
+ * Kupuvacot go prepisuva vo "povikuvanje na broj" -> izvodot avtomatski se povrzuva so fakturata.
+ */
+export function paymentReference(inv: { number: string | null; docType: string; status: string }, payable: string | number | null, ps: { showPaymentReference?: boolean }) {
+  if (ps.showPaymentReference === false || !inv.number || ["draft", "to_issue", "cancelled_draft"].includes(inv.status)) return null;
+  if (!["INV", "AV", "KZ", "KR"].includes(inv.docType) || !(Number(payable) > 0)) return null;
+  return inv.number;
+}
+
 /** "За плаќање": секогаш цели денари, без децимали. */
 const m0 = (v: string | number | null | undefined) => new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 }).format(Math.round(Number(v ?? 0)));
 const day = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "");
@@ -202,6 +212,8 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   let cy = Math.max(y2 + 28, by + 40);
   if (cy > 700) { doc.addPage(); cy = 50; }
   const CW = 330;
+  const ref = paymentReference(inv, totals.payableAmount, ps);
+  if (ref) cy = text(`При плаќање, во „повикување на број“ наведете: ${ref}`, PAGE.l + 20, cy, { font: "b", size: 8, width: CW }) + 9;
   if (ps.paymentNote) cy = text(ps.paymentNote, PAGE.l + 20, cy, { font: "b", size: 7.3, width: CW }) + 9;
   if (ps.clausesTitle) cy = text(ps.clausesTitle, PAGE.l + 20, cy, { font: "b", size: 7.3, width: CW }) + 9;
   const clauses = (inv.clauses ?? client.invoiceClauses ?? "").split(/\r?\n/).filter((x) => x.trim());

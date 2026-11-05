@@ -6,7 +6,7 @@ import { useSession } from "../session";
 
 interface Bank { account: string; bank: string }
 interface Pdf { shortName?: string; tagline?: string; subtitle?: string; contactLine?: string; addressLines?: string[];
-  bankAccounts?: Bank[]; invoiceTitle?: string; signatory?: string; paymentNote?: string; clausesTitle?: string;
+  bankAccounts?: Bank[]; invoiceTitle?: string; signatory?: string; paymentNote?: string; showPaymentReference?: boolean; clausesTitle?: string;
   receiverDeclaration?: string; showReceivedBy?: boolean }
 interface Client { id: number; name: string; edb: string; embs: string | null; vatNumber: string | null; address: string; city: string;
   postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn"; productionSettings: ProductionSettings | null }
@@ -30,7 +30,7 @@ export function ClientSettings() {
       shortName: f.shortName, tagline: f.tagline, subtitle: f.subtitle, contactLine: f.contactLine,
       addressLines: (f.addressLines ?? "").split("\n").map((x) => x.trim()).filter(Boolean),
       bankAccounts: banks.filter((b) => b.account.trim()), invoiceTitle: f.invoiceTitle, signatory: f.signatory,
-      paymentNote: f.paymentNote, clausesTitle: f.clausesTitle, receiverDeclaration: f.receiverDeclaration,
+      paymentNote: f.paymentNote, showPaymentReference: f.showPaymentReference === "on", clausesTitle: f.clausesTitle, receiverDeclaration: f.receiverDeclaration,
       showReceivedBy: f.showReceivedBy === "on",
     };
     try {
@@ -78,6 +78,8 @@ export function ClientSettings() {
 
         <h2 className="span-all">Подножје</h2>
         <div className="span-all"><label>Напомена за плаќање (задебелено)<input name="paymentNote" defaultValue={p.paymentNote} disabled={dis} /></label></div>
+        <label className="check span-all"><input type="checkbox" name="showPaymentReference" defaultChecked={p.showPaymentReference ?? true} disabled={dis} />
+          „При плаќање, во повикување на број наведете: MC-2026-00004“ (купувачот го препишува, па уплатата од изводот се поврзува со фактурата сама)</label>
         <div className="span-all"><label>Наслов на клаузулите (задебелено)<input name="clausesTitle" defaultValue={p.clausesTitle} disabled={dis} /></label></div>
         <div className="span-all"><label>Клаузули (секоја во нов ред)<textarea name="invoiceClauses" rows={7} defaultValue={c.invoiceClauses ?? ""} disabled={dis} /></label></div>
         <div className="span-all"><label>Изјава под „Примил“<textarea name="receiverDeclaration" rows={2} defaultValue={p.receiverDeclaration} disabled={dis} /></label></div>
