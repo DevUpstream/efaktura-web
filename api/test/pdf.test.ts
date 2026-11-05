@@ -23,3 +23,21 @@ describe("PDF faktura (format UPSTREAM 2026/10/11)", () => {
     }
   });
 });
+
+describe("povikuvanje na broj (docs/08)", () => {
+  it("samo za izdadeni dokumenti sto se plakjaat; moze da se iskluci", async () => {
+    const { paymentReference } = await import("../src/domain/pdf.js");
+    const inv = { number: "MC-2026-00004", docType: "INV", status: "issued" };
+    expect(paymentReference(inv, "1180", {})).toBe("MC-2026-00004");
+    expect(paymentReference({ ...inv, status: "sent_to_ujp", docType: "AV" }, "500", {})).toBe("MC-2026-00004");
+    expect(paymentReference({ ...inv, number: null, status: "draft" }, "1180", {})).toBeNull();
+    expect(paymentReference({ ...inv, docType: "OD" }, "-100", {})).toBeNull();
+    expect(paymentReference({ ...inv, docType: "ST" }, "-1180", {})).toBeNull();
+    expect(paymentReference(inv, "0", {})).toBeNull();   // celosno platena so avans
+    expect(paymentReference(inv, "1180", { showPaymentReference: false })).toBeNull();
+  });
+  it("izdadena faktura so povikuvanje se renderira", async () => {
+    const b = await renderInvoicePdf({ inv: { ...inv, status: "issued", number: "UPSTRI-2026-00007" } as never, lines, client });
+    expect(pages(b)).toBe(1);
+  });
+});
