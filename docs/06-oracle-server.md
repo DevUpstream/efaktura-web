@@ -42,7 +42,7 @@
 | `20261105-d63090a` | Нова фактура: јасни пораки наместо „Неисправни податоци“, линк по зачувување, порака кога фирмата нема купувачи  | чека |
 
 Команда (PowerShell, една линија):
-`ssh -i "$env:USERPROFILE\.ssh\oracle-efaktura.key" ubuntu@92.5.149.62 "sudo bash ~/efaktura-deploy/03-deploy.sh 20261105-268e817"`
+`ssh -i "$env:USERPROFILE\.ssh\oracle-efaktura.key" ubuntu@92.5.149.62 "sudo bash ~/efaktura-deploy/03-deploy.sh 20261105-aa751a1"`
 
 Миграциите на базата (`api/drizzle/0000`–`0010`) се применуваат автоматски при старт.
 
