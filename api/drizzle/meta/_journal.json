@@ -71,6 +71,13 @@
       "when": 1793830444330,
       "tag": "0009_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793896939842,
+      "tag": "0010_bank_statements",
+      "breakpoints": true
     }
   ]
 }

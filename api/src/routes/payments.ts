@@ -2,11 +2,12 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { z } from "zod";
-import { clients, invoices, partners, paymentAllocations, payments, purchaseInvoices, type BankImportMapping } from "../db/schema.js";
+import { bankStatementLines, bankStatements, clients, invoices, partnerAccounts, partners, paymentAllocations, payments, purchaseInvoices, type BankImportMapping } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { aging, allocateExisting, createPayment, openItems, unallocated, voidPayment } from "../domain/payments.js";
-import { findInvoiceNumbers, normalizeName, parseStatement } from "../domain/bank-import.js";
+import { bookLine, bookSure, clientOwnAccounts, importStatement, statementDetail } from "../domain/statements.js";
+import { normAccount } from "../domain/bank-txt.js";
 import { assertModule, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
@@ -113,71 +114,71 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
     return m;
   });
 
-  app.post("/api/clients/:clientId/payments/import/preview", async (req) => {
+  /* ------------------------------------------------- izvodi (docs/08) */
+  app.get("/api/clients/:clientId/bank-statements", async (req) => {
     const { clientId } = await ctx(req);
-    const b = z.object({ text: z.string().max(2_000_000), mapping: Mapping.optional() }).parse(req.body);
-    const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
-    const mapping = (b.mapping ?? client!.bankImportMapping) as BankImportMapping | null;
-    if (!mapping) throw new DomainError("validation", "Прво поставете како се чита изводот (колони).", 422);
-    const { rows, skipped } = parseStatement(b.text, mapping);
-    const keys = rows.map((r) => r.key);
-    const done = keys.length ? new Set((await db.select({ k: payments.statementLineKey }).from(payments)
-      .where(and(eq(payments.clientId, clientId), inArray(payments.statementLineKey, keys), sql`${payments.voidedAt} is null`))).map((x) => x.k)) : new Set();
-    const ps = await db.select().from(partners).where(and(eq(partners.clientId, clientId), eq(partners.isActive, true)));
-    const recv = await openItems(db, clientId, "in"), pay = await openItems(db, clientId, "out");
-    const ownAccounts = new Set([client!.iban, ...(client!.pdfSettings?.bankAccounts ?? []).map((b) => b.account)].filter(Boolean).map((a) => String(a).replace(/[\s-]/g, "")));
-    const out = rows.map((r) => {
-      const text = `${r.name} ${r.reference}`;
-      const open = r.direction === "in" ? recv : pay;
-      // 1) broj na faktura vo referencata
-      const nums = findInvoiceNumbers(text, [client!.invoicePrefix]);
-      const byNum = open.filter((o) => nums.some((n) => o.number.toUpperCase().startsWith(n)));
-      // 2) partner: ziro-smetka -> EDB vo tekstot -> naziv
-      const acc = r.account.replace(/-/g, "");
-      let partner = acc && !ownAccounts.has(acc) ? ps.find((p) => p.bankAccount && p.bankAccount.replace(/[\s-]/g, "") === acc) : undefined;
-      let how = partner ? "жиро-сметка" : "";
-      if (!partner) { partner = ps.find((p) => p.edb && text.includes(p.edb)); if (partner) how = "ЕДБ"; }
-      if (!partner && byNum.length) { partner = ps.find((p) => p.id === byNum[0]!.partnerId); if (partner) how = "број на фактура"; }
-      if (!partner && r.name) {
-        const n = normalizeName(r.name);
-        const cands = ps.filter((p) => { const pn = normalizeName(p.name); return pn.length > 3 && (n.includes(pn) || pn.includes(n)); });
-        if (cands.length === 1) { partner = cands[0]; how = "назив"; }
-      }
-      // 3) fakturi: po broj; inaku tocen iznos kaj partnerot; inaku avtomatski od najstarata (null)
-      let allocations: { id: number; number: string; amount: string }[] | null = null;
-      const mine = partner ? open.filter((o) => o.partnerId === partner!.id) : [];
-      const numMine = byNum.filter((o) => !partner || o.partnerId === partner.id);
-      if (numMine.length) {
-        let left = Number(r.amount);
-        allocations = numMine.map((o) => { const a = Math.min(left, Number(o.remaining)); left -= a; return { id: o.id, number: o.number, amount: a.toFixed(2) }; }).filter((a) => Number(a.amount) > 0);
-      } else {
-        const exact = mine.find((o) => o.remaining === r.amount);
-        if (exact) allocations = [{ id: exact.id, number: exact.number, amount: exact.remaining }];
-      }
-      return { ...r, imported: done.has(r.key), partnerId: partner?.id ?? null, partnerName: partner?.name ?? null, matchedBy: how,
-        allocations, openForPartner: mine.map((o) => ({ id: o.id, number: o.number, remaining: o.remaining, dueDate: o.dueDate })) };
-    });
-    return { rows: out, skipped, mapping };
+    return db.select({ id: bankStatements.id, format: bankStatements.format, ownAccount: bankStatements.ownAccount, statementNo: bankStatements.statementNo,
+      statementDate: bankStatements.statementDate, openingBalance: bankStatements.openingBalance, closingBalance: bankStatements.closingBalance,
+      fileName: bankStatements.fileName, createdAt: bankStatements.createdAt,
+      lines: sql<number>`(select count(*)::int from bank_statement_lines l where l.statement_id = ${bankStatements.id})`,
+      open: sql<number>`(select count(*)::int from bank_statement_lines l left join payments y on y.id = l.payment_id
+        where l.statement_id = ${bankStatements.id} and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
+      inflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = ${bankStatements.id} and l.direction = 'in')`,
+      outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = ${bankStatements.id} and l.direction = 'out')` })
+      .from(bankStatements).where(eq(bankStatements.clientId, clientId)).orderBy(desc(bankStatements.statementDate), desc(bankStatements.id)).limit(500);
+  });
+  app.post("/api/clients/:clientId/bank-statements", async (req, reply) => {
+    const { clientId, actor } = await ctx(req);
+    const b = z.object({ text: z.string().min(1).max(2_000_000), fileName: z.string().max(200).optional().nullable(), autoBook: z.boolean().default(true) }).parse(req.body);
+    return reply.status(201).send(await importStatement(db, clientId, b.text, b.fileName ?? null, actor, { autoBook: b.autoBook }));
+  });
+  app.get("/api/clients/:clientId/bank-statements/:id", async (req) => {
+    const { clientId, id } = await ctx(req);
+    return statementDetail(db, clientId, id!);
+  });
+  app.post("/api/clients/:clientId/bank-statements/:id/book-sure", async (req) => {
+    const { clientId, id, actor } = await ctx(req);
+    return bookSure(db, clientId, id!, actor);
+  });
+  app.post("/api/clients/:clientId/bank-lines/:id/book", async (req) => {
+    const { clientId, id, actor } = await ctx(req);
+    const b = z.object({ partnerId: Id, allocations: Alloc, learn: z.boolean().default(true) }).parse(req.body);
+    const r = await bookLine(db, clientId, id!, { partnerId: b.partnerId, allocations: b.allocations ?? null, learn: b.learn }, actor);
+    return { paymentId: r.id, allocated: r.allocated, unallocated: r.unallocated, learned: r.learned };
+  });
+  app.post("/api/clients/:clientId/bank-lines/:id/ignore", async (req) => {
+    const { clientId, id } = await ctx(req);
+    const b = z.object({ ignored: z.boolean(), reason: z.string().trim().max(200).optional().nullable() }).parse(req.body);
+    const [l] = await db.select().from(bankStatementLines).where(and(eq(bankStatementLines.id, id!), eq(bankStatementLines.clientId, clientId)));
+    if (!l) throw new DomainError("not_found", "Ставката не постои.", 404);
+    if (b.ignored && l.paymentId) {
+      const [p] = await db.select({ v: payments.voidedAt }).from(payments).where(eq(payments.id, l.paymentId));
+      if (p && !p.v) throw new DomainError("validation", "Ставката е прокнижена: прво сторнирајте ја уплатата.", 422);
+    }
+    await db.update(bankStatementLines).set({ ignored: b.ignored, ignoreReason: b.ignored ? b.reason ?? null : null }).where(eq(bankStatementLines.id, l.id));
+    return { ok: true };
   });
 
-  app.post("/api/clients/:clientId/payments/import/commit", async (req) => {
-    const { clientId, actor } = await ctx(req);
-    const b = z.object({ rows: z.array(z.object({ key: z.string().min(16).max(64), payDate: Day, amount: Money, direction: Dir, partnerId: Id,
-      reference: z.string().max(200).optional().nullable(), allocations: Alloc })).min(1).max(2000) }).parse(req.body);
-    const results: { key: string; ok: boolean; paymentId?: number; message?: string }[] = [];
-    const existing = new Set((await db.select({ k: payments.statementLineKey }).from(payments).where(and(eq(payments.clientId, clientId),
-      inArray(payments.statementLineKey, b.rows.map((r) => r.key)), sql`${payments.voidedAt} is null`))).map((x) => x.k));
-    for (const r of b.rows) {
-      if (existing.has(r.key)) { results.push({ key: r.key, ok: false, message: "Веќе увезено." }); continue; }
-      try {
-        const p = await db.transaction(async (tx) => createPayment(tx as unknown as Db, { clientId, direction: r.direction, partnerId: r.partnerId, payDate: r.payDate,
-          amount: r.amount, method: "bank", reference: r.reference ?? null, statementLineKey: r.key, allocations: r.allocations }, actor));
-        results.push({ key: r.key, ok: true, paymentId: p.id });
-      } catch (e) {
-        const code = ((e as { cause?: { code?: string } }).cause?.code ?? (e as { code?: string }).code);
-        results.push({ key: r.key, ok: false, message: code === "23505" ? "Веќе увезено." : (e as Error).message });
-      }
-    }
-    return { imported: results.filter((r) => r.ok).length, results };
+  /* ------------------------------------------- ziro-smetki na partner */
+  app.get("/api/clients/:clientId/partners/:id/accounts", async (req) => {
+    const { clientId, id } = await ctx(req);
+    return db.select().from(partnerAccounts).where(and(eq(partnerAccounts.clientId, clientId), eq(partnerAccounts.partnerId, id!)));
+  });
+  app.post("/api/clients/:clientId/partners/:id/accounts", async (req, reply) => {
+    const { clientId, id } = await ctx(req);
+    const { account } = z.object({ account: z.string().trim().regex(/^\d{3}-?\d{10}-?\d{2}$/, "Жиро-сметка: XXX-XXXXXXXXXX-XX") }).parse(req.body);
+    const [p] = await db.select({ id: partners.id }).from(partners).where(and(eq(partners.id, id!), eq(partners.clientId, clientId)));
+    if (!p) throw new DomainError("not_found", "Партнерот не постои.", 404);
+    const [own] = await db.select().from(clients).where(eq(clients.id, clientId));
+    if (clientOwnAccounts(own!).has(normAccount(account))) throw new DomainError("validation", "Тоа е сметка на нашата фирма.", 422);
+    const r = await db.insert(partnerAccounts).values({ clientId, partnerId: id!, account: normAccount(account), source: "manual" }).onConflictDoNothing().returning();
+    if (!r.length) throw new DomainError("duplicate", "Сметката е веќе поврзана (можеби со друг партнер).", 409);
+    return reply.status(201).send(r[0]);
+  });
+  app.delete("/api/clients/:clientId/partners/:id/accounts/:accId", async (req) => {
+    const { clientId, id } = await ctx(req);
+    const { accId } = z.object({ accId: Id }).parse(req.params);
+    await db.delete(partnerAccounts).where(and(eq(partnerAccounts.id, accId), eq(partnerAccounts.partnerId, id!), eq(partnerAccounts.clientId, clientId)));
+    return { ok: true };
   });
 }
