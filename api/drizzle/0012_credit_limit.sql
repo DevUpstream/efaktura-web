@@ -1,0 +1,1 @@
+ALTER TABLE "partners" ADD COLUMN "credit_limit" numeric(18, 2);

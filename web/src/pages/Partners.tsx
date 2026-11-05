@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
+import { GradeChip, type PartnerScore } from "../components/Score";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
 import { date } from "../format";
 import { CompanyCard, DiffTable, UjpPullStatus, useUjpPull } from "../components/UjpPull";
@@ -17,6 +18,11 @@ export function Partners() {
   useEffect(() => { setRows(null); setEdit(null); void load(); }, [client.id]);
 
   const needle = q.trim().toLowerCase();
+  const [scores, setScores] = useState<Map<number, PartnerScore> | null>(null);
+  useEffect(() => {
+    if (!client.modules.includes("payments")) { setScores(null); return; }
+    api.get<PartnerScore[]>(`/api/clients/${client.id}/partner-scores`).then((x) => setScores(new Map(x.map((s) => [s.partnerId, s]))), () => setScores(null));
+  }, [client.id]);
   const shown = (rows ?? []).filter((p) => !needle || p.name.toLowerCase().includes(needle) || (p.edb ?? "").includes(needle));
   return (
     <>
@@ -31,13 +37,14 @@ export function Partners() {
       {rows && shown.length === 0 && <div className="empty"><p>{rows.length ? "Нема купувач со тоа име или ЕДБ." : "Сè уште нема купувачи. Додадете го првиот."}</p></div>}
       {shown.length > 0 && (
         <div className="table-wrap"><table className="grid">
-          <thead><tr><th>Назив</th><th>ЕДБ</th><th>ДДВ број</th><th>Град</th><th>Регистар</th></tr></thead>
+          <thead><tr><th>Назив</th><th>ЕДБ</th><th>ДДВ број</th><th>Град</th><th>Регистар</th>{scores && <th title="Платежна дисциплина">Плаќа</th>}</tr></thead>
           <tbody>{shown.map((p) => (
             <tr key={p.id} onClick={() => (client.modules.includes("crm") ? nav(`/c/${client.id}/partners/${p.id}`) : setEdit(p))} className={p.isActive ? "" : "row-inactive"}>
               <td>{client.modules.includes("crm") ? <Link className="docno" to={`/c/${client.id}/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{p.name}</Link>
                 : <button className="link" onClick={() => setEdit(p)}>{p.name}</button>}{!p.isActive && <span className="doctype">неактивен</span>}</td>
               <td>{p.edb ?? "–"}</td><td>{p.vatNumber ?? "–"}</td><td>{p.city ?? "–"}</td>
               <td>{p.ujpRegistryAt ? <span className="chip ok" title={`Проверено ${date(p.ujpRegistryAt.slice(0, 10))}`}>УЈП ✓</span> : <span className="muted">–</span>}</td>
+              {scores && <td><GradeChip s={scores.get(p.id)} /></td>}
             </tr>))}
           </tbody>
         </table></div>

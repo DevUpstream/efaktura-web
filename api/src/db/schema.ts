@@ -189,6 +189,7 @@ export const partners = pgTable("partners", {
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
   bankAccount: varchar("bank_account", { length: 40 }),  // ziro-smetka, za prepoznavanje vo izvod
+  creditLimit: money("credit_limit"),  // kreditni limit (otvoreno + nova faktura); null = bez limit (docs/08)
   edb: varchar("edb", { length: 13 }),
   embs: varchar("embs", { length: 8 }),
   vatNumber: varchar("vat_number", { length: 20 }),
