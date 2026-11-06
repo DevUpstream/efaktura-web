@@ -8,7 +8,7 @@
 import { sql } from "drizzle-orm";
 import {
   pgTable, pgEnum, serial, bigserial, integer, smallint, text, varchar, char, boolean, numeric,
-  date, timestamp, jsonb, uuid, uniqueIndex, index, primaryKey, check,
+  date, timestamp, jsonb, uuid, uniqueIndex, index, primaryKey, check, customType,
 } from "drizzle-orm/pg-core";
 
 const ts = (name: string) => timestamp(name, { withTimezone: true });
@@ -16,6 +16,7 @@ const created = () => ts("created_at").notNull().defaultNow();
 const updated = () => ts("updated_at").notNull().defaultNow();
 const money = (name: string) => numeric(name, { precision: 18, scale: 2 });
 const amount4 = (name: string) => numeric(name, { precision: 18, scale: 4 });
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 /* ---------------------------------------------------------------- enumi */
 
@@ -544,6 +545,15 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   vatTotal: money("vat_total").notNull().default("0"),
   grossTotal: money("gross_total").notNull().default("0"),
   note: text("note"),
+  /** "manual" ili "ujp_json" (uvoz na e-faktura vo formatot na UJP, docs/09). */
+  source: varchar("source", { length: 12 }).notNull().default("manual"),
+  /** Iznosite (stavki i zaglavje) se od dokumentot na dobavuvacot i ne se presmetuvaat odnovo. */
+  fixedAmounts: boolean("fixed_amounts").notNull().default(false),
+  payableAmount: money("payable_amount"),            // "za plakjanje" od dokumentot (po avans); null = grossTotal
+  turnoverDate: date("turnover_date"),
+  ujpDocType: varchar("ujp_doc_type", { length: 3 }),
+  sourceJson: jsonb("source_json"),
+  sourceHash: varchar("source_hash", { length: 64 }),
   version: integer("version").notNull().default(1),
   createdBy: integer("created_by").references(() => users.id),
   postedBy: integer("posted_by").references(() => users.id),
@@ -581,6 +591,28 @@ export const purchaseLines = pgTable("purchase_lines", {
   check("purchase_lines_qty_ck", sql`${t.qty} > 0`),
   check("purchase_lines_price_ck", sql`${t.unitPrice} >= 0`),
 ]);
+
+/** Prilozi na vlezna faktura (PDF od dobavuvacot). */
+export const purchaseFiles = pgTable("purchase_files", {
+  id: serial("id").primaryKey(),
+  purchaseInvoiceId: integer("purchase_invoice_id").notNull().references(() => purchaseInvoices.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  contentType: varchar("content_type", { length: 100 }).notNull(),
+  size: integer("size").notNull(),
+  sha256: varchar("sha256", { length: 64 }).notNull(),
+  data: bytea("data").notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("purchase_files_purchase_ix").on(t.purchaseInvoiceId)]);
+
+/** Naucheno povrzuvanje: dobavuvac + opis na stavka -> nash artikl (se uci pri knizenje). */
+export const supplierItemMap = pgTable("supplier_item_map", {
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "cascade" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "cascade" }),
+  descKey: text("desc_key").notNull(),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "cascade" }),
+  updatedAt: updated(),
+}, (t) => [primaryKey({ columns: [t.clientId, t.partnerId, t.descKey] })]);
 
 /** Magacinski dokumenti. Ne se menuvaat i ne se brisat - ispravka so nov (storno) dokument. */
 export const stockDocs = pgTable("stock_docs", {
