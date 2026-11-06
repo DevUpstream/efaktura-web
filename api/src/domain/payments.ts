@@ -40,7 +40,7 @@ export async function openItems(db: Db, clientId: number, direction: "in" | "out
     where x.client_id = ${clientId} and x.doc_type in ('INV','AV','KZ','KR') and x.status in (${RECV_SQL}) ${partnerCond}`
     : sql`
     select x.id, coalesce(x.number, '') || ' (' || x.supplier_number || ')' as number, 'VF' as "docType", x.issue_date as "issueDate", x.due_date as "dueDate",
-      x.partner_id as "partnerId", p.name as "partnerName", x.gross_total as amount, 0 as credits, x.supplier_number as "supplierNumber",
+      x.partner_id as "partnerId", p.name as "partnerName", coalesce(x.payable_amount, x.gross_total) as amount, 0 as credits, x.supplier_number as "supplierNumber",
       coalesce((select sum(a.amount) from payment_allocations a join payments y on y.id = a.payment_id
         where a.purchase_invoice_id = x.id and y.voided_at is null), 0) as paid
     from purchase_invoices x join partners p on p.id = x.partner_id

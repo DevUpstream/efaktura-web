@@ -12,6 +12,7 @@ import { calcTotals } from "./calc.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
 import { defaultWarehouse, formatStockNumber, nextStockNo, postStockDoc, reverseStockDoc } from "./stock.js";
+import { learnItems } from "./ujp-import.js";
 
 const D = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 
@@ -55,7 +56,9 @@ export async function postPurchase(db: Db, id: number, actor: Actor & { userId: 
     });
     for (const l of stockLines) await tx.update(purchaseLines).set({ unitCost: costs.get(l.id)! }).where(eq(purchaseLines.id, l.id));
 
-    const totals = calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })));
+    // uvezena e-faktura: zbirovite se od dokumentot (dobavuvacot moze da zaokruzuva poinaku)
+    const totals = p.fixedAmounts ? { netTotal: p.netTotal, vatTotal: p.vatTotal, grossTotal: p.grossTotal } : calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })));
+    await learnItems(tx, p.clientId, p.partnerId, lines);
     const seqNo = await nextStockNo(tx, p.clientId, "purchase", p.year);
     const number = formatStockNumber(client!.invoicePrefix, "VF", p.year, seqNo);
     let warehouseId = p.warehouseId;

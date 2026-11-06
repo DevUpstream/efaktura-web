@@ -2,13 +2,14 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { clients, items, lotBalances, lots, partners, purchaseInvoices, purchaseLines, stockBalances, stockDocs, stockMoves, users, vatRates,
+import { clients, items, lotBalances, lots, partners, purchaseFiles, purchaseInvoices, purchaseLines, stockBalances, stockDocs, stockMoves, users, vatRates,
   warehouses } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { calcLine, calcTotals } from "../domain/calc.js";
 import { postPurchase, voidPurchase } from "../domain/purchase.js";
+import { addFile, importUjpPurchase, MAX_FILE } from "../domain/ujp-import.js";
 import { balanceOf, postStockDoc, reverseStockDoc, StockDecimal as D, type MoveIn } from "../domain/stock.js";
 import { assertClientAccess, assertModule, requireAdmin, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
@@ -101,7 +102,8 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (q.q) conds.push(or(ilike(partners.name, `%${q.q}%`), ilike(purchaseInvoices.supplierNumber, `%${q.q}%`), ilike(purchaseInvoices.number, `%${q.q}%`))!);
     return db.select({ id: purchaseInvoices.id, number: purchaseInvoices.number, status: purchaseInvoices.status, supplierNumber: purchaseInvoices.supplierNumber,
       issueDate: purchaseInvoices.issueDate, receivedDate: purchaseInvoices.receivedDate, dueDate: purchaseInvoices.dueDate, supplierName: partners.name,
-      netTotal: purchaseInvoices.netTotal, vatTotal: purchaseInvoices.vatTotal, grossTotal: purchaseInvoices.grossTotal })
+      netTotal: purchaseInvoices.netTotal, vatTotal: purchaseInvoices.vatTotal, grossTotal: purchaseInvoices.grossTotal, source: purchaseInvoices.source,
+      fileCount: sql<number>`(select count(*)::int from purchase_files f where f.purchase_invoice_id = ${purchaseInvoices.id})` })
       .from(purchaseInvoices).innerJoin(partners, eq(partners.id, purchaseInvoices.partnerId)).where(and(...conds))
       .orderBy(desc(purchaseInvoices.receivedDate), desc(purchaseInvoices.id)).limit(500);
   });
@@ -118,7 +120,53 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const docs = await db.select({ id: stockDocs.id, number: stockDocs.number, kind: stockDocs.kind, docDate: stockDocs.docDate, reversesDocId: stockDocs.reversesDocId })
       .from(stockDocs).where(eq(stockDocs.purchaseInvoiceId, p.id)).orderBy(asc(stockDocs.id));
     const totals = calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })));
-    return { ...p, lines, byRate: totals.byRate, stockDocs: docs };
+    const files = await db.select({ id: purchaseFiles.id, fileName: purchaseFiles.fileName, contentType: purchaseFiles.contentType, size: purchaseFiles.size,
+      createdAt: purchaseFiles.createdAt }).from(purchaseFiles).where(eq(purchaseFiles.purchaseInvoiceId, p.id)).orderBy(asc(purchaseFiles.id));
+    const { sourceJson: _src, ...head } = p;
+    return { ...head, hasSource: !!_src, lines, byRate: totals.byRate, stockDocs: docs, files };
+  });
+
+  /* uvoz na e-faktura (JSON vo formatot na UJP) + PDF, docs/09 */
+  const B64 = z.string().max(Math.ceil(MAX_FILE * 4 / 3) + 16).regex(/^[A-Za-z0-9+/=\s]*$/, "Неисправна датотека");
+  app.post("/api/clients/:clientId/purchases/import-ujp", { bodyLimit: 16 * 1024 * 1024 }, async (req, reply) => {
+    const { u, clientId } = await withModule(req, "incoming");
+    const b = z.object({ text: z.string().min(2).max(2_000_000), fileName: z.string().max(200).optional().nullable(),
+      pdf: z.object({ name: z.string().min(1).max(200), base64: B64 }).optional().nullable() }).parse(req.body);
+    try {
+      const r = await importUjpPurchase(db, clientId, { text: b.text, fileName: b.fileName ?? null,
+        pdf: b.pdf ? { name: b.pdf.name, data: Buffer.from(b.pdf.base64, "base64") } : null }, { userId: u.id, ip: req.ip });
+      return reply.status(201).send(r);
+    } catch (e) { if (pgUnique(e)) throw new DomainError("duplicate", "Оваа фактура е веќе внесена.", 409); throw e; }
+  });
+  app.post("/api/clients/:clientId/purchases/:id/files", { bodyLimit: 12 * 1024 * 1024 }, async (req, reply) => {
+    const { u, clientId, id } = await withModule(req, "incoming");
+    const p = await loadPurchase(clientId, id!);
+    const b = z.object({ name: z.string().min(1).max(200), base64: B64 }).parse(req.body);
+    const f = await addFile(db, p.id, b.name, Buffer.from(b.base64, "base64"), u.id);
+    await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "purchase_invoice", entityId: p.id, action: "add_file", changes: { file: f.fileName } });
+    return reply.status(201).send(f);
+  });
+  const fileParams = (req: FastifyRequest) => z.object({ fileId: Id }).parse(req.params);
+  async function loadFile(purchaseId: number, fileId: number) {
+    const [f] = await db.select().from(purchaseFiles).where(and(eq(purchaseFiles.id, fileId), eq(purchaseFiles.purchaseInvoiceId, purchaseId)));
+    if (!f) throw new DomainError("not_found", "Прилогот не постои.", 404);
+    return f;
+  }
+  app.get("/api/clients/:clientId/purchases/:id/files/:fileId", async (req, reply) => {
+    const { clientId, id } = await withModule(req, "incoming");
+    const p = await loadPurchase(clientId, id!);
+    const f = await loadFile(p.id, fileParams(req).fileId);
+    return reply.header("content-type", f.contentType).header("x-content-type-options", "nosniff")
+      .header("content-disposition", `inline; filename*=UTF-8''${encodeURIComponent(f.fileName)}`).send(Buffer.from(f.data));
+  });
+  app.delete("/api/clients/:clientId/purchases/:id/files/:fileId", async (req) => {
+    const { u, clientId, id } = await withModule(req, "incoming");
+    const p = await loadPurchase(clientId, id!);
+    if (p.status !== "draft") throw new DomainError("not_draft", "Прилогот на прокнижена фактура не се брише.", 409);
+    const f = await loadFile(p.id, fileParams(req).fileId);
+    await db.delete(purchaseFiles).where(eq(purchaseFiles.id, f.id));
+    await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "purchase_invoice", entityId: p.id, action: "delete_file", changes: { file: f.fileName } });
+    return { ok: true };
   });
 
   async function writePurchase(tx: Db, clientId: number, id: number, b: z.infer<typeof PurchaseIn>) {
@@ -149,6 +197,27 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       .where(eq(purchaseInvoices.id, id));
   }
 
+  /** Uvezena e-faktura: se menuvaat samo artikl, zavisen trosok, lot, rok, datum na priem, rok za plakjanje, magacin, zabeleska. */
+  async function writeImported(tx: Db, clientId: number, p: typeof purchaseInvoices.$inferSelect, b: z.infer<typeof PurchaseIn>) {
+    const cur = await tx.select().from(purchaseLines).where(eq(purchaseLines.purchaseInvoiceId, p.id)).orderBy(asc(purchaseLines.lineNo));
+    const same = (a: unknown, c: unknown) => Math.abs(Number(a) - Number(c)) < 0.00005;
+    const changed = b.partnerId !== p.partnerId || b.supplierNumber !== p.supplierNumber || b.issueDate !== p.issueDate || b.lines.length !== cur.length
+      || b.lines.some((l, i) => !same(l.qty, cur[i]!.qty) || !same(l.unitPrice, cur[i]!.unitPrice) || !same(l.discountPct, cur[i]!.discountPct)
+        || l.vatRateId !== cur[i]!.vatRateId || l.description !== cur[i]!.description);
+    if (changed) throw new DomainError("validation", "Увезена е-фактура: добавувачот, бројот, датумот и износите се од документот и не се менуваат. Ако фактурата е погрешна, побарајте корекција од добавувачот.", 422);
+    if (b.receivedDate < p.issueDate) throw new DomainError("validation", "Датумот на прием е пред датумот на фактурата.", 422);
+    if (b.warehouseId) await ownWarehouse(clientId, b.warehouseId);
+    const ids = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
+    if (ids.length) {
+      const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, ids)));
+      if (own.length !== new Set(ids).size) throw new DomainError("validation", "Непознат артикл.", 422);
+    }
+    for (const [i, l] of b.lines.entries())
+      await tx.update(purchaseLines).set({ itemId: l.itemId ?? null, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null }).where(eq(purchaseLines.id, cur[i]!.id));
+    await tx.update(purchaseInvoices).set({ receivedDate: b.receivedDate, dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note,
+      year: Number(b.receivedDate.slice(0, 4)), version: sql`${purchaseInvoices.version} + 1` }).where(eq(purchaseInvoices.id, p.id));
+  }
+
   app.post("/api/clients/:clientId/purchases", async (req, reply) => {
     const { u, clientId } = await withModule(req, "incoming");
     const b = PurchaseIn.parse(req.body);
@@ -172,7 +241,8 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
         if (!p) throw new DomainError("not_found", "Влезната фактура не постои.", 404);
         if (p.status !== "draft") throw new DomainError("not_draft", "Само нацрт може да се менува.", 409);
         if (b.version !== undefined && b.version !== p.version) throw new DomainError("conflict", "Фактурата е изменета од друг корисник. Освежете ја страницата.", 409);
-        await writePurchase(tx as unknown as Db, clientId, p.id, b);
+        if (p.fixedAmounts) await writeImported(tx as unknown as Db, clientId, p, b);
+        else await writePurchase(tx as unknown as Db, clientId, p.id, b);
       });
     } catch (e) { if (pgUnique(e)) throw new DomainError("duplicate", `Фактура ${b.supplierNumber} од овој добавувач е веќе внесена.`, 409); throw e; }
     await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "purchase_invoice", entityId: id!, action: "save_draft" });
