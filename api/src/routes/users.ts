@@ -94,7 +94,7 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
     const b = z.object({ isActive: z.boolean().optional(), modules: z.array(z.enum(MODULE_KEYS)).max(20).nullable().optional() }).parse(req.body);
     const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, p.clientId));
     const [u] = await db.select({ id: users.id }).from(users).where(eq(users.id, p.userId));
-    if (!c || !u) throw new DomainError("not_found", "Клиентот или корисникот не постои.", 404);
+    if (!c || !u) throw new DomainError("not_found", "Фирмата или корисникот не постои.", 404);
     const set: { isActive?: boolean; modules?: string[] | null } = {};
     if (b.isActive !== undefined) set.isActive = b.isActive;
     if (b.modules !== undefined) set.modules = b.modules;
@@ -117,7 +117,7 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
     const n = normalizeClientModules(modules);
     if (n.error) throw new DomainError("validation", n.error, 422);
     const [c] = await db.update(clients).set({ modules: n.modules }).where(eq(clients.id, clientId)).returning({ id: clients.id, modules: clients.modules });
-    if (!c) throw new DomainError("not_found", "Клиентот не постои.", 404);
+    if (!c) throw new DomainError("not_found", "Фирмата не постои.", 404);
     await audit(db, { userId: me.id, ip: req.ip }, { clientId, entity: "client", entityId: clientId, action: "modules", changes: { modules: n.modules } });
     return c;
   });

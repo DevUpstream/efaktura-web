@@ -25,7 +25,7 @@ export function Login() {
     <main className="login">
       <section className="login-card">
         <h1>е-Фактура</h1>
-        <p className="muted">Издавање е-фактури кон УЈП за клиентите на бирото.</p>
+        <p className="muted">Издавање е-фактури кон УЈП за фирмите што ги води бирото.</p>
         {err && <p className="alert" role="alert">{err}</p>}
         {me?.entra !== false && (
           <a className="btn btn-primary btn-block" href="/api/auth/entra/login">Најави се со Microsoft</a>

@@ -21,6 +21,7 @@ import { crmRoutes } from "./routes/crm.js";
 import { stockRoutes } from "./routes/stock.js";
 import { productionRoutes } from "./routes/production.js";
 import { paymentRoutes } from "./routes/payments.js";
+import { recurringRoutes } from "./routes/recurring.js";
 
 export interface AppDeps {
   db: Db; version: string; logLevel?: string;
@@ -69,6 +70,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await stockRoutes(app, { db: d.db });
   await productionRoutes(app, { db: d.db });
   await paymentRoutes(app, { db: d.db });
+  await recurringRoutes(app, { db: d.db });
   // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
   if (d.webDir && existsSync(d.webDir)) {
     await app.register(fastifyStatic, {

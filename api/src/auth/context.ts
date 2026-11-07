@@ -77,7 +77,7 @@ export async function assertClientAccess(db: Db, u: SessionUser, clientId: numbe
       .where(and(eq(clientAccess.clientId, clientId), eq(clientAccess.userId, u.id), eq(clientAccess.isActive, true)));
     if (a) return;
   }
-  throw new DomainError("not_found", "Клиентот не постои.", 404);
+  throw new DomainError("not_found", "Фирмата не постои.", 404);
 }
 
 export function setSessionCookie(reply: FastifyReply, token: string) {

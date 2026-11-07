@@ -38,7 +38,7 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
 
     const [client] = await tx.select().from(clients).where(eq(clients.id, inv.clientId));
     const [partner] = await tx.select().from(partners).where(eq(partners.id, inv.partnerId));
-    if (!client?.isActive) errors.push("Клиентот не е активен.");
+    if (!client?.isActive) errors.push("Фирмата не е активна.");
     if (!partner?.isActive) errors.push("Купувачот не е активен.");
 
     // Povrzana faktura (storno, odobrenie, zadolzuvanje, korekcija)

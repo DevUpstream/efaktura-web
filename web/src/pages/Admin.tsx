@@ -39,9 +39,9 @@ export function Admin() {
   return (
     <>
       <header className="page-head"><h1>Корисници и пристап</h1><div className="row-actions">
-        <Link className="btn" to={`/c/${current.id}/clients`}>Нова фирма (клиент)</Link>
+        <Link className="btn" to={`/c/${current.id}/clients`}>Нова фирма</Link>
         <button className="btn btn-primary" onClick={() => setAdding(true)}>Нов корисник</button></div></header>
-      <p className="muted small">Колоните {clients.map((c) => c.prefix).join(", ")} се фирмите што ги водите. Нова фирма (на пр. MRFP) прво се додава со „Нова фирма (клиент)“, па тука се појавува како колона за доделување.</p>
+      <p className="muted small">Колоните {clients.map((c) => c.prefix).join(", ")} се фирмите што ги водите. Нова фирма (на пр. MRFP) прво се додава со „Нова фирма“, па тука се појавува како колона за доделување.</p>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
       {invite && (
         <div className="panel">
@@ -73,7 +73,7 @@ export function Admin() {
                   {clients.map((c) => (
                     <td key={c.id} className="center">
                       <input type="checkbox" checked={u.role === "admin" || u.clientIds.includes(c.id)} disabled={u.role === "admin"}
-                        title={u.role === "admin" ? "Администраторот ги гледа сите клиенти" : c.name}
+                        title={u.role === "admin" ? "Администраторот ги гледа сите фирми" : c.name}
                         onChange={(e) => access(u, c.id, e.target.checked)} aria-label={`${u.email} – пристап до ${c.name}`} />
                       {u.role !== "admin" && u.clientIds.includes(c.id) && <button className="link small mods-link" onClick={() => setModUser(modUser === u.id ? null : u.id)}>
                         {u.clientModules[c.id] ? `${u.clientModules[c.id]!.filter((k) => c.modules.includes(k)).length + 1}/${c.modules.length} мод.` : "сите мод."}</button>}
@@ -101,7 +101,7 @@ function NewUser({ onDone }: { onDone: (msg?: string) => void }) {
     const f = Object.fromEntries(new FormData(e.currentTarget));
     try {
       await api.post("/api/users", f);
-      onDone(f.provider === "local" ? "Корисникот е додаден. Направете му линк за покана." : "Корисникот е додаден. Може да се најави со Microsoft; доделете му клиенти.");
+      onDone(f.provider === "local" ? "Корисникот е додаден. Направете му линк за покана." : "Корисникот е додаден. Може да се најави со Microsoft; доделете му фирми.");
     } catch (x) { setErr((x as ApiError).message); }
   }
   return (

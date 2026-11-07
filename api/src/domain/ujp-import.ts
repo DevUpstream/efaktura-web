@@ -119,9 +119,10 @@ export async function importUjpPurchase(db: Db, clientId: number, input: { text:
       [sup] = await tx.insert(partners).values({ clientId, name: doc.seller.sellerName || `Добавувач ${sellerEdb}`, edb: sellerEdb,
         vatNumber: doc.seller.sellerVatNumber ? countryCode(doc.seller.sellerVatNumber.slice(0, 2)) + doc.seller.sellerVatNumber.slice(2) : null,
         address: [a.streetAddress, a.streetNumber].filter(Boolean).join(" ") || null, city: a.city || null,
-        postalCode: a.postalCode?.slice(0, 10) || null, country: countryCode(doc.seller.sellerCCode || "MK"), email: email?.slice(0, 254) ?? null }).returning();
+        postalCode: a.postalCode?.slice(0, 10) || null, country: countryCode(doc.seller.sellerCCode || "MK"), email: email?.slice(0, 254) ?? null,
+        isSupplier: true }).returning();
       created = true;
-    }
+    } else if (!sup.isSupplier) await tx.update(partners).set({ isSupplier: true }).where(eq(partners.id, sup.id));
 
     // --- duplikat
     const [dup] = await tx.select({ id: purchaseInvoices.id, number: purchaseInvoices.number }).from(purchaseInvoices)

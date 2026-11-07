@@ -297,3 +297,8 @@ tr.sub .grid.compact { background: var(--surface); }
 .grade-big.err { color: var(--err); border-color: var(--err); }
 .limit-edit { display: inline-flex; gap: 6px; } .score-line { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 ul.plain { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.tabs button { font: inherit; padding: 7px 14px; color: var(--muted); background: none; border: 0; cursor: pointer; }
+.tabs button + button { border-left: 1px solid var(--line); }
+.tabs button.active { background: var(--ink); color: var(--paper); }
+.tabs button.active .muted { color: inherit; opacity: .7; }
+.menu .menu-sub { padding-left: 26px; font-size: .92em; }

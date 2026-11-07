@@ -1,9 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Contact, type Note, type NoteKind, type PartnerCardData } from "../api";
-import { addDays, date, dateTime, DOC, money0, NOTE_KIND, STATUS, today } from "../format";
+import { addDays, date, dateTime, DOC, money0, NOTE_KIND, today, statusOf } from "../format";
 import { CheckPartner, PartnerForm } from "./Partners";
-import { BiznisMrezaButton, GRADE, type PartnerScore } from "../components/Score";
+import { CompanyWallLink, GRADE, type PartnerScore } from "../components/Score";
 
 /** Kartica na kupuvac: podatoci, kontakt lica, istorija na komunikacija so potsetnici, fakturi. */
 export function PartnerCard() {
@@ -23,14 +23,14 @@ export function PartnerCard() {
 
   return (
     <>
-      <Link className="back" to={`/c/${client.id}/partners`}>← Купувачи</Link>
+      <Link className="back" to={`/c/${client.id}/partners`}>← Партнери</Link>
       <header className="page-head">
         <div><h1>{p.name}</h1>
           <p className="muted small">{[p.edb && `ЕДБ ${p.edb}`, p.vatNumber && `ДДВ ${p.vatNumber}`, [p.address, p.city].filter(Boolean).join(", ")].filter(Boolean).join("   ")}
             {p.ujpRegistryAt && <span className="chip ok" style={{ marginLeft: 10 }}>УЈП ✓</span>}</p></div>
         <div className="row-actions">
           <Link className="btn" to={`/c/${client.id}/invoices/new?partner=${p.id}`}>Нова фактура</Link>
-          <BiznisMrezaButton edb={p.edb} name={p.name} />
+          <CompanyWallLink edb={p.edb} />
           <button className="btn" onClick={() => setMode("edit")}>Уреди податоци</button></div>
       </header>
       {mode === "edit" && <PartnerForm client={client} p={p} onDone={() => { setMode(null); void load(); }} onCheck={p.edb ? () => setMode("check") : undefined} />}
@@ -87,7 +87,7 @@ export function PartnerCard() {
             {d.invoices.length === 0 ? <p className="muted">Нема фактури за овој купувач.</p> : (
               <table className="grid compact"><tbody>{d.invoices.slice(0, 15).map((i) => (
                 <tr key={i.id}><td><Link className="docno" to={`/c/${client.id}/invoices/${i.id}`}>{i.number ?? "Нацрт"}</Link>
-                  {i.docType !== "INV" && <span className="doctype">{DOC[i.docType]}</span>}<br /><span className="muted small">{date(i.issueDate)} · {STATUS[i.status]}</span></td>
+                  {i.docType !== "INV" && <span className="doctype">{DOC[i.docType]}</span>}<br /><span className="muted small">{date(i.issueDate)} · {statusOf(i.docType, i.status)}</span></td>
                   <td className="num">{money0(i.payableAmount ?? i.grossTotal)}</td></tr>))}</tbody></table>
             )}
           </section>
@@ -185,6 +185,7 @@ function Balance({ client, partnerId }: { client: ClientRef; partnerId: number }
   const late = (r: R) => Number(r.aging.total) - Number(r.aging.current);
   const free = (r: R) => Number(r.byPartner[0]?.unallocated ?? 0);
   const s = d.score, g = GRADE[s.grade]!;
+  const net = Number(d.in.aging.total) - free(d.in) - Number(d.out.aging.total) + free(d.out);
   async function saveLimit() {
     try { await api.put(`/api/clients/${client.id}/partners/${partnerId}/credit-limit`, { creditLimit: limit.trim() ? Number(limit.replace(/\./g, "").replace(",", ".")) : null }); setEditLimit(false); await load(); }
     catch (x) { setErr((x as ApiError).message); }
@@ -201,6 +202,11 @@ function Balance({ client, partnerId }: { client: ClientRef; partnerId: number }
         {late(d.in) > 0 && <div className="late-amt"><dt>од тоа задоцнето (најстаро {s.maxDaysOverdue} дена)</dt><dd>{money0(late(d.in))}</dd></div>}
         {free(d.in) > 0 && <div><dt>Нераспоредена уплата</dt><dd>{money0(free(d.in))}</dd></div>}
         {Number(d.out.aging.total) > 0 && <div><dt>Ние му должиме</dt><dd>{money0(d.out.aging.total)}</dd></div>}
+        {free(d.out) > 0 && <div><dt>Наше нераспоредено плаќање</dt><dd>{money0(free(d.out))}</dd></div>}
+        {Number(d.in.aging.total) > 0 && Number(d.out.aging.total) > 0 && <>
+          <div className="net-row"><dt>Нето салдо ({net >= 0 ? "ни должи" : "му должиме"})</dt><dd>{money0(Math.abs(net))}</dd></div>
+          <div><dt title="Колку може да се затвори со компензација (помалото од двете)">Можна компензација</dt><dd>{money0(Math.min(Number(d.in.aging.total), Number(d.out.aging.total)))}</dd></div>
+        </>}
         <div><dt>Кредитен лимит</dt><dd>{editLimit
           ? <span className="limit-edit"><input className="amt-in" inputMode="decimal" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="без лимит" autoFocus aria-label="Кредитен лимит" />
               <button className="btn btn-small" onClick={saveLimit}>Зачувај</button></span>

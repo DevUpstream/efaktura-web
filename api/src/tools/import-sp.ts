@@ -115,7 +115,7 @@ export async function importSharePoint(db: Db, json: string, opts: { includeTest
   for (const p of items("Partners")) {
     const cid = clientBySp.get(clientNo(p)); if (!cid) continue;
     const [row] = await db.insert(s.partners).values({
-      legacySpId: p.ID, clientId: cid, name: p.Title, edb: str(p.Edb, 13), embs: str(p.Embs, 8), vatNumber: str(p.VatNumber, 20),
+      legacySpId: p.ID, clientId: cid, isCustomer: true, name: p.Title, edb: str(p.Edb, 13), embs: str(p.Embs, 8), vatNumber: str(p.VatNumber, 20),
       address: str(p.Address), city: str(p.City), postalCode: str(p.PostalCode, 10), country: (p.Country || "MK").slice(0, 2),
       email: str(p.Email, 254), phone: str(p.Phone, 50), isActive: p.IsActive !== false,
       ujpRegistryAt: ts(p.UjpRegistryAt), ujpRegistryNote: str(p.UjpRegistryNote), createdAt: ts(p.Created) ?? undefined,

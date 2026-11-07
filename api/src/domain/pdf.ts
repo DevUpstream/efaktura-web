@@ -43,7 +43,7 @@ const m0 = (v: string | number | null | undefined) => new Intl.NumberFormat("de-
 const day = (d: string | null | undefined) => (d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : "");
 
 const TITLE: Record<Inv["docType"], string> = { INV: "Фактура", AV: "Авансна фактура", OD: "Книжно одобрение",
-  KZ: "Книжно задолжување", ST: "Сторно фактура", KR: "Корекција на фактура" };
+  KZ: "Книжно задолжување", ST: "Сторно фактура", KR: "Корекција на фактура", PF: "Понуда / Профактура" };
 
 export interface PdfInput { inv: Inv; lines: Line[]; client: Client; relatedNumber?: string | null; relatedDate?: string | null;
   advanceNumber?: string | null; itemCodes?: Record<number, string> }
@@ -111,9 +111,9 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
     ry = doc.y;
   };
   kv("Датум", day(inv.issueDate));
-  if (inv.supplyDate && inv.supplyDate !== inv.issueDate) kv("Датум на промет", day(inv.supplyDate));
+  if (inv.docType !== "PF" && inv.supplyDate && inv.supplyDate !== inv.issueDate) kv("Датум на промет", day(inv.supplyDate));
   if (inv.docType === "AV") kv("Датум на авансно плаќање", day(inv.issueDate));
-  if (inv.dueDate) kv("Рок за плаќање", day(inv.dueDate));
+  if (inv.dueDate) kv(inv.docType === "PF" ? "Важи до" : "Рок за плаќање", day(inv.dueDate));
   if (d.relatedNumber) ry = text(`по фактура бр. ${d.relatedNumber}${d.relatedDate ? ` од ${day(d.relatedDate)}` : ""}`, RX, ry + 2, { size: 9.5, width: RW });
   ry += 14;
   ry = text("Купувач:", RX + 6, ry, { font: "b", size: 12 });
@@ -205,7 +205,7 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
     row(`Аванс${d.advanceNumber ? ` ${d.advanceNumber}` : ""}:`, `-${m2(inv.advanceAmount)}`);
   }
   doc.moveTo(BX + 10, by).lineTo(PAGE.r, by).lineWidth(0.6).stroke();
-  text("За плаќање вкупно:", BX, by + 2, { font: "b", size: 9, width: BW, align: "right" });
+  text(inv.docType === "PF" ? "Вкупно:" : "За плаќање вкупно:", BX, by + 2, { font: "b", size: 9, width: BW, align: "right" });
   text(`${m0(totals.payableAmount)} ден.`, BX - 40, by + 15, { font: "b", size: 12.5, width: BW + 40, align: "right" });
 
   /* ------------------------------------------------- klauzuli i potpisi */
@@ -214,7 +214,8 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   const CW = 330;
   const ref = paymentReference(inv, totals.payableAmount, ps);
   if (ref) cy = text(`При плаќање, во „повикување на број“ наведете: ${ref}`, PAGE.l + 20, cy, { font: "b", size: 8, width: CW }) + 9;
-  if (ps.paymentNote) cy = text(ps.paymentNote, PAGE.l + 20, cy, { font: "b", size: 7.3, width: CW }) + 9;
+  if (inv.docType === "PF") cy = text("Ова е понуда / профактура. Не е фактура ни даночен документ; фактура се издава по прифаќање.", PAGE.l + 20, cy, { font: "b", size: 8, width: CW }) + 9;
+  else if (ps.paymentNote) cy = text(ps.paymentNote, PAGE.l + 20, cy, { font: "b", size: 7.3, width: CW }) + 9;
   if (ps.clausesTitle) cy = text(ps.clausesTitle, PAGE.l + 20, cy, { font: "b", size: 7.3, width: CW }) + 9;
   const clauses = (inv.clauses ?? client.invoiceClauses ?? "").split(/\r?\n/).filter((x) => x.trim());
   for (const c of clauses) cy = text(c, PAGE.l + 20, cy, { size: 7.3, width: CW });
@@ -225,14 +226,14 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
 
   const SX = 400, BOTTOM = PAGE.h - 34;
   let sy = Math.max(y2 + 85, by + 75);
-  sy = text("Лице овластено за потпишување на фактури:", SX, sy, { size: 8.5, width: PAGE.r - SX });
+  sy = text(inv.docType === "PF" ? "Подготвил:" : "Лице овластено за потпишување на фактури:", SX, sy, { size: 8.5, width: PAGE.r - SX });
   if (ps.signatory) sy = text(ps.signatory, SX, sy, { font: "b", size: 8.5, width: PAGE.r - SX });
   sy += 56;   // prostor za potpis
-  if (ps.showReceivedBy !== false) {
+  if (ps.showReceivedBy !== false && inv.docType !== "PF") {
     text("Примил (Име и Презиме, Потпис):", SX, sy, { size: 8.5, width: PAGE.r - SX });
     sy += 46;
   }
-  if (ps.receiverDeclaration) {
+  if (ps.receiverDeclaration && inv.docType !== "PF") {
     doc.font("r").fontSize(7.3);
     const h = doc.heightOfString(ps.receiverDeclaration, { width: PAGE.r - 345 });
     const dy = Math.min(sy + 8, BOTTOM - h);   // pod "Примил", kako vo primerot, bez nova strana

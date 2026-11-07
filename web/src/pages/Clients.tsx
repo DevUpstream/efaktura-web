@@ -25,10 +25,10 @@ export function Clients() {
 
   return (
     <>
-      <header className="page-head"><h1>Клиенти (фирми)</h1>
-        <button className="btn btn-primary" onClick={() => { setAdding(true); setChecking(null); }}>Нов клиент</button></header>
+      <header className="page-head"><h1>Фирми</h1>
+        <button className="btn btn-primary" onClick={() => { setAdding(true); setChecking(null); }}>Нова фирма</button></header>
       {msg && <p className="notice" role="status">{msg}</p>}
-      {adding && <NewClient onDone={async (c) => { setAdding(false); await load(); if (c) { await refresh(); setMsg(`Клиентот ${c.name} е додаден.`); nav(`/c/${c.id}/settings`); } }} />}
+      {adding && <NewClient onDone={async (c) => { setAdding(false); await load(); if (c) { await refresh(); setMsg(`Фирмата ${c.name} е додадена.`); nav(`/c/${c.id}/settings`); } }} />}
       {mods && <ClientModules c={mods} catalog={catalog} onDone={async (saved) => { setMods(null); if (saved) { await load(); await refresh(); setMsg(`Модулите за ${mods.name} се зачувани.`); } }} />}
       {checking && <CheckClient c={checking} onDone={async (changed) => { setChecking(null); await load(); if (changed !== null) setMsg(changed ? `Применети ${changed} промени од УЈП.` : "Се совпаѓа со регистарот."); }} />}
       {rows && (
@@ -63,7 +63,7 @@ function NewClient({ onDone }: { onDone: (c?: { id: number; name: string }) => v
   }
   return (
     <section className="panel stack">
-      <h2>Нов клиент</h2>
+      <h2>Нова фирма</h2>
       <div className="row-actions">
         <label className="grow">ЕДБ (13 цифри)<input value={edb} onChange={(e) => { setEdb(e.target.value.replace(/\D/g, "").slice(0, 13)); pull.reset(); }} inputMode="numeric" autoFocus /></label>
         <button className="btn" disabled={edb.length !== 13 || pull.req?.status === "pending"} onClick={() => pull.start({ edb })}>Повлечи од УЈП</button>
@@ -77,7 +77,7 @@ function NewClient({ onDone }: { onDone: (c?: { id: number; name: string }) => v
           <div className="span2"><label>Е-пошта<input name="email" type="email" /></label></div>
           <label>Телефон<input name="phone" /></label>
         </div>
-        <div className="row-actions"><button className="btn btn-primary">Креирај клиент</button><button type="button" className="link" onClick={() => onDone()}>Откажи</button></div>
+        <div className="row-actions"><button className="btn btn-primary">Креирај фирма</button><button type="button" className="link" onClick={() => onDone()}>Откажи</button></div>
       </form>}
       {!done && <button className="link" onClick={() => onDone()}>Откажи</button>}
     </section>

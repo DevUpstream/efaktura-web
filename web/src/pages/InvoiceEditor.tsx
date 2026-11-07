@@ -3,8 +3,9 @@ import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { GRADE, GradeChip, useScore } from "../components/Score";
-import { DOC, PAYMENT, STATUS, addDays, date, money, money0, parseNum, today } from "../format";
+import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
+import { RecurringForm } from "./Recurring";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
   paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | "" }
@@ -25,11 +26,12 @@ export function InvoiceEditor() {
   const { id } = useParams();
   const nav = useNavigate();
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [allPartners, setAllPartners] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
-  const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: "INV", issueDate: today(), supplyDate: today(),
+  const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: new URLSearchParams(window.location.search).get("type") === "PF" ? "PF" : "INV", issueDate: today(), supplyDate: today(),
     dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "" });
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
@@ -40,6 +42,7 @@ export function InvoiceEditor() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirmIssue, setConfirmIssue] = useState(false);
+  const [recurOpen, setRecurOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -112,7 +115,7 @@ export function InvoiceEditor() {
   const realLines = () => lines.filter((l) => l.description.trim() || l.itemId || parseNum(l.unitPrice) > 0);
   /** Proverka pred zacuvuvanje, so jasna poraka po stavka (ne "Неисправни податоци"). */
   function check(): string | null {
-    if (!head.partnerId) return partners.length ? "Изберете купувач." : "Оваа фирма уште нема купувачи. Додајте купувач во „Купувачи“ (од регистарот на УЈП или рачно).";
+    if (!head.partnerId) return partners.length ? "Изберете купувач." : "Оваа фирма уште нема купувачи. Додајте купувач во „Партнери“ (од регистарот на УЈП или рачно).";
     const errs: string[] = [];
     realLines().forEach((l, i) => {
       const n = `Ставка ${i + 1}`;
@@ -151,7 +154,7 @@ export function InvoiceEditor() {
       const r = await api.post<{ number: string; stockDocNumber: string | null; stockWarnings: string[] }>(`/api/invoices/${invId}/issue`);
       setInv(await api.get<Invoice>(`/api/invoices/${invId}`));
       setMsg({ kind: r.stockWarnings?.length ? "err" : "ok", text: `Издаден е документ ${r.number}.${r.stockDocNumber ? ` Испратница ${r.stockDocNumber}.` : ""}`
-        + `${r.stockWarnings?.length ? ` Предупредување: ${r.stockWarnings.join(" ")}` : ""} Агентот ќе го потпише и прати до УЈП.` });
+        + `${r.stockWarnings?.length ? ` Предупредување: ${r.stockWarnings.join(" ")}` : ""}${head.docType === "PF" ? " Понудата не се праќа на УЈП; кога купувачот ќе ја прифати, „Направи фактура“." : " Агентот ќе го потпише и прати до УЈП."}` });
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); }
     finally { setBusy(false); setConfirmIssue(false); }
   }
@@ -161,6 +164,21 @@ export function InvoiceEditor() {
     setBusy(true);
     try { await api.post(`/api/invoices/${inv.id}/cancel`); nav(`/c/${client.id}/invoices`); }
     catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); setBusy(false); }
+  }
+
+  async function copy(as: "same" | "INV") {
+    if (!inv) return;
+    setBusy(true);
+    try { const r = await api.post<{ id: number }>(`/api/invoices/${inv.id}/copy`, { as }); nav(`/c/${client.id}/invoices/${r.id}`); }
+    catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); }
+    finally { setBusy(false); }
+  }
+  async function cancelQuote() {
+    if (!inv) return;
+    setBusy(true);
+    try { await api.post(`/api/invoices/${inv.id}/cancel`); setInv(await api.get<Invoice>(`/api/invoices/${inv.id}`)); setMsg({ kind: "ok", text: "Понудата е откажана." }); }
+    catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); }
+    finally { setBusy(false); }
   }
 
   async function derive(docType: DocType) {
@@ -186,9 +204,9 @@ export function InvoiceEditor() {
       <header className="page-head">
         <div>
           <Link to={inv ? "../../invoices" : "../invoices"} relative="path" className="back">← Фактури</Link>
-          <h1>{inv?.number ?? (inv ? "Нацрт" : "Нова фактура")}{inv && inv.docType !== "INV" && <span className="doctype">{DOC[inv.docType]}</span>}</h1>
+          <h1>{inv?.number ?? (inv ? "Нацрт" : head.docType === "PF" ? "Нова понуда" : "Нова фактура")}{inv && inv.docType !== "INV" && <span className="doctype">{DOC[inv.docType]}</span>}</h1>
         </div>
-        {inv && <div className="head-state"><span className={`chip st-${inv.status}`}>{STATUS[inv.status]}</span><UjpState r={inv} />
+        {inv && <div className="head-state"><span className={`chip st-${inv.status}`}>{statusOf(inv.docType, inv.status)}</span>{inv.docType !== "PF" && <UjpState r={inv} />}
           <a className="btn" href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noopener" onClick={(e) => { if (dirty) { e.preventDefault(); setMsg({ kind: "err", text: "Прво зачувајте ги промените, па отворете PDF." }); } }}>PDF</a></div>}
       </header>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role={msg.kind === "err" ? "alert" : "status"}>{msg.text}</p>}
@@ -202,10 +220,11 @@ export function InvoiceEditor() {
             {editable && !isDerived ? (
               <select value={head.partnerId} onChange={(e) => set("partnerId", e.target.value ? Number(e.target.value) : "")} required>
                 <option value="">— изберете —</option>
-                {partners.filter((p) => p.isActive || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{p.name}{p.edb ? ` (${p.edb})` : ""}</option>)}
+                {partners.filter((p) => (p.isActive && (allPartners || p.isCustomer)) || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{p.name}{p.edb ? ` (${p.edb})` : ""}</option>)}
               </select>
             ) : <output>{inv?.buyerName}</output>}
-            {editable && !isDerived && loaded && !partners.some((p) => p.isActive) && (
+            {editable && !isDerived && partners.some((p) => p.isActive && !p.isCustomer) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и добавувачите</label>}
+            {editable && !isDerived && loaded && !partners.some((p) => p.isActive && p.isCustomer) && (
               <small className="alert">Оваа фирма уште нема купувачи. <Link to={`/c/${client.id}/partners`}>Додајте купувач</Link> (од регистарот на УЈП или рачно), па вратете се тука.</small>)}
             {partner && <small className="muted">{[partner.address, partner.city].filter(Boolean).join(", ") || "без адреса"}{partner.vatNumber ? ` · ДДВ ${partner.vatNumber}` : ""}</small>}
             {score && score.grade !== "-" && <small className="score-line"><GradeChip s={score} /> {GRADE[score.grade]!.text}
@@ -214,17 +233,17 @@ export function InvoiceEditor() {
           <label>Вид
             {editable && !isDerived ? (
               <select value={head.docType} onChange={(e) => set("docType", e.target.value as Head["docType"])}>
-                <option value="INV">Фактура</option><option value="AV">Авансна фактура</option>
+                <option value="INV">Фактура</option><option value="AV">Авансна фактура</option><option value="PF">Понуда / профактура</option>
               </select>
             ) : <output>{DOC[head.docType]}</output>}
           </label>
           <label>Датум на издавање
             {editable ? <input type="date" value={head.issueDate} onChange={(e) => set("issueDate", e.target.value)} required /> : <output>{date(inv!.issueDate)}</output>}
           </label>
-          {head.docType !== "AV" && <label>Датум на промет
+          {head.docType !== "AV" && head.docType !== "PF" && <label>Датум на промет
             {editable ? <input type="date" value={head.supplyDate} onChange={(e) => set("supplyDate", e.target.value)} /> : <output>{date(inv!.supplyDate)}</output>}
           </label>}
-          <label>Рок за плаќање
+          <label>{head.docType === "PF" ? "Важи до" : "Рок за плаќање"}
             {editable ? <input type="date" value={head.dueDate} onChange={(e) => set("dueDate", e.target.value)} /> : <output>{date(inv!.dueDate)}</output>}
           </label>
           {whs.filter((w) => w.isActive).length > 1 && ["INV", "KR"].includes(head.docType) && <label>Магацин
@@ -344,11 +363,30 @@ export function InvoiceEditor() {
               <div><dt>ДДВ вкупно</dt><dd>{money(shown.vatTotal)}</dd></div>
               <div><dt>Вкупно</dt><dd>{money(shown.grossTotal)}</dd></div>
               {inv?.advanceAmount && Number(inv.advanceAmount) > 0 && <div><dt>Одбиен аванс</dt><dd>−{money(inv.advanceAmount)}</dd></div>}
-              <div className="payable"><dt>За плаќање</dt><dd>{money0(shown.payableAmount)} <span>ден.</span></dd></div>
+              <div className="payable"><dt>{head.docType === "PF" ? "Вкупно по понудата" : "За плаќање"}</dt><dd>{money0(shown.payableAmount)} <span>ден.</span></dd></div>
             </dl>
           )}
         </div>
       </section>
+
+      {inv && !editable && (
+        <section className="after">
+          {head.docType === "PF" && inv.status === "issued" && <p className="notice">Понуда / профактура: не е фактура ни даночен документ и не се праќа на УЈП.
+            Кога купувачот ќе ја прифати, „Направи фактура“ прави нацрт со истите ставки.</p>}
+          {(inv.sourceNumber || inv.sourceInvoiceId) && <p className="muted">Направена од <Link to={`/c/${client.id}/invoices/${inv.sourceInvoiceId}`}>{inv.sourceNumber ?? "нацрт"}</Link>
+            {inv.recurringId ? " (повторувачка)" : ""}.</p>}
+          {(inv.made?.length ?? 0) > 0 && <p className="muted">{head.docType === "PF" ? "Фактури од оваа понуда" : "Копии"}: {inv.made!.map((d, i) => (
+            <span key={d.id}>{i > 0 && ", "}<Link to={`/c/${client.id}/invoices/${d.id}`}>{d.number ?? `нацрт (${DOC[d.docType]})`}</Link></span>))}</p>}
+          <div className="row-actions wrap">
+            {head.docType === "PF" && inv.status === "issued" && <>
+              <button className="btn btn-primary" onClick={() => copy("INV")} disabled={busy}>Направи фактура</button>
+              <button className="btn btn-quiet" onClick={cancelQuote} disabled={busy}>Откажи понуда</button></>}
+            {["INV", "AV", "PF", "KR"].includes(head.docType) && inv.status !== "cancelled_draft" && <button className="btn" onClick={() => copy("same")} disabled={busy}>Копирај</button>}
+            {client.modules.includes("recurring") && head.docType === "INV" && !recurOpen && <button className="btn" onClick={() => setRecurOpen(true)}>Повторувај месечно</button>}
+          </div>
+          {recurOpen && <RecurringForm client={client} invoiceId={inv.id} defaultName={`${inv.buyerName} – месечно`} onDone={(ok) => { setRecurOpen(false); if (ok) setMsg({ kind: "ok", text: "Повторувачката фактура е зачувана. Секој месец на избраниот ден ќе се направи нацрт." }); }} />}
+        </section>
+      )}
 
       {inv && !editable && (canDerive || (inv.derived?.length ?? 0) > 0) && (
         <section className="after">

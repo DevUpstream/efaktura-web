@@ -14,16 +14,11 @@ export function GradeChip({ s }: { s: PartnerScore | undefined }) {
   return <span className={`chip grade ${g.cls}`} title={`${g.text}${s.avgDaysLate !== null ? `, просечно ${s.avgDaysLate} дена по рокот` : ""}`}>{g.label}</span>;
 }
 
-/** Bizнис мрежа нема јавна адреса за пребарување по ЕДБ: копираме ЕДБ и ја отвораме страницата (секој со своја сметка). */
-export function BiznisMrezaButton({ edb, name }: { edb: string | null; name: string }) {
-  const [copied, setCopied] = useState(false);
-  async function open() {
-    const v = edb ?? name;
-    try { await navigator.clipboard.writeText(v); setCopied(true); setTimeout(() => setCopied(false), 4000); } catch { /* без дозвола за clipboard */ }
-    window.open("https://biznismreza.mk/", "_blank", "noopener,noreferrer");
-  }
-  return <button className="btn" onClick={open} title="Се отвора Бизнис мрежа во нов таб (со вашата сметка). ЕДБ-то се копира: залепете го во пребарувањето.">
-    {copied ? `ЕДБ ${edb ?? ""} е копиран` : "Провери во Бизнис мрежа"}</button>;
+/** CompanyWall: директна врска по ЕДБ (бесплатно: статус, вработени, промет; блокади и бонитет се во нивен платен пакет). */
+export function CompanyWallLink({ edb }: { edb: string | null }) {
+  if (!edb) return null;
+  return <a className="btn" href={`https://www.companywall.com.mk/prebaruvanje?n=${encodeURIComponent(edb)}`} target="_blank" rel="noopener noreferrer"
+    title="Се отвора CompanyWall во нов таб: статус, вработени и промет се бесплатни; блокади и бонитет бараат нивна сметка.">Провери во CompanyWall</a>;
 }
 
 /** Predupreduvanje pri faktura: zadocnet dolg, nadminat limit, ocenka G. */

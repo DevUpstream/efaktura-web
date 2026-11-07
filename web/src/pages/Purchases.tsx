@@ -137,6 +137,7 @@ export function PurchaseEditor() {
   const [itemsList, setItems] = useState<Item[]>([]);
   const [rates, setRates] = useState<VatRate[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
+  const [allPartners, setAllPartners] = useState(false);
   const [head, setHead] = useState({ partnerId: "" as number | "", supplierNumber: "", issueDate: today(), receivedDate: today(), dueDate: "", warehouseId: "" as number | "", note: "" });
   const [lines, setLines] = useState<PLine[]>([]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -218,9 +219,10 @@ export function PurchaseEditor() {
           <label className="span2">Добавувач
             {free ? <select value={head.partnerId} onChange={(e) => setHead({ ...head, partnerId: e.target.value ? Number(e.target.value) : "" })} required>
               <option value="">— изберете —</option>
-              {partners.filter((x) => x.isActive || x.id === head.partnerId).map((x) => <option key={x.id} value={x.id}>{x.name}{x.edb ? ` (${x.edb})` : ""}</option>)}
+              {partners.filter((x) => (x.isActive && (allPartners || x.isSupplier)) || x.id === head.partnerId).map((x) => <option key={x.id} value={x.id}>{x.name}{x.edb ? ` (${x.edb})` : ""}</option>)}
             </select> : <output>{supplier?.name}</output>}
-            {free && <small className="muted">Нов добавувач се додава во <Link to={`/c/${client.id}/partners`}>Купувачи и добавувачи</Link>, од регистарот на УЈП.</small>}
+            {free && partners.some((x) => x.isActive && !x.isSupplier) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и купувачите</label>}
+            {free && <small className="muted">Нов добавувач се додава во <Link to={`/c/${client.id}/partners`}>Партнери</Link>, од регистарот на УЈП.</small>}
           </label>
           <label>Број кај добавувачот{free ? <input value={head.supplierNumber} onChange={(e) => setHead({ ...head, supplierNumber: e.target.value })} required maxLength={60} /> : <output>{head.supplierNumber}</output>}</label>
           <label>Датум на фактурата{free ? <input type="date" value={head.issueDate} onChange={(e) => setHead({ ...head, issueDate: e.target.value })} /> : <output>{date(head.issueDate)}</output>}</label>
