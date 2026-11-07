@@ -44,7 +44,7 @@ export async function nextStockNo(tx: Tx, clientId: number, kind: string, year: 
 
 export async function defaultWarehouse(tx: Tx, clientId: number) {
   const [w] = await tx.select().from(warehouses).where(and(eq(warehouses.clientId, clientId), eq(warehouses.isDefault, true)));
-  if (!w) throw new DomainError("validation", "Клиентот нема главен магацин.", 422);
+  if (!w) throw new DomainError("validation", "Фирмата нема главен магацин.", 422);
   return w;
 }
 

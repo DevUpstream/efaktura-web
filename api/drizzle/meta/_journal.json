@@ -99,6 +99,13 @@
       "when": 1793975980611,
       "tag": "0013_purchase_import",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794053827617,
+      "tag": "0014_partners_quotes_recurring",
+      "breakpoints": true
     }
   ]
 }

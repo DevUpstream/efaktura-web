@@ -21,11 +21,13 @@ const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () =>
 /* ---------------------------------------------------------------- enumi */
 
 /** Kodovi isti kako Doc_code vo tekot v5 (vleguvaat vo brojot na fakturata). */
-export const docType = pgEnum("doc_type", ["INV", "AV", "OD", "KZ", "ST", "KR"]);
+export const docType = pgEnum("doc_type", ["INV", "AV", "OD", "KZ", "ST", "KR", "PF"]);
 export const DOC_TYPE_LABEL: Record<(typeof docType.enumValues)[number], string> = {
   INV: "Фактура", AV: "Авансна фактура", OD: "Книжно одобрение",
-  KZ: "Книжно задолжување", ST: "Сторно", KR: "Корекција",
+  KZ: "Книжно задолжување", ST: "Сторно", KR: "Корекција", PF: "Понуда / профактура",
 };
+/** Видови што се праќаат на УЈП, влегуваат во ДДВ и наплата. Понудата (PF) НЕ е даночен документ. */
+export const TAX_DOC_TYPES = ["INV", "AV", "OD", "KZ", "ST", "KR"] as const;
 
 export const invoiceStatus = pgEnum("invoice_status", [
   "draft", "to_issue", "issued", "json_exported", "sent_to_ujp", "rejected", "voided", "corrected", "cancelled_draft",
@@ -203,6 +205,9 @@ export const partners = pgTable("partners", {
   ujpRegistryAt: ts("ujp_registry_at"),
   ujpRegistryNote: text("ujp_registry_note"),
   isActive: boolean("is_active").notNull().default(true),
+  /** Улоги (docs/10): се поставуваат сами (издадена фактура -> купувач, влезна -> добавувач), може и рачно. */
+  isCustomer: boolean("is_customer").notNull().default(false),
+  isSupplier: boolean("is_supplier").notNull().default(false),
   createdAt: created(),
   updatedAt: updated(),
 }, (t) => [
@@ -286,6 +291,8 @@ export const invoices = pgTable("invoices", {
   payableAmount: money("payable_amount"),            // round(gross, 0) - advance
 
   relatedInvoiceId: integer("related_invoice_id"),   // storno / odobrenie / zadolzuvanje / korekcija
+  sourceInvoiceId: integer("source_invoice_id"),     // napravena od (kopija / ponuda -> faktura)
+  recurringId: integer("recurring_id"),              // generirana od povtoruvacka faktura
   correctionReason: text("correction_reason"),
   voidReasonCode: varchar("void_reason_code", { length: 10 }).references(() => ujpReasons.code),
   correctionReasonCode: varchar("correction_reason_code", { length: 10 }).references(() => ujpReasons.code),
@@ -591,6 +598,29 @@ export const purchaseLines = pgTable("purchase_lines", {
   check("purchase_lines_qty_ck", sql`${t.qty} > 0`),
   check("purchase_lines_price_ck", sql`${t.unitPrice} >= 0`),
 ]);
+
+/** Повторувачка фактура (модул recurring, docs/10): секој месец нов НАЦРТ од шаблонот. */
+export interface RecurringLine { itemId: number | null; description: string; unit: string; qty: number; unitPrice: number; discountPct: number; vatRateId: number }
+export const recurringInvoices = pgTable("recurring_invoices", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  name: text("name").notNull(),
+  lines: jsonb("lines").$type<RecurringLine[]>().notNull(),
+  paymentMethod: paymentMethod("payment_method").notNull().default("bank"),
+  dueDays: smallint("due_days"),
+  note: text("note"),
+  clauses: text("clauses"),
+  warehouseId: integer("warehouse_id").references(() => warehouses.id),
+  dayOfMonth: smallint("day_of_month").notNull(),     // 1-28, 0 = posleden den vo mesecot
+  nextDate: date("next_date").notNull(),
+  endDate: date("end_date"),
+  isActive: boolean("is_active").notNull().default(true),
+  sourceInvoiceId: integer("source_invoice_id").references(() => invoices.id),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+  updatedAt: updated(),
+}, (t) => [index("recurring_client_ix").on(t.clientId), check("recurring_day_ck", sql`${t.dayOfMonth} between 0 and 28`)]);
 
 /** Prilozi na vlezna faktura (PDF od dobavuvacot). */
 export const purchaseFiles = pgTable("purchase_files", {

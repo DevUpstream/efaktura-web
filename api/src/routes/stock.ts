@@ -172,6 +172,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
   async function writePurchase(tx: Db, clientId: number, id: number, b: z.infer<typeof PurchaseIn>) {
     const [sup] = await tx.select({ id: partners.id }).from(partners).where(and(eq(partners.id, b.partnerId), eq(partners.clientId, clientId)));
     if (!sup) throw new DomainError("validation", "Добавувачот не постои.", 422);
+    await tx.update(partners).set({ isSupplier: true }).where(and(eq(partners.id, sup.id), eq(partners.isSupplier, false)));
     if (b.warehouseId) await ownWarehouse(clientId, b.warehouseId);
     const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
     const ids = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);

@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
-import { api, type ClientRef, type InvoiceRow, type Status } from "../api";
-import { DOC, STATUS, date, money0 } from "../format";
+import { api, type ClientRef, type InvoiceRow } from "../api";
+import { DOC, date, money0, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
 
-const FILTERS: { key: string; label: string; match: (s: Status) => boolean }[] = [
-  { key: "all", label: "Сите", match: (s) => s !== "cancelled_draft" },
-  { key: "draft", label: "Нацрти", match: (s) => s === "draft" },
-  { key: "issued", label: "Издадени", match: (s) => ["issued", "json_exported", "sent_to_ujp", "corrected"].includes(s) },
-  { key: "voided", label: "Сторнирани", match: (s) => s === "voided" || s === "rejected" },
+/** Понудите (PF) не се фактури: само во „Понуди“ и „Сите“, и не влегуваат во збирот. */
+const FILTERS: { key: string; label: string; match: (r: InvoiceRow) => boolean }[] = [
+  { key: "all", label: "Сите", match: (r) => r.status !== "cancelled_draft" },
+  { key: "draft", label: "Нацрти", match: (r) => r.status === "draft" && r.docType !== "PF" },
+  { key: "issued", label: "Издадени", match: (r) => r.docType !== "PF" && ["issued", "json_exported", "sent_to_ujp", "corrected"].includes(r.status) },
+  { key: "voided", label: "Сторнирани", match: (r) => r.docType !== "PF" && (r.status === "voided" || r.status === "rejected") },
+  { key: "quotes", label: "Понуди", match: (r) => r.docType === "PF" && r.status !== "cancelled_draft" },
 ];
 
 export function Invoices() {
@@ -28,16 +30,17 @@ export function Invoices() {
   const shown = useMemo(() => {
     const f = FILTERS.find((x) => x.key === filter)!;
     const needle = q.trim().toLowerCase();
-    return (rows ?? []).filter((r) => f.match(r.status) &&
+    return (rows ?? []).filter((r) => f.match(r) &&
       (!needle || (r.number ?? "").toLowerCase().includes(needle) || r.buyerName.toLowerCase().includes(needle)));
   }, [rows, filter, q]);
-  const total = shown.filter((r) => r.status !== "draft").reduce((s, r) => s + Number(r.payableAmount ?? Math.round(Number(r.grossTotal))), 0);
+  const total = shown.filter((r) => r.status !== "draft" && r.docType !== "PF").reduce((s, r) => s + Number(r.payableAmount ?? Math.round(Number(r.grossTotal))), 0);
 
   return (
     <>
       <header className="page-head">
         <h1>Фактури</h1>
-        <Link className="btn btn-primary" to="../invoices/new" relative="path">Нова фактура</Link>
+        <div className="row-actions"><Link className="btn" to="../invoices/new?type=PF" relative="path">Нова понуда</Link>
+          <Link className="btn btn-primary" to="../invoices/new" relative="path">Нова фактура</Link></div>
       </header>
       <div className="toolbar">
         <div className="seg" role="tablist" aria-label="Статус">
@@ -76,12 +79,12 @@ export function Invoices() {
                   <td>{date(r.issueDate)}</td>
                   <td className="buyer">{r.buyerName}</td>
                   <td className="num">{money0(r.payableAmount ?? Math.round(Number(r.grossTotal)))}</td>
-                  <td><span className={`chip st-${r.status}`}>{STATUS[r.status]}</span></td>
-                  <td><UjpState r={r} /></td>
+                  <td><span className={`chip st-${r.status}`}>{statusOf(r.docType, r.status)}</span></td>
+                  <td>{r.docType === "PF" ? <span className="muted small">не се праќа</span> : <UjpState r={r} />}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot><tr><td colSpan={3}>{shown.length} документи (без нацрти во збирот)</td><td className="num">{money0(total)}</td><td colSpan={2} /></tr></tfoot>
+            <tfoot><tr><td colSpan={3}>{shown.length} документи (нацртите и понудите не влегуваат во збирот)</td><td className="num">{money0(total)}</td><td colSpan={2} /></tr></tfoot>
           </table>
         </div>
       )}

@@ -1,6 +1,7 @@
 /** Moduli po klient: administratorot odlucuva koi moduli gi ima sekoja firma i koi od niv gi gleda sekoj korisnik. */
 export const MODULES = [
   { key: "invoices", name: "Излезни фактури", core: true, ready: true, requires: [] },
+  { key: "recurring", name: "Повторувачки фактури (месечни претплати)", core: false, ready: true, requires: [] },
   { key: "crm", name: "Купувачи: контакти, историја, потсетници", core: false, ready: true, requires: [] },
   { key: "payments", name: "Плаќања и наплата", core: false, ready: true, requires: [] },
   { key: "incoming", name: "Влезни фактури", core: false, ready: true, requires: [] },

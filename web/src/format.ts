@@ -10,10 +10,12 @@ export const today = () => new Date(Date.now() - new Date().getTimezoneOffset() 
 export const addDays = (d: string, n: number) => new Date(new Date(d + "T12:00:00Z").getTime() + n * 864e5).toISOString().slice(0, 10);
 
 export const DOC: Record<DocType, string> = { INV: "Фактура", AV: "Авансна фактура", OD: "Книжно одобрение",
-  KZ: "Книжно задолжување", ST: "Сторно", KR: "Корекција" };
+  KZ: "Книжно задолжување", ST: "Сторно", KR: "Корекција", PF: "Понуда / профактура" };
 export const STATUS: Record<Status, string> = { draft: "Нацрт", to_issue: "За издавање", issued: "Издадена",
   json_exported: "JSON извезен", sent_to_ujp: "Качена на УЈП", rejected: "Одбиена", voided: "Сторнирана",
   corrected: "Корегирана", cancelled_draft: "Откажан нацрт" };
+/** Статус за приказ: понудата не се „сторнира“, туку се откажува. */
+export const statusOf = (docType: DocType, status: Status) => (docType === "PF" && status === "voided" ? "Откажана" : STATUS[status]);
 export const PAYMENT: Record<string, string> = { bank: "Трансакциска сметка", cash: "Готовина", card: "Платежна картичка",
   compensation: "Компензација", other: "Друго" };
 export const NOTE_KIND: Record<string, string> = { call: "Телефонски разговор", meeting: "Состанок", email: "Е-пошта", note: "Белешка" };

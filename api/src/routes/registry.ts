@@ -68,7 +68,7 @@ export async function registryRoutes(app: FastifyInstance, { db }: { db: Db }) {
     } else if (b.clientId) {
       requireAdmin(req);
       const [c] = await db.select().from(clients).where(eq(clients.id, b.clientId));
-      if (!c) throw new DomainError("not_found", "Клиентот не постои.", 404);
+      if (!c) throw new DomainError("not_found", "Фирмата не постои.", 404);
       kind = "client"; edb = c.edb; sellerEdb = c.edb; clientId = c.id;
     } else if (b.edb) {
       requireAdmin(req);                       // nov klient
@@ -154,7 +154,7 @@ export async function registryRoutes(app: FastifyInstance, { db }: { db: Db }) {
       return reply.status(201).send(c);
     } catch (e) {
       const code = (e as { cause?: { code?: string } }).cause?.code ?? (e as { code?: string }).code;
-      if (code === "23505") throw new DomainError("duplicate", "Клиент со ова ЕДБ или префикс веќе постои.", 409);
+      if (code === "23505") throw new DomainError("duplicate", "Фирма со ова ЕДБ или префикс веќе постои.", 409);
       throw e;
     }
   });
@@ -163,11 +163,12 @@ export async function registryRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const u = requireUser(req);
     const clientId = Id.parse((req.params as { clientId: string }).clientId);
     await assertClientAccess(db, u, clientId);
-    const b = z.object({ edb: Edb, registryRequestId: Id, email: z.string().trim().max(254).optional().nullable(), phone: z.string().trim().max(50).optional().nullable() }).parse(req.body);
+    const b = z.object({ edb: Edb, registryRequestId: Id, email: z.string().trim().max(254).optional().nullable(), phone: z.string().trim().max(50).optional().nullable(),
+      role: z.enum(["customer", "supplier", "both"]).default("customer") }).parse(req.body);
     const reg = await fromLookup(b.registryRequestId, b.edb);
     try {
       const [p] = await db.insert(partners).values({ clientId, edb: b.edb, ...regValues(reg), country: (reg.countryCode || "MK").slice(0, 2),
-        email: b.email ?? null, phone: b.phone ?? null, ujpRegistryAt: new Date(), ujpRegistryNote: `Креиран од регистарот на УЈП (${today()})` }).returning();
+        email: b.email ?? null, phone: b.phone ?? null, isCustomer: b.role !== "supplier", isSupplier: b.role !== "customer", ujpRegistryAt: new Date(), ujpRegistryNote: `Креиран од регистарот на УЈП (${today()})` }).returning();
       await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "partner", entityId: p!.id, action: "create_from_ujp", changes: { edb: b.edb } });
       return reply.status(201).send(p);
     } catch (e) {

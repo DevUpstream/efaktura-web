@@ -23,7 +23,7 @@ export const api = {
 };
 
 /* --------------------------------------------------------------- tipovi */
-export type DocType = "INV" | "AV" | "OD" | "KZ" | "ST" | "KR";
+export type DocType = "INV" | "AV" | "OD" | "KZ" | "ST" | "KR" | "PF";
 export type Status = "draft" | "to_issue" | "issued" | "json_exported" | "sent_to_ujp" | "rejected" | "voided" | "corrected" | "cancelled_draft";
 export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[] }
 export interface Me {
@@ -32,7 +32,8 @@ export interface Me {
   clients?: ClientRef[];
 }
 export interface Partner { id: number; name: string; edb: string | null; embs: string | null; vatNumber: string | null; address: string | null;
-  city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; bankAccount?: string | null; isActive: boolean; ujpRegistryAt: string | null }
+  city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; bankAccount?: string | null; isActive: boolean; ujpRegistryAt: string | null;
+  isCustomer: boolean; isSupplier: boolean }
 export type ItemType = "goods" | "service" | "material" | "product";
 export interface Item { id: number; code: string; name: string; type: ItemType; trackLots: boolean; unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
@@ -46,7 +47,9 @@ export interface Invoice extends InvoiceRow { clientId: number; partnerId: numbe
   byRate: { vatRatePct: string; net: string; vat: string }[];
   relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;
   correctionReason: string | null; voidReasonCode: string | null; correctionReasonCode: string | null;
-  derived?: { id: number; number: string | null; docType: DocType; status: Status }[] }
+  derived?: { id: number; number: string | null; docType: DocType; status: Status }[];
+  sourceInvoiceId?: number | null; sourceNumber?: string | null; recurringId?: number | null;
+  made?: { id: number; number: string | null; docType: DocType; status: Status }[] }
 export type NoteKind = "call" | "meeting" | "email" | "note";
 export interface Contact { id: number; partnerId: number; name: string; role: string | null; phone: string | null; mobile: string | null;
   email: string | null; isPrimary: boolean; isActive: boolean }

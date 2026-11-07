@@ -26,7 +26,7 @@ const LineIn = z.object({
 });
 const DraftIn = z.object({
   partnerId: Id,
-  docType: z.enum(["INV", "AV", "OD", "KZ", "ST", "KR"]).default("INV"),   // OD/KZ/ST/KR samo preku /derive
+  docType: z.enum(["INV", "AV", "OD", "KZ", "ST", "KR", "PF"]).default("INV"),   // OD/KZ/ST/KR samo preku /derive; PF = ponuda
   issueDate: Day,
   supplyDate: Day.optional().nullable(),
   dueDate: Day.optional().nullable(),
@@ -45,7 +45,60 @@ const DraftIn = z.object({
 /** Iznosite se negativni kaj knizno odobrenie i storno (kolicinata se cuva so minus, kako vo SharePoint). */
 export const signOf = (d: string): 1 | -1 => (d === "OD" || d === "ST" ? -1 : 1);
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" });
-type Draft = z.infer<typeof DraftIn>;
+export type Draft = z.infer<typeof DraftIn>;
+
+/** Gi presmetuva stavkite na serverot (klientot samo prikazuva) i gi zapisuva. */
+export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b: Draft, relatedId: number | null) {
+  const [partner] = await tx.select().from(partners).where(and(eq(partners.id, b.partnerId), eq(partners.clientId, clientId)));
+  if (!partner) throw new DomainError("validation", "Купувачот не постои.", 422);
+  if (!partner.isCustomer) await tx.update(partners).set({ isCustomer: true }).where(eq(partners.id, partner.id));
+  if (["OD", "KZ", "ST", "KR"].includes(b.docType) !== !!relatedId)
+    throw new DomainError("validation", "Сторно, одобрение, задолжување и корекција се прават од издадена фактура.", 422);
+  const sign = signOf(b.docType);
+  if (b.docType === "ST") {
+    // storno = tocna kopija na originalot so minus; stavkite ne se uredat
+    const orig = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, relatedId!)).orderBy(asc(invoiceLines.lineNo));
+    b = { ...b, lines: orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Math.abs(Number(l.qty)),
+      unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId, priceSource: l.priceSource })) };
+  }
+  if (b.warehouseId) {
+    const [w] = await tx.select({ id: warehouses.id }).from(warehouses).where(and(eq(warehouses.id, b.warehouseId), eq(warehouses.clientId, clientId), eq(warehouses.isActive, true)));
+    if (!w) throw new DomainError("validation", "Непознат магацин.", 422);
+  }
+  const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
+  const itemIds = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
+  if (itemIds.length) {
+    const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, itemIds)));
+    if (own.length !== new Set(itemIds).size) throw new DomainError("validation", "Непознат артикл.", 422);
+  }
+  await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId));
+  const calc = [];
+  for (const [i, l] of b.lines.entries()) {
+    const rate = rates.get(l.vatRateId);
+    if (!rate) throw new DomainError("validation", `Ставка ${i + 1}: непозната ДДВ стапка.`, 422);
+    const r = calcLine({ qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRatePct: rate.ratePct }, sign);
+    await tx.insert(invoiceLines).values({
+      invoiceId, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
+      qty: String(sign * l.qty), unitPrice: String(l.unitPrice), discountPct: String(l.discountPct),
+      vatRateId: rate.id, vatRatePct: rate.ratePct, netAmount: r.netAmount, vatAmount: r.vatAmount, priceSource: l.priceSource ?? null,
+    });
+    calc.push({ ...r, vatRatePct: rate.ratePct });
+  }
+  const adv = ["INV", "KR"].includes(b.docType) && b.advanceInvoiceId ? { id: b.advanceInvoiceId, amount: (b.advanceAmount ?? 0).toFixed(2) } : null;
+  const t = calcTotals(calc, adv?.amount ?? 0);
+  await tx.update(invoices).set({
+    correctionReason: b.correctionReason ?? null,
+    voidReasonCode: b.docType === "ST" ? b.voidReasonCode || null : null,
+    correctionReasonCode: b.docType === "KR" ? b.correctionReasonCode || null : null,
+    advanceInvoiceId: adv?.id ?? null, advanceAmount: adv?.amount ?? null,
+    partnerId: b.partnerId, docType: b.docType, year: Number(b.issueDate.slice(0, 4)), issueDate: b.issueDate,
+    supplyDate: b.docType === "AV" ? null : (b.supplyDate || b.issueDate), dueDate: b.dueDate ?? null,
+    paymentMethod: b.paymentMethod, note: b.note ?? null, clauses: b.clauses ?? null, warehouseId: b.warehouseId ?? null,
+    netTotal: t.netTotal, vatTotal: t.vatTotal, grossTotal: t.grossTotal, payableAmount: t.payableAmount, lineCount: b.lines.length,
+    buyerName: partner.name, version: sql`${invoices.version} + 1`,
+  }).where(eq(invoices.id, invoiceId));
+}
+
 
 export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
   /** Ja vcituva fakturata i proveruva pristap (404 za tugi). */
@@ -84,67 +137,18 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const num = async (id: number | null) => id ? (await db.select({ n: invoices.number }).from(invoices).where(eq(invoices.id, id)))[0]?.n ?? null : null;
     const derived = await db.select({ id: invoices.id, number: invoices.number, docType: invoices.docType, status: invoices.status })
       .from(invoices).where(and(eq(invoices.relatedInvoiceId, inv.id), sql`${invoices.status} <> 'cancelled_draft'`));
+    const made = await db.select({ id: invoices.id, number: invoices.number, docType: invoices.docType, status: invoices.status })
+      .from(invoices).where(and(eq(invoices.sourceInvoiceId, inv.id), sql`${invoices.status} <> 'cancelled_draft'`)).orderBy(asc(invoices.id));
     return { ...inv, lines, byRate: totals.byRate, relatedNumber: await num(inv.relatedInvoiceId),
-      advanceNumber: await num(inv.advanceInvoiceId), derived };
+      advanceNumber: await num(inv.advanceInvoiceId), sourceNumber: await num(inv.sourceInvoiceId), derived, made };
   });
-
-  /** Gi presmetuva stavkite na serverot (klientot samo prikazuva) i gi zapisuva. */
-  async function writeDraft(tx: Db, invoiceId: number, clientId: number, b: Draft, relatedId: number | null) {
-    const [partner] = await tx.select().from(partners).where(and(eq(partners.id, b.partnerId), eq(partners.clientId, clientId)));
-    if (!partner) throw new DomainError("validation", "Купувачот не постои.", 422);
-    if (["OD", "KZ", "ST", "KR"].includes(b.docType) !== !!relatedId)
-      throw new DomainError("validation", "Сторно, одобрение, задолжување и корекција се прават од издадена фактура.", 422);
-    const sign = signOf(b.docType);
-    if (b.docType === "ST") {
-      // storno = tocna kopija na originalot so minus; stavkite ne se uredat
-      const orig = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, relatedId!)).orderBy(asc(invoiceLines.lineNo));
-      b = { ...b, lines: orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Math.abs(Number(l.qty)),
-        unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId, priceSource: l.priceSource })) };
-    }
-    if (b.warehouseId) {
-      const [w] = await tx.select({ id: warehouses.id }).from(warehouses).where(and(eq(warehouses.id, b.warehouseId), eq(warehouses.clientId, clientId), eq(warehouses.isActive, true)));
-      if (!w) throw new DomainError("validation", "Непознат магацин.", 422);
-    }
-    const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
-    const itemIds = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
-    if (itemIds.length) {
-      const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, itemIds)));
-      if (own.length !== new Set(itemIds).size) throw new DomainError("validation", "Непознат артикл.", 422);
-    }
-    await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId));
-    const calc = [];
-    for (const [i, l] of b.lines.entries()) {
-      const rate = rates.get(l.vatRateId);
-      if (!rate) throw new DomainError("validation", `Ставка ${i + 1}: непозната ДДВ стапка.`, 422);
-      const r = calcLine({ qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRatePct: rate.ratePct }, sign);
-      await tx.insert(invoiceLines).values({
-        invoiceId, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
-        qty: String(sign * l.qty), unitPrice: String(l.unitPrice), discountPct: String(l.discountPct),
-        vatRateId: rate.id, vatRatePct: rate.ratePct, netAmount: r.netAmount, vatAmount: r.vatAmount, priceSource: l.priceSource ?? null,
-      });
-      calc.push({ ...r, vatRatePct: rate.ratePct });
-    }
-    const adv = ["INV", "KR"].includes(b.docType) && b.advanceInvoiceId ? { id: b.advanceInvoiceId, amount: (b.advanceAmount ?? 0).toFixed(2) } : null;
-    const t = calcTotals(calc, adv?.amount ?? 0);
-    await tx.update(invoices).set({
-      correctionReason: b.correctionReason ?? null,
-      voidReasonCode: b.docType === "ST" ? b.voidReasonCode || null : null,
-      correctionReasonCode: b.docType === "KR" ? b.correctionReasonCode || null : null,
-      advanceInvoiceId: adv?.id ?? null, advanceAmount: adv?.amount ?? null,
-      partnerId: b.partnerId, docType: b.docType, year: Number(b.issueDate.slice(0, 4)), issueDate: b.issueDate,
-      supplyDate: b.docType === "AV" ? null : (b.supplyDate || b.issueDate), dueDate: b.dueDate ?? null,
-      paymentMethod: b.paymentMethod, note: b.note ?? null, clauses: b.clauses ?? null, warehouseId: b.warehouseId ?? null,
-      netTotal: t.netTotal, vatTotal: t.vatTotal, grossTotal: t.grossTotal, payableAmount: t.payableAmount, lineCount: b.lines.length,
-      buyerName: partner.name, version: sql`${invoices.version} + 1`,
-    }).where(eq(invoices.id, invoiceId));
-  }
 
   app.post("/api/clients/:clientId/invoices", async (req, reply) => {
     const u = requireUser(req);
     const clientId = Id.parse((req.params as { clientId: string }).clientId);
     await assertClientAccess(db, u, clientId);
     const b = DraftIn.parse(req.body);
-    if (b.docType !== "INV" && b.docType !== "AV") throw new DomainError("validation", "Нова фактура може да биде само фактура или авансна.", 422);
+    if (!["INV", "AV", "PF"].includes(b.docType)) throw new DomainError("validation", "Нов документ може да биде фактура, авансна или понуда.", 422);
     const [partner] = await db.select({ id: partners.id }).from(partners).where(and(eq(partners.id, b.partnerId), eq(partners.clientId, clientId)));
     if (!partner) throw new DomainError("validation", "Купувачот не постои.", 422);
     const id = await db.transaction(async (tx) => {
@@ -239,9 +243,47 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
   /** Nacrt: se otkazuva (ostanuva trag). Izdadena: ne - samo storno/korekcija. */
   app.post("/api/invoices/:id/cancel", async (req) => {
     const { u, inv } = await load(req);
-    if (inv.status !== "draft") throw new DomainError("not_draft", "Само нацрт може да се откаже. Издадена фактура се сторнира.", 409);
-    await db.update(invoices).set({ status: "cancelled_draft" }).where(eq(invoices.id, inv.id));
-    await audit(db, { userId: u.id, ip: req.ip }, { clientId: inv.clientId, entity: "invoice", entityId: inv.id, action: "cancel_draft" });
+    // izdadena ponuda (ne e danocen dokument) moze da se otkaze; izdadena faktura - samo storno/korekcija
+    const pfIssued = inv.docType === "PF" && inv.status === "issued";
+    if (inv.status !== "draft" && !pfIssued) throw new DomainError("not_draft", "Само нацрт може да се откаже. Издадена фактура се сторнира.", 409);
+    await db.update(invoices).set({ status: pfIssued ? "voided" : "cancelled_draft", version: sql`${invoices.version} + 1` }).where(eq(invoices.id, inv.id));
+    await audit(db, { userId: u.id, ip: req.ip }, { clientId: inv.clientId, entity: "invoice", entityId: inv.id, action: pfIssued ? "cancel_quote" : "cancel_draft" });
     return { ok: true };
   });
+
+  /**
+   * Копирај (фактура, авансна, понуда, корекција -> ист вид; корекција -> фактура) или понуда -> фактура.
+   * Нов НАЦРТ со денешен датум; рокот го задржува бројот на денови; цените се исти како во изворот.
+   */
+  app.post("/api/invoices/:id/copy", async (req, reply) => {
+    const { u, inv: o } = await load(req);
+    const { as } = z.object({ as: z.enum(["same", "INV"]).default("same") }).parse(req.body ?? {});
+    if (!["INV", "AV", "PF", "KR"].includes(o.docType)) throw new DomainError("validation", "Сторно, книжно одобрение и задолжување не се копираат.", 422);
+    if (o.status === "cancelled_draft") throw new DomainError("validation", "Откажан нацрт не се копира.", 422);
+    const docType = (as === "INV" || o.docType === "KR" ? "INV" : o.docType) as "INV" | "AV" | "PF";
+    const id = await copyToDraft(db, o, docType, u.id);
+    await audit(db, { userId: u.id, ip: req.ip }, { clientId: o.clientId, entity: "invoice", entityId: id,
+      action: o.docType === "PF" && docType === "INV" ? "quote_to_invoice" : "copy", changes: { from: o.number ?? `нацрт ${o.id}` } });
+    return reply.status(201).send({ id });
+  });
+
+  async function copyToDraft(db0: Db, o: typeof invoices.$inferSelect, docType: "INV" | "AV" | "PF", userId: number) {
+    const orig = await db0.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, o.id)).orderBy(asc(invoiceLines.lineNo));
+    const issueDate = today();
+    const days = o.dueDate ? Math.round((Date.parse(o.dueDate) - Date.parse(o.issueDate)) / 86400000) : null;
+    const due = days !== null && days >= 0 ? new Date(Date.parse(`${issueDate}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10) : null;
+    const b: Draft = { partnerId: o.partnerId, docType, issueDate, supplyDate: null, dueDate: due, paymentMethod: o.paymentMethod,
+      note: o.note, clauses: o.clauses, warehouseId: o.warehouseId,
+      lines: orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Math.abs(Number(l.qty)),
+        unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId,
+        priceSource: o.docType === "PF" && docType === "INV" ? `Од понуда ${o.number ?? ""}`.trim() : l.priceSource })) };
+    return db0.transaction(async (tx) => {
+      const [p] = await tx.select({ isActive: partners.isActive }).from(partners).where(eq(partners.id, o.partnerId));
+      if (!p?.isActive) throw new DomainError("validation", "Купувачот е исклучен.", 422);
+      const [inv] = await tx.insert(invoices).values({ clientId: o.clientId, partnerId: o.partnerId, docType, sourceInvoiceId: o.id,
+        year: Number(issueDate.slice(0, 4)), issueDate, createdBy: userId }).returning();
+      await writeDraft(tx as unknown as Db, inv!.id, o.clientId, b, null);
+      return inv!.id;
+    });
+  }
 }

@@ -43,7 +43,7 @@ export function ClientSettings() {
   const dis = !admin;
   return (
     <>
-      <header className="page-head"><h1>Поставки на клиентот</h1></header>
+      <header className="page-head"><h1>Поставки на фирмата</h1></header>
       <p className="muted">Ова е изгледот на PDF фактурата. Назив, ЕДБ, адреса и ДДВ број доаѓаат од регистарот на УЈП и не се менуваат тука.</p>
       <dl className="facts">
         <div><dt>Назив (УЈП)</dt><dd>{c.name}</dd></div><div><dt>ЕДБ / ДДВ</dt><dd>{c.edb} · {c.vatNumber ?? "–"}</dd></div>

@@ -19,33 +19,34 @@ export function Layout() {
     window.addEventListener("followups-changed", get);
     return () => window.removeEventListener("followups-changed", get);
   }, [client?.id, crm, loc.pathname]);
-  if (!client) return <div className="center-card"><h1>Клиентот не е достапен</h1><p>Немате пристап или клиентот не постои.</p></div>;
+  if (!client) return <div className="center-card"><h1>Фирмата не е достапна</h1><p>Немате пристап или фирмата не постои.</p></div>;
 
   return (
     <div className="shell">
       <aside className="side">
         <div className="brand">е-Фактура</div>
         <label className="client-pick">
-          <span className="sr-only">Клиент</span>
+          <span className="sr-only">Фирма</span>
           <select value={client.id} onChange={(e) => nav(`/c/${e.target.value}/invoices`)}>
             {me!.clients!.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
-        <div className="seal" aria-label="Податоци за клиентот">
+        <div className="seal" aria-label="Податоци за фирмата">
           <span className="seal-prefix">{client.prefix}</span>
           <span className="seal-edb">ЕДБ<br />{client.edb}</span>
         </div>
         <nav className="menu">
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
+          {client.modules.includes("recurring") && <NavLink to={`/c/${client.id}/recurring`} className="menu-sub">Повторувачки</NavLink>}
           {client.modules.includes("incoming") && <NavLink to={`/c/${client.id}/purchases`}>Влезни фактури</NavLink>}
           {client.modules.includes("payments") && <NavLink to={`/c/${client.id}/payments`}>Плаќања и наплата</NavLink>}
           {client.modules.includes("warehouse") && <NavLink to={`/c/${client.id}/stock`}>Магацин</NavLink>}
           {client.modules.includes("production") && <NavLink to={`/c/${client.id}/production`}>Производство</NavLink>}
-          <NavLink to={`/c/${client.id}/partners`}>{client.modules.includes("incoming") ? "Купувачи и добавувачи" : "Купувачи"}</NavLink>
+          <NavLink to={`/c/${client.id}/partners`}>Партнери</NavLink>
           {crm && <NavLink to={`/c/${client.id}/followups`}>Потсетници{fu.n > 0 && <span className={`badge ${fu.late ? "late" : ""}`} aria-label={`${fu.n} за денес`}>{fu.n}</span>}</NavLink>}
           <NavLink to={`/c/${client.id}/items`}>Артикли и услуги</NavLink>
           <NavLink to={`/c/${client.id}/settings`}>Поставки и PDF</NavLink>
-          {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/clients`} className="menu-admin">Клиенти (фирми)</NavLink>}
+          {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/clients`} className="menu-admin">Фирми</NavLink>}
           {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/admin`}>Корисници и пристап</NavLink>}
         </nav>
         <div className="who">

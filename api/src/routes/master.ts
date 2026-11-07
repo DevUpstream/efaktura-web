@@ -22,6 +22,8 @@ const PartnerIn = z.object({
   email: opt(z.string().max(254)), phone: opt(z.string().max(50)),
   bankAccount: opt(z.string().max(40)),
   isActive: z.boolean().default(true),
+  isCustomer: z.boolean().optional(),
+  isSupplier: z.boolean().optional(),
 });
 /** Polinja zakluceni po proverka vo registarot na UJP ("UJP ✓"). */
 const REGISTRY_LOCKED = ["name", "edb", "embs", "vatNumber", "address", "city", "postalCode"] as const;
@@ -89,7 +91,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const clientId = Id.parse((req.params as { clientId: string }).clientId);
     const b = ClientPatch.parse(req.body);
     const [c] = await db.update(clients).set(b).where(eq(clients.id, clientId)).returning();
-    if (!c) throw new DomainError("not_found", "Клиентот не постои.", 404);
+    if (!c) throw new DomainError("not_found", "Фирмата не постои.", 404);
     await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "client", entityId: clientId, action: "update", changes: b });
     return c;
   });
@@ -104,11 +106,13 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const { u, clientId } = await ctx(req);
     const b = PartnerIn.parse(req.body);
     try {
-      const [p] = await db.insert(partners).values({ ...b, clientId }).returning();
+      // bez uloga -> kupuvac (kako dosega); i dvete uloge se dozvoleni
+      const roles = b.isCustomer || b.isSupplier ? { isCustomer: !!b.isCustomer, isSupplier: !!b.isSupplier } : { isCustomer: true, isSupplier: false };
+      const [p] = await db.insert(partners).values({ ...b, ...roles, clientId }).returning();
       await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "partner", entityId: p!.id, action: "create", changes: b });
       return reply.status(201).send(p);
     } catch (e) {
-      if (pgUnique(e)) throw new DomainError("duplicate", "Купувач со ова ЕДБ веќе постои.", 409);
+      if (pgUnique(e)) throw new DomainError("duplicate", "Партнер со ова ЕДБ веќе постои.", 409);
       throw e;
     }
   });
@@ -118,7 +122,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const id = Id.parse((req.params as { id: string }).id);
     const b = PartnerIn.partial().parse(req.body);
     const [cur] = await db.select().from(partners).where(and(eq(partners.id, id), eq(partners.clientId, clientId)));
-    if (!cur) throw new DomainError("not_found", "Купувачот не постои.", 404);
+    if (!cur) throw new DomainError("not_found", "Партнерот не постои.", 404);
     if (cur.ujpRegistryAt) {
       const changed = REGISTRY_LOCKED.filter((k) => k in b && (b as Record<string, unknown>)[k] !== cur[k]);
       if (changed.length) throw new DomainError("registry_locked", "Податоците се проверени во регистарот на УЈП и се заклучени.", 409);
@@ -128,7 +132,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
       await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "partner", entityId: id, action: "update", changes: b });
       return p;
     } catch (e) {
-      if (pgUnique(e)) throw new DomainError("duplicate", "Купувач со ова ЕДБ веќе постои.", 409);
+      if (pgUnique(e)) throw new DomainError("duplicate", "Партнер со ова ЕДБ веќе постои.", 409);
       throw e;
     }
   });
@@ -191,7 +195,7 @@ export async function suggestPrice(db: Db, clientId: number,
   const [last] = await db.select({ price: invoiceLines.unitPrice, date: invoices.issueDate }).from(invoiceLines)
     .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
     .where(and(eq(invoices.clientId, clientId), eq(invoices.partnerId, q.partnerId), eq(invoiceLines.itemId, q.itemId),
-      gt(invoiceLines.qty, "0"), inArray(invoices.status, ["issued", "json_exported", "sent_to_ujp", "corrected"]),
+      gt(invoiceLines.qty, "0"), inArray(invoices.status, ["issued", "json_exported", "sent_to_ujp", "corrected"]), ne(invoices.docType, "PF"),
       q.excludeInvoiceId ? ne(invoices.id, q.excludeInvoiceId) : sql`true`))
     .orderBy(desc(invoices.issueDate), desc(invoices.id)).limit(1);
   if (last) return { price: last.price, source: `Последна цена за купувачот (${fmt(last.date)})` };

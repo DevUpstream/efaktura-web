@@ -12,6 +12,7 @@ import { ClientSettings } from "./pages/ClientSettings";
 import { Clients } from "./pages/Clients";
 import { PartnerCard } from "./pages/PartnerCard";
 import { Followups } from "./pages/Followups";
+import { Recurring } from "./pages/Recurring";
 import { PurchaseEditor, Purchases } from "./pages/Purchases";
 import { BankExpenses, OpenItems, PaymentsList, Statements, StatementView } from "./pages/Payments";
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
@@ -33,6 +34,7 @@ function Gate() {
         <Route path="partners" element={<Partners />} />
         <Route path="partners/:id" element={<PartnerCard />} />
         <Route path="followups" element={<Followups />} />
+        <Route path="recurring" element={<Recurring />} />
         <Route path="purchases" element={<Purchases />} />
         <Route path="purchases/new" element={<PurchaseEditor />} />
         <Route path="purchases/:id" element={<PurchaseEditor />} />
@@ -67,8 +69,8 @@ function NoClients() {
   const { me, logout } = useSession();
   return (
     <main className="center-card">
-      <h1>Немате доделено клиенти</h1>
-      <p>Најавени сте како {me?.user?.email}. Побарајте од администраторот да ви додели пристап до клиент.</p>
+      <h1>Немате доделено фирми</h1>
+      <p>Најавени сте како {me?.user?.email}. Побарајте од администраторот да ви додели пристап до фирма.</p>
       <button className="btn" onClick={logout}>Одјави се</button>
     </main>
   );
