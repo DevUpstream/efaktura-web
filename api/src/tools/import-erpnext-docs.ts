@@ -26,7 +26,7 @@ const Line = z.object({ itemCode: z.string().nullable(), description: z.string()
   unitPrice: z.number().nonnegative(), net: z.number().nonnegative(), vatPct: z.number() });
 const Purchase = z.object({ ref: z.string(), supplierRef: z.string(), supplierEdb: z.string().nullable(), supplierName: z.string(), supplierNumber: z.string().min(1).max(60),
   issueDate: z.string().date(), receivedDate: z.string().date(), dueDate: z.string().date().nullable(), net: z.number(), vat: z.number(), gross: z.number(),
-  payable: z.number(), lines: z.array(Line).min(1) });
+  payable: z.number(), note: z.string().nullable().optional(), lines: z.array(Line).min(1) });
 const Payment = z.object({ ref: z.string(), supplierRef: z.string(), date: z.string().date(), amount: z.number().positive(), reference: z.string().nullable(),
   allocations: z.array(z.object({ ref: z.string(), amount: z.number().positive() })) });
 const Purchases = z.object({ format: z.literal("erpnext-purchases/1"), exportedAt: z.string(), company: z.object({ edb: z.string() }),
@@ -94,7 +94,7 @@ export async function importErpPurchases(db: Db, json: string, clientEdb: string
     const [pi] = await db.insert(s.purchaseInvoices).values({ clientId: client.id, partnerId: partner.id, year: Number(p.receivedDate.slice(0, 4)),
       supplierNumber: p.supplierNumber, issueDate: p.issueDate, receivedDate: p.receivedDate, dueDate: p.dueDate,
       netTotal: d2(p.net), vatTotal: d2(p.vat), grossTotal: d2(p.gross), payableAmount: d2(p.payable) === d2(p.gross) ? null : d2(p.payable),
-      note: `Пренесено од ERPNext (${p.ref})`, source: "erpnext", fixedAmounts: true, sourceJson: { erpnext: p.ref }, createdBy: actor.userId }).returning();
+      note: `Пренесено од ERPNext (${p.ref}).${p.note ? ` ${p.note}` : ""}`, source: "erpnext", fixedAmounts: true, sourceJson: { erpnext: p.ref }, createdBy: actor.userId }).returning();
     let n = 0;
     for (const l of p.lines) {
       const v = vat.get(l.vatPct)!;
@@ -104,6 +104,7 @@ export async function importErpPurchases(db: Db, json: string, clientEdb: string
     }
     const posted = await postPurchase(db, pi!.id, actor, false);
     done.set(p.ref, { id: pi!.id, ref: p.ref, number: posted.number });
+    if (p.note) lines.push(`${posted.number} (${p.ref}): ${p.note}`);
     inc(counts, "purchases_new");
   }
 

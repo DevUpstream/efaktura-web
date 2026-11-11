@@ -23,7 +23,7 @@ describe("uvoz na vlezni fakturi od ERPNext", () => {
       pur({}),
       pur({ ref: "ACC-PINV-2025-00002", supplierNumber: "F-2", receivedDate: "2025-05-01", net: 500, vat: 25, gross: 525, payable: 525,
         lines: [line({ qty: 1, unitPrice: 500, net: 500, vatPct: 5 })] }),
-      pur({ ref: "ACC-PINV-2025-00003", supplierNumber: "F-4", receivedDate: "2025-06-01", net: 300, vat: 0, gross: 300, payable: 300,
+      pur({ ref: "ACC-PINV-2025-00003", supplierNumber: "F-4", note: "ЗА ПРОВЕРКА: кредит", receivedDate: "2025-06-01", net: 300, vat: 0, gross: 300, payable: 300,
         lines: [line({ qty: 1, unitPrice: 300, net: 300, vatPct: 0 })] }),
     ], [{ ref: "ACC-PAY-1", supplierRef: "ДОБ А", date: "2025-04-01", amount: 1180, reference: "извод 5",
       allocations: [{ ref: "ACC-PINV-2025-00001", amount: 1180 }] }]);
@@ -37,6 +37,8 @@ describe("uvoz na vlezni fakturi od ERPNext", () => {
     const [np] = await t.db.select().from(s.vatRates).where(eq(s.vatRates.code, "NP"));
     const [l0] = await t.db.select().from(s.purchaseLines).where(eq(s.purchaseLines.purchaseInvoiceId, by("ACC-PINV-2025-00003").id));
     expect(l0).toMatchObject({ vatRateId: np!.id, vatAmount: "0.0000" });
+    expect(by("ACC-PINV-2025-00003").note).toBe("Пренесено од ERPNext (ACC-PINV-2025-00003). ЗА ПРОВЕРКА: кредит");
+    expect(r.lines.join("\n")).toMatch(/UPSTRI-VF-2025-00003 \(ACC-PINV-2025-00003\): ЗА ПРОВЕРКА/);
     const [l1] = await t.db.select().from(s.purchaseLines).where(eq(s.purchaseLines.purchaseInvoiceId, by("ACC-PINV-2026-00001").id));
     expect(l1!.itemId).not.toBeNull();
     // bez zaliha

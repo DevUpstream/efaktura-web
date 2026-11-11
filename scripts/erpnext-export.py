@@ -42,6 +42,7 @@ def main():
     ap.add_argument("--purchases")
     ap.add_argument("--files-from")
     ap.add_argument("--files-prefix")
+    ap.add_argument("--no-payments", action="store_true", help="bez plakjanja (gi zatvoraat izvodite)")
     a = ap.parse_args()
     con = pymysql.connect(unix_socket=a.socket, user="root", database=a.db, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     cur = con.cursor()
@@ -171,7 +172,10 @@ def export_purchases(q, a, code_of, c_edb):
             ls.append({"itemCode": code_of.get(l["item_code"]), "description": re.sub(r"\s+", " ", (l["item_name"] or l["item_code"]).strip()),
                        "unit": UNIT.get(l["uom"], (l["uom"] or "ком")[:10].lower()), "qty": float(l["qty"]), "unitPrice": float(l["rate"]),
                        "net": float(l["net_amount"]), "vatPct": float(rate)})
+        note = None
         if any(l["net"] < 0 or l["unitPrice"] < 0 for l in ls):
+            note = "ЗА ПРОВЕРКА: во ERPNext фактурата има негативни ставки (кредит од добавувачот); внесена е како збирна ставка по ДДВ стапка. Оригинални ставки: " + "; ".join(
+                f"{l['description']} {l['qty']:g} × {l['unitPrice']:.2f} = {l['net']:.2f} ({l['vatPct']:g}%)" for l in ls)
             # negativni stavki (kredit od dobavuvacot): aplikacijata nema negativni ceni -> zbirna stavka po DDV stapka
             by = {}
             for l in ls:
@@ -182,13 +186,13 @@ def export_purchases(q, a, code_of, c_edb):
                     "supplierNumber": (p["bill_no"] or "").strip() or p["name"], "issueDate": str(p["bill_date"] or p["posting_date"]),
                     "receivedDate": str(p["posting_date"]), "dueDate": str(p["due_date"]) if p["due_date"] else None,
                     "net": float(p["net_total"]), "vat": float(p["total_taxes_and_charges"]), "gross": float(p["grand_total"]),
-                    "payable": float(p["rounded_total"] or p["grand_total"]), "lines": ls})
+                    "payable": float(p["rounded_total"] or p["grand_total"]), "note": note, "lines": ls})
         if a.files_from:
             for f in q("select name, file_name, file_url from tabFile where attached_to_doctype='Purchase Invoice' and attached_to_name=%s", p["name"]):
                 files.append((p["name"], f))
     refs = {x["ref"] for x in out}
     pays = []
-    for e in q("select * from `tabPayment Entry` where docstatus=1 and payment_type='Pay' and party_type='Supplier' order by posting_date, name"):
+    for e in ([] if a.no_payments else q("select * from `tabPayment Entry` where docstatus=1 and payment_type='Pay' and party_type='Supplier' order by posting_date, name")):
         al = [{"ref": r["reference_name"], "amount": float(r["allocated_amount"])} for r in q(
             "select reference_name, allocated_amount from `tabPayment Entry Reference` where parent=%s and reference_doctype='Purchase Invoice'", e["name"])
             if r["reference_name"] in refs]
