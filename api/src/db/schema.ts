@@ -334,17 +334,20 @@ export const invoices = pgTable("invoices", {
   createdAt: created(),
   updatedAt: updated(),
   version: integer("version").notNull().default(1), // optimisticko zaklucuvanje
+  /** "app" ili "erpnext" (prenesena istoriska faktura, docs/11): izdadena nadvor od e-Faktura, NIKOGASH ne se prakja kon UJP. */
+  source: varchar("source", { length: 12 }).notNull().default("app"),
 }, (t) => [
   index("invoices_client_year_ix").on(t.clientId, t.year, t.status),
   index("invoices_partner_ix").on(t.partnerId),
   index("invoices_related_ix").on(t.relatedInvoiceId),
-  index("invoices_ujp_pending_ix").on(t.status).where(sql`${t.status} = 'issued' and ${t.ujpId} is null`),
+  index("invoices_ujp_pending_ix").on(t.status).where(sql`${t.status} = 'issued' and ${t.ujpId} is null and ${t.source} = 'app'`),
   uniqueIndex("invoices_seq_uq").on(t.clientId, t.docType, t.year, t.seqNo).where(sql`${t.seqNo} is not null`),
   uniqueIndex("invoices_number_uq").on(t.clientId, t.number).where(sql`${t.number} is not null`),
   uniqueIndex("invoices_ujp_id_uq").on(t.ujpId).where(sql`${t.ujpId} is not null`),
   check("invoices_issued_has_number_ck", sql`${t.status} in ('draft','to_issue','cancelled_draft') or (${t.seqNo} is not null and ${t.number} is not null)`),
   check("invoices_supply_ck", sql`${t.docType} = 'AV' or ${t.status} in ('draft','cancelled_draft') or ${t.supplyDate} is not null`),
   check("invoices_rate_ck", sql`${t.exchangeRate} > 0`),
+  check("invoices_source_ck", sql`${t.source} in ('app', 'erpnext')`),
 ]);
 
 export const invoiceLines = pgTable("invoice_lines", {

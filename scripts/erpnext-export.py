@@ -43,6 +43,7 @@ def main():
     ap.add_argument("--files-from")
     ap.add_argument("--files-prefix")
     ap.add_argument("--no-payments", action="store_true", help="bez plakjanja (gi zatvoraat izvodite)")
+    ap.add_argument("--sales", help="izlezni fakturi (podneseni) -> JSON")
     a = ap.parse_args()
     con = pymysql.connect(unix_socket=a.socket, user="root", database=a.db, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     cur = con.cursor()
@@ -148,6 +149,55 @@ def main():
         print("  !", w)
     if a.purchases:
         export_purchases(q, a, code_of, c_edb)
+    if a.sales:
+        export_sales(q, a, code_of, c_edb)
+
+
+def export_sales(q, a, code_of, c_edb):
+    """Izlezni fakturi: samo podneseni (docstatus=1). Storniranite (docstatus=2) ne vazat -> samo se navedeni vo izveshtajot."""
+    cus = {r["name"]: r for r in q("select name, customer_name, tax_id from tabCustomer")}
+    taxes = {r["parent"]: json.loads(r["item_wise_tax_detail"] or "{}") for r in q(
+        "select parent, item_wise_tax_detail from `tabSales Taxes and Charges` where parenttype='Sales Invoice'")}
+    lines = {}
+    for r in q("select parent, idx, item_code, item_name, qty, uom, price_list_rate, discount_percentage, rate, net_amount from `tabSales Invoice Item` order by parent, idx"):
+        lines.setdefault(r["parent"], []).append(r)
+    out, warn = [], []
+    for p in q("select * from `tabSales Invoice` where docstatus=1 order by posting_date, name"):
+        if p["currency"] != "MKD" or p["is_return"]:
+            sys.exit(f"{p['name']}: девизна или поврат – не е поддржано.")
+        c = cus[p["customer"]]
+        edb, _ = tax_id(c["tax_id"])
+        ls = []
+        for l in lines[p["name"]]:
+            rate = taxes.get(p["name"], {}).get(l["item_code"], [None])[0]
+            if rate is None:
+                sys.exit(f"{p['name']}: нема ДДВ стапка за {l['item_code']}")
+            qty, net = float(l["qty"]), float(l["net_amount"])
+            plr, disc = float(l["price_list_rate"] or 0), float(l["discount_percentage"] or 0)
+            # popust kako vo ERPNext ako dava ist iznos; inaku neto cena bez popust
+            unet = plr - round(plr * disc / 100, 4)
+            if not (disc > 0 and plr > 0 and abs(round(qty * unet, 4) - net) < 0.005):
+                plr, disc = float(l["rate"]), 0.0
+                if abs(round(qty * plr, 4) - net) >= 0.005:
+                    # cena so vklucen DDV (included_in_print_rate): neto cena = neto iznos / kolicina
+                    plr = round(net / qty, 4)
+                    if abs(round(qty * plr, 2) - round(net, 2)) >= 0.005:
+                        warn.append(f"{p['name']} ставка {l['idx']}: {qty} × {plr} ≠ {net}")
+            ls.append({"itemCode": code_of.get(l["item_code"]), "description": re.sub(r"\s+", " ", (l["item_name"] or l["item_code"]).strip()),
+                       "unit": UNIT.get(l["uom"], (l["uom"] or "ком")[:10].lower()), "qty": qty, "unitPrice": plr, "discountPct": disc,
+                       "net": net, "vatPct": float(rate)})
+        out.append({"ref": p["name"], "customerRef": p["customer"], "customerEdb": edb, "customerName": c["customer_name"].strip(),
+                    "issueDate": str(p["posting_date"]), "dueDate": str(p["due_date"]) if p["due_date"] else None,
+                    "net": float(p["net_total"]), "vat": float(p["total_taxes_and_charges"]), "gross": float(p["grand_total"]),
+                    "payable": float(p["rounded_total"] or p["grand_total"]), "lines": ls})
+    cancelled = [r["name"] for r in q("select name from `tabSales Invoice` where docstatus=2 order by name")]
+    doc = {"format": "erpnext-sales/1", "exportedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+           "company": {"edb": c_edb}, "invoices": out, "cancelled": cancelled}
+    with open(a.sales, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, ensure_ascii=False, indent=1)
+    print(f"{a.sales}: {len(out)} излезни фактури ({sum(len(x['lines']) for x in out)} ставки); сторнирани во ERPNext (не се внесуваат): {len(cancelled)}.")
+    for w in warn:
+        print("  !", w)
 
 
 def export_purchases(q, a, code_of, c_edb):

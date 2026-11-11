@@ -126,6 +126,7 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
       buyerName: sql<string>`coalesce(${invoices.buyerName}, ${partners.name})`,
       netTotal: invoices.netTotal, vatTotal: invoices.vatTotal, grossTotal: invoices.grossTotal, payableAmount: invoices.payableAmount,
       ujpId: invoices.ujpId, ujpStatusName: invoices.ujpStatusName, ujpError: invoices.ujpError, relatedInvoiceId: invoices.relatedInvoiceId,
+      source: invoices.source,
     }).from(invoices).innerJoin(partners, eq(partners.id, invoices.partnerId))
       .where(and(...conds)).orderBy(desc(invoices.issueDate), desc(invoices.id)).limit(1000);
   });

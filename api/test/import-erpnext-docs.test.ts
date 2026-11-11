@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import { testDb } from "./helpers.js";
 import * as s from "../src/db/schema.js";
-import { importErpFiles, importErpPurchases } from "../src/tools/import-erpnext-docs.js";
+import { importErpFiles, importErpPurchases, importErpSales } from "../src/tools/import-erpnext-docs.js";
 
 const EDB = "4015023508550";
 /** Izmisleni podatoci vo formatot na scripts/erpnext-export.py --purchases. */
@@ -69,5 +69,36 @@ describe("uvoz na vlezni fakturi od ERPNext", () => {
     expect(r.lines.join("\n")).toMatch(/F-1.*веќе внесена/);
     expect((await t.db.select().from(s.purchaseInvoices).where(and(eq(s.purchaseInvoices.clientId, t.c2.id), eq(s.purchaseInvoices.source, "erpnext")))).length).toBe(0);
     await expect(importErpPurchases(t.db, doc([]), "4030994180119", "dev@upstream.mk")).rejects.toThrow(/ЕДБ 4015023508550/);
+  });
+});
+
+describe("uvoz na izlezni fakturi od ERPNext", () => {
+  const sale = (o: Record<string, unknown>) => ({ ref: "ACC-SINV-2025-00007", customerRef: "К", customerEdb: "4000000000044", customerName: "КУПУВАЧ К ДОО",
+    issueDate: "2025-06-03", dueDate: "2025-07-03", net: 900, vat: 162, gross: 1062, payable: 1062,
+    lines: [{ itemCode: null, description: "Тонер", unit: "ком", qty: 1, unitPrice: 1000, discountPct: 10, net: 900, vatPct: 18 }], ...o });
+  const doc = (invoices: unknown[]) => JSON.stringify({ format: "erpnext-sales/1", exportedAt: "2026-11-11T10:00:00Z", company: { edb: EDB },
+    cancelled: ["ACC-SINV-2025-00006"], invoices });
+
+  it("izdadeni so brojot od ERPNext, bez zaliha i bez UJP; brojacot ne go dodeluva istiot broj; povtorno ne dodava", async () => {
+    const t = await testDb();
+    const [k] = await t.db.insert(s.partners).values({ clientId: t.c2.id, name: "Купувач К", edb: "4000000000044" }).returning();
+    const json = doc([sale({}), sale({ ref: "ACC-SINV-2025-00055-1", net: 100, vat: 18, gross: 118, payable: 118,
+      lines: [{ itemCode: null, description: "Услуга", unit: "час", qty: 1, unitPrice: 100, discountPct: 0, net: 100, vatPct: 18 }] })]);
+    const r = await importErpSales(t.db, json, EDB, "dev@upstream.mk");
+    expect(r.counts).toMatchObject({ invoices_new: 2, invoices_skipped: 0 });
+    expect(r.lines.join("\n")).toMatch(/ACC-SINV-2025-00006/);
+    const invs = await t.db.select().from(s.invoices).where(eq(s.invoices.clientId, t.c2.id));
+    const a = invs.find((i) => i.number === "ACC-SINV-2025-00007")!;
+    expect(a).toMatchObject({ status: "issued", source: "erpnext", seqNo: 7, year: 2025, grossTotal: "1062.00", payableAmount: "1062.00",
+      buyerName: "Купувач К", sellerEdb: EDB, ujpId: null, partnerId: k!.id });
+    expect(invs.find((i) => i.number === "ACC-SINV-2025-00055-1")!.seqNo).toBe(55);
+    const [ln] = await t.db.select().from(s.invoiceLines).where(eq(s.invoiceLines.invoiceId, a.id));
+    expect(ln).toMatchObject({ unitPrice: "1000.0000", discountPct: "10.00", netAmount: "900.0000", vatAmount: "162.0000" });
+    expect((await t.db.select().from(s.stockDocs)).length).toBe(0);
+    const [cn] = await t.db.select().from(s.counters).where(and(eq(s.counters.clientId, t.c2.id), eq(s.counters.year, 2025)));
+    expect(cn!.lastNo).toBe(55);
+    // izdadena = ne se brise
+    await expect(t.db.delete(s.invoices).where(eq(s.invoices.id, a.id))).rejects.toThrow();
+    expect((await importErpSales(t.db, json, EDB, "dev@upstream.mk")).counts).toMatchObject({ invoices_new: 0, invoices_existing: 2 });
   });
 });

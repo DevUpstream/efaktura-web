@@ -74,7 +74,7 @@ export function Invoices() {
                     <Link to={`../invoices/${r.id}`} relative="path" onClick={(e) => e.stopPropagation()} className="docno">
                       {r.number ?? "нацрт"}
                     </Link>
-                    {r.docType !== "INV" && <span className="doctype">{DOC[r.docType]}</span>}
+                    {r.docType !== "INV" && <span className="doctype">{DOC[r.docType]}</span>}{r.source === "erpnext" && <span className="doctype" title="Пренесена од ERPNext: издадена надвор од е-Фактура, не се праќа кон УЈП">ERP</span>}
                   </td>
                   <td>{date(r.issueDate)}</td>
                   <td className="buyer">{r.buyerName}</td>
