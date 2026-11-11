@@ -7,7 +7,7 @@
 #>
 param(
   [Parameter(Mandatory)] [string] $Email,                 # e-poshta so koja se najavuvash vo aplikacijata
-  [string] $Tag = "__TAG__",
+  [string] $Tag = "20261111-63e5cf6",
   [string] $File = "$PSScriptRoot\upstream-purchases.json",
   [switch] $SkipDeploy
 )
