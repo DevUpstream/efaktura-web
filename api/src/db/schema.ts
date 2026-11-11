@@ -552,7 +552,7 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   vatTotal: money("vat_total").notNull().default("0"),
   grossTotal: money("gross_total").notNull().default("0"),
   note: text("note"),
-  /** "manual" ili "ujp_json" (uvoz na e-faktura vo formatot na UJP, docs/09). */
+  /** "manual", "ujp_json" (uvoz na e-faktura vo formatot na UJP, docs/09) ili "erpnext" (prenos, docs/11). */
   source: varchar("source", { length: 12 }).notNull().default("manual"),
   /** Iznosite (stavki i zaglavje) se od dokumentot na dobavuvacot i ne se presmetuvaat odnovo. */
   fixedAmounts: boolean("fixed_amounts").notNull().default(false),

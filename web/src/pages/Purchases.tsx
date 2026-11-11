@@ -47,7 +47,7 @@ export function Purchases() {
           <thead><tr><th>Наш број</th><th>Добавувач</th><th>Број кај добавувачот</th><th>Примена</th><th>Рок</th><th className="num">Основица</th><th className="num">ДДВ</th><th className="num">Вкупно</th><th>Статус</th></tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.id} className={`row-${r.status === "voided" ? "voided" : r.status}`}>
-              <td><Link className="docno" to={String(r.id)}>{r.number ?? "Нацрт"}</Link>{r.source === "ujp_json" && <span className="doctype" title="Увезена е-фактура (JSON)">е-ф</span>}
+              <td><Link className="docno" to={String(r.id)}>{r.number ?? "Нацрт"}</Link>{r.source === "ujp_json" && <span className="doctype" title="Увезена е-фактура (JSON)">е-ф</span>}{r.source === "erpnext" && <span className="doctype" title="Пренесена од ERPNext (архива, без залиха)">ERP</span>}
                 {!!r.fileCount && <span className="muted small" title="Има прилог (PDF)"> 📎</span>}</td><td className="buyer">{r.supplierName}</td><td>{r.supplierNumber}</td>
               <td>{date(r.receivedDate)}</td><td>{date(r.dueDate)}</td>
               <td className="num">{money(r.netTotal)}</td><td className="num">{money(r.vatTotal)}</td><td className="num">{money(r.grossTotal)}</td>

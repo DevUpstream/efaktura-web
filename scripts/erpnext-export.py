@@ -5,6 +5,9 @@ Izvoz na shifrarnici od ERPNext (Next ERP) vo JSON za api/src/tools/import-erpne
   1. Bekapot (*-database.sql.gz) se vcituva vo LOKALEN MariaDB (nikogash na serverot na aplikacijata):
        mysql -e "create database erp character set utf8mb4"; zcat <bekap>-database.sql.gz | mysql erp
   2. python3 scripts/erpnext-export.py --db erp --out upstream-erpnext.json
+  3. (vlezni fakturi, docs/11) python3 scripts/erpnext-export.py --db erp --out upstream-erpnext.json \
+       --purchases upstream-purchases.json --files-from <raspakuvan private-files.tar>/upstream/private/files --files-prefix upstream-files
+     -> upstream-purchases.json + upstream-files-1.json, -2.json ... (prilozi, do ~15 MB po datoteka)
 
 Se izvezuva: kupuvaci + dobavuvaci (spoeni po EDB), adresa za fakturiranje, ziro-smetki, kontakti povrzani so partner,
 artikli so prodazna cena (Standard Selling, bez DDV) i DDV stapka (Item Tax; bez stapka = 18 %).
@@ -36,6 +39,9 @@ def main():
     ap.add_argument("--db", default="erp")
     ap.add_argument("--socket", default="/run/mysqld/mysqld.sock")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--purchases")
+    ap.add_argument("--files-from")
+    ap.add_argument("--files-prefix")
     a = ap.parse_args()
     con = pymysql.connect(unix_socket=a.socket, user="root", database=a.db, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     cur = con.cursor()
@@ -116,7 +122,7 @@ def main():
     rate = {r["parent"]: float(r["tax_rate"]) for r in q("select parent, tax_rate from `tabItem Tax Template Detail`")}
     price = {r["item_code"]: float(r["price_list_rate"]) for r in q(
         "select item_code, price_list_rate from `tabItem Price` where price_list='Standard Selling' and currency='MKD' order by valid_from")}
-    items, codes = [], set()
+    items, codes, code_of = [], set(), {}
     for r in q("select name, item_code, item_name, is_stock_item, stock_uom, disabled from tabItem where has_variants=0 order by item_code"):
         code = r["item_code"].strip()
         if len(code) > 30:
@@ -124,6 +130,7 @@ def main():
         if code.upper() in codes:
             sys.exit(f"Двојна шифра по скратување: {code}")
         codes.add(code.upper())
+        code_of[r["name"]] = code
         unit = UNIT.get(r["stock_uom"], (r["stock_uom"] or "ком")[:10].lower())
         items.append({"ref": r["name"], "code": code, "name": re.sub(r"\s+", " ", (r["item_name"] or r["item_code"]).strip()),
                       "type": "goods" if r["is_stock_item"] else "service", "unit": unit,
@@ -138,6 +145,85 @@ def main():
           f"{len(items)} артикли ({sum(i['price'] is not None for i in items)} со цена).")
     for w in warnings:
         print("  !", w)
+    if a.purchases:
+        export_purchases(q, a, code_of, c_edb)
+
+
+def export_purchases(q, a, code_of, c_edb):
+    """Vlezni fakturi (samo podneseni, bez storniranite), plakjanja kon niv i prilozi."""
+    sup = {r["name"]: r for r in q("select name, supplier_name, tax_id from tabSupplier")}
+    taxes = {r["parent"]: json.loads(r["item_wise_tax_detail"] or "{}") for r in q(
+        "select parent, item_wise_tax_detail from `tabPurchase Taxes and Charges` where parenttype='Purchase Invoice'")}
+    lines = {}
+    for r in q("select parent, idx, item_code, item_name, qty, uom, rate, net_amount from `tabPurchase Invoice Item` order by parent, idx"):
+        lines.setdefault(r["parent"], []).append(r)
+    out, files = [], []
+    for p in q("select * from `tabPurchase Invoice` where docstatus=1 order by posting_date, name"):
+        s_ = sup[p["supplier"]]
+        edb, _ = tax_id(s_["tax_id"])
+        ls = []
+        for l in lines[p["name"]]:
+            rate = taxes.get(p["name"], {}).get(l["item_code"], [None])[0]
+            if rate is None and p["name"] not in taxes and not float(p["total_taxes_and_charges"] or 0):
+                rate = 0.0  # bez DDV red i bez DDV = dobavuvacot ne e DDV obvrznik
+            if rate is None:
+                sys.exit(f"{p['name']}: нема ДДВ стапка за {l['item_code']}")
+            ls.append({"itemCode": code_of.get(l["item_code"]), "description": re.sub(r"\s+", " ", (l["item_name"] or l["item_code"]).strip()),
+                       "unit": UNIT.get(l["uom"], (l["uom"] or "ком")[:10].lower()), "qty": float(l["qty"]), "unitPrice": float(l["rate"]),
+                       "net": float(l["net_amount"]), "vatPct": float(rate)})
+        if any(l["net"] < 0 or l["unitPrice"] < 0 for l in ls):
+            # negativni stavki (kredit od dobavuvacot): aplikacijata nema negativni ceni -> zbirna stavka po DDV stapka
+            by = {}
+            for l in ls:
+                by[l["vatPct"]] = by.get(l["vatPct"], 0) + l["net"]
+            ls = [{"itemCode": None, "description": f"Збирна ставка по ERPNext {p['name']} (вклучени кредити од добавувачот)", "unit": "ком",
+                   "qty": 1.0, "unitPrice": round(n, 4), "net": round(n, 4), "vatPct": v} for v, n in by.items()]
+        out.append({"ref": p["name"], "supplierRef": p["supplier"], "supplierEdb": edb, "supplierName": s_["supplier_name"].strip(),
+                    "supplierNumber": (p["bill_no"] or "").strip() or p["name"], "issueDate": str(p["bill_date"] or p["posting_date"]),
+                    "receivedDate": str(p["posting_date"]), "dueDate": str(p["due_date"]) if p["due_date"] else None,
+                    "net": float(p["net_total"]), "vat": float(p["total_taxes_and_charges"]), "gross": float(p["grand_total"]),
+                    "payable": float(p["rounded_total"] or p["grand_total"]), "lines": ls})
+        if a.files_from:
+            for f in q("select name, file_name, file_url from tabFile where attached_to_doctype='Purchase Invoice' and attached_to_name=%s", p["name"]):
+                files.append((p["name"], f))
+    refs = {x["ref"] for x in out}
+    pays = []
+    for e in q("select * from `tabPayment Entry` where docstatus=1 and payment_type='Pay' and party_type='Supplier' order by posting_date, name"):
+        al = [{"ref": r["reference_name"], "amount": float(r["allocated_amount"])} for r in q(
+            "select reference_name, allocated_amount from `tabPayment Entry Reference` where parent=%s and reference_doctype='Purchase Invoice'", e["name"])
+            if r["reference_name"] in refs]
+        pays.append({"ref": e["name"], "supplierRef": e["party"], "date": str(e["posting_date"]), "amount": float(e["paid_amount"]),
+                     "reference": (e["reference_no"] or "").strip() or None, "allocations": al})
+    doc = {"format": "erpnext-purchases/1", "exportedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+           "company": {"edb": c_edb}, "purchases": out, "payments": pays}
+    with open(a.purchases, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, ensure_ascii=False, indent=1)
+    print(f"{a.purchases}: {len(out)} влезни фактури ({sum(len(x['lines']) for x in out)} ставки), {len(pays)} плаќања.")
+    if a.files_from and a.files_prefix:
+        import base64, os
+        chunk, size, n, missing = [], 0, 0, []
+        def flush():
+            nonlocal chunk, size, n
+            if not chunk:
+                return
+            n += 1
+            with open(f"{a.files_prefix}-{n}.json", "w", encoding="utf-8") as fh:
+                json.dump({"format": "erpnext-files/1", "company": {"edb": c_edb}, "files": chunk}, fh, ensure_ascii=False)
+            print(f"  {a.files_prefix}-{n}.json: {len(chunk)} прилози, {size / 1048576:.1f} MB")
+            chunk, size = [], 0
+        for ref, f in files:
+            path = os.path.join(a.files_from, os.path.basename(f["file_url"] or ""))
+            if not os.path.isfile(path):
+                missing.append(f"{ref}: {f['file_name']}")
+                continue
+            data = open(path, "rb").read()
+            if size + len(data) > 15 * 1048576:
+                flush()
+            chunk.append({"purchaseRef": ref, "fileName": f["file_name"], "data": base64.b64encode(data).decode()})
+            size += len(data)
+        flush()
+        for m in missing:
+            print("  ! нема датотека:", m)
 
 
 if __name__ == "__main__":
