@@ -26,6 +26,7 @@ import { dispatchRoutes } from "./routes/dispatch.js";
 import { receivableRoutes } from "./routes/receivables.js";
 import { todayRoutes } from "./routes/today.js";
 import { exportRoutes } from "./routes/export.js";
+import { vatBookRoutes } from "./routes/vatbooks.js";
 
 export interface AppDeps {
   db: Db; version: string; logLevel?: string;
@@ -80,6 +81,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await receivableRoutes(app, { db: d.db });
   await todayRoutes(app, { db: d.db });
   await exportRoutes(app, { db: d.db });
+  await vatBookRoutes(app, { db: d.db });
   // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
   if (d.webDir && existsSync(d.webDir)) {
     await app.register(fastifyStatic, {

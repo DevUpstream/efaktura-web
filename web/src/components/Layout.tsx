@@ -49,6 +49,7 @@ export function Layout() {
           {client.modules.includes("recurring") && <NavLink to={`/c/${client.id}/recurring`} className="menu-sub">Повторувачки</NavLink>}
           {client.modules.includes("incoming") && <NavLink to={`/c/${client.id}/purchases`}>Влезни фактури</NavLink>}
           {client.modules.includes("payments") && <NavLink to={`/c/${client.id}/payments`}>Плаќања и наплата</NavLink>}
+          <NavLink to={`/c/${client.id}/vat-books`}>КИФ / КУФ</NavLink>
           {client.modules.includes("warehouse") && <NavLink to={`/c/${client.id}/stock`}>Магацин</NavLink>}
           {client.modules.includes("production") && <NavLink to={`/c/${client.id}/production`}>Производство</NavLink>}
           <NavLink to={`/c/${client.id}/partners`}>Партнери</NavLink>

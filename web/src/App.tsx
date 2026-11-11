@@ -18,6 +18,7 @@ import { BankExpenses, OpenItems, PaymentsList, Statements, StatementView } from
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
 import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 import { Today } from "./pages/Today";
+import { VatBooks } from "./pages/VatBooks";
 import { Dispatches } from "./pages/Dispatches";
 import { Compensations, Dunning, Ios } from "./pages/Receivables";
 
@@ -32,6 +33,7 @@ function Gate() {
     <Routes>
       <Route path="/c/:clientId" element={<Layout />}>
         <Route path="today" element={<Today />} />
+        <Route path="vat-books" element={<VatBooks />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceEditor />} />
         <Route path="invoices/:id" element={<InvoiceEditor />} />
