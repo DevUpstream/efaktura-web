@@ -8,10 +8,12 @@
 param(
   [Parameter(Mandatory)] [string] $Email,                 # e-poshta so koja se najavuvash vo aplikacijata
   [string] $Tag = "20261111-63e5cf6",
-  [string] $File = "$PSScriptRoot\upstream-purchases.json",
+  [string] $File,
   [switch] $SkipDeploy
 )
 $ErrorActionPreference = "Stop"
+# PowerShell 5.1: $PSScriptRoot e prazen vo param() -> se postavuva tuka
+if (-not $File) { $File = Join-Path $PSScriptRoot "upstream-purchases.json" }
 $k = "$env:USERPROFILE\.ssh\oracle-efaktura.key"; $s = "ubuntu@92.5.149.62"; $edb = "4015023508550"
 $run = "cd /opt/efaktura && sudo docker compose exec -T api node dist/tools/import-erpnext-docs.js - --client $edb --user $Email"
 
