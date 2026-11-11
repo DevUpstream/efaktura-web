@@ -67,6 +67,6 @@ D=$(grep ^DOMAIN= .env | cut -d= -f2)
 curl -s "https://$D/api/health"; echo
 docker compose logs api --tail 10
 docker image prune -f >/dev/null
-systemctl list-timers efaktura-backup.timer --no-pager | head -2
-free -m | head -2
+systemctl list-timers efaktura-backup.timer --no-pager | sed -n 1,2p   # ne head: SIGPIPE + pipefail = kod 141 (O36)
+free -m | sed -n 1,2p
 echo GOTOVO
