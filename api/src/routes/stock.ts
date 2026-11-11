@@ -113,6 +113,12 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (!p) throw new DomainError("not_found", "Влезната фактура не постои.", 404);
     return p;
   }
+  app.get("/api/clients/:clientId/purchases/years", async (req) => {
+    const { clientId } = await withModule(req, "incoming");
+    const r = await db.selectDistinct({ y: purchaseInvoices.year }).from(purchaseInvoices).where(eq(purchaseInvoices.clientId, clientId)).orderBy(desc(purchaseInvoices.year));
+    return r.map((x) => x.y);
+  });
+
   app.get("/api/clients/:clientId/purchases/:id", async (req) => {
     const { clientId, id } = await withModule(req, "incoming");
     const p = await loadPurchase(clientId, id!);

@@ -111,6 +111,15 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
     return { u, inv };
   };
 
+  /** Godini so fakturi (za izborot vo listata); najnovata prva. */
+  app.get("/api/clients/:clientId/invoices/years", async (req) => {
+    const u = requireUser(req);
+    const clientId = Id.parse((req.params as { clientId: string }).clientId);
+    await assertClientAccess(db, u, clientId);
+    const r = await db.selectDistinct({ y: invoices.year }).from(invoices).where(eq(invoices.clientId, clientId)).orderBy(desc(invoices.year));
+    return r.map((x) => x.y);
+  });
+
   app.get("/api/clients/:clientId/invoices", async (req) => {
     const u = requireUser(req);
     const clientId = Id.parse((req.params as { clientId: string }).clientId);

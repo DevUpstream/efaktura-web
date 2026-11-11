@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type Item, type Partner, type VatRate, type Warehouse } from "../api";
 import { date, money, STOCK_KIND, STOCK_TYPES, today } from "../format";
+import { useYears, YearSelect } from "../components/YearSelect";
 
 interface PurchaseRow { id: number; number: string | null; status: "draft" | "posted" | "voided"; supplierNumber: string; supplierName: string;
   issueDate: string; receivedDate: string; dueDate: string | null; netTotal: string; vatTotal: string; grossTotal: string; source?: string; fileCount?: number }
@@ -22,12 +23,14 @@ export function Purchases() {
   const [status, setStatus] = useState("");
   const [importing, setImporting] = useState(false);
   const [reload, setReload] = useState(0);
+  const { years, year, setYear } = useYears(`/api/clients/${client.id}/purchases/years?r=${reload}`);
   useEffect(() => {
     setRows(null);
-    const p = new URLSearchParams({ ...(status ? { status } : {}), ...(q.trim() ? { q: q.trim() } : {}) });
+    if (year === null) return;
+    const p = new URLSearchParams({ ...(status ? { status } : {}), ...(q.trim() ? { q: q.trim() } : {}), ...(year ? { year: String(year) } : {}) });
     const h = setTimeout(() => api.get<PurchaseRow[]>(`/api/clients/${client.id}/purchases?${p}`).then(setRows), q ? 250 : 0);
     return () => clearTimeout(h);
-  }, [client.id, q, status, reload]);
+  }, [client.id, q, status, reload, year]);
   useEffect(() => { setImporting(false); }, [client.id]);
   const sum = (rows ?? []).filter((r) => r.status === "posted").reduce((a, r) => a + Number(r.grossTotal), 0);
   return (
@@ -40,6 +43,7 @@ export function Purchases() {
         <input type="search" placeholder="Добавувач, број на фактура" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
         <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Статус"><option value="">Сите</option>
           {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        <YearSelect years={years} year={year} onChange={setYear} allowAll />
       </div>
       {rows && rows.length === 0 && <div className="empty"><p>{q || status ? "Нема фактури за овој избор." : "Сè уште нема влезни фактури."}</p></div>}
       {rows && rows.length > 0 && (

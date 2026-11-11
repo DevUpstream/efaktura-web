@@ -58,7 +58,9 @@ export function InvoiceEditor() {
           advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "" });
         setLines(i.lines.map(toEdit));
       } else {
-        setLines([]);
+        // ?item=ID (od „Артикли“): prva stavka so toj artikl i negovata standardna cena
+        const pre = it.find((x) => x.id === Number(new URLSearchParams(window.location.search).get("item")) && x.isActive);
+        setLines(pre ? [{ ...blankLine(pre.vatRateId), itemId: pre.id, description: pre.name, unit: pre.unit, unitPrice: Number(pre.unitPrice).toString(), priceSource: "Стандардна цена" }] : []);
       }
       setDirty(false);
     }).catch((e) => setMsg({ kind: "err", text: e.message }));

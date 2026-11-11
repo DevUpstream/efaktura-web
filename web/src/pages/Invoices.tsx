@@ -3,6 +3,7 @@ import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api, type ClientRef, type InvoiceRow } from "../api";
 import { DOC, date, money0, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
+import { useYears, YearSelect } from "../components/YearSelect";
 
 /** Понудите (PF) не се фактури: само во „Понуди“ и „Сите“, и не влегуваат во збирот. */
 const FILTERS: { key: string; label: string; match: (r: InvoiceRow) => boolean }[] = [
@@ -16,7 +17,7 @@ const FILTERS: { key: string; label: string; match: (r: InvoiceRow) => boolean }
 export function Invoices() {
   const client = useOutletContext<ClientRef>();
   const nav = useNavigate();
-  const [year, setYear] = useState(new Date().getFullYear());
+  const { years, year, setYear } = useYears(`/api/clients/${client.id}/invoices/years`);
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
   const [rows, setRows] = useState<InvoiceRow[] | null>(null);
@@ -24,7 +25,8 @@ export function Invoices() {
 
   useEffect(() => {
     setRows(null); setErr(null);
-    api.get<InvoiceRow[]>(`/api/clients/${client.id}/invoices?year=${year}`).then(setRows).catch((e) => setErr(e.message));
+    if (year === null) return;
+    api.get<InvoiceRow[]>(`/api/clients/${client.id}/invoices${year ? `?year=${year}` : ""}`).then(setRows).catch((e) => setErr(e.message));
   }, [client.id, year]);
 
   const shown = useMemo(() => {
@@ -49,15 +51,13 @@ export function Invoices() {
           ))}
         </div>
         <input type="search" placeholder="Број или купувач" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Година">
-          {[0, 1, 2].map((d) => new Date().getFullYear() - d).map((y) => <option key={y}>{y}</option>)}
-        </select>
+        <YearSelect years={years} year={year} onChange={setYear} allowAll />
       </div>
       {err && <p className="alert">{err}</p>}
       {!rows && !err && <p className="muted">Се вчитува…</p>}
       {rows && shown.length === 0 && (
         <div className="empty">
-          <p>{rows.length === 0 ? `Нема фактури за ${year}.` : "Нема фактури за овој филтер."}</p>
+          <p>{rows.length === 0 ? year ? `Нема фактури за ${year}.` : "Нема фактури." : "Нема фактури за овој филтер."}</p>
           {rows.length === 0 && <Link className="btn" to="../invoices/new" relative="path">Направи прва фактура</Link>}
         </div>
       )}
