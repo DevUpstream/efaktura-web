@@ -22,7 +22,7 @@ export interface StatementLine {
   purpose: string; refDebit: string; refCredit: string; extra: string; key: string;
 }
 export interface ParsedStatement {
-  format: "mk-txt" | "csv"; statementNo: string | null; date: string | null; ownAccount: string | null;
+  format: "mk-txt" | "csv" | "mt940"; statementNo: string | null; date: string | null; ownAccount: string | null;
   opening: string | null; closing: string | null; lines: StatementLine[]; warnings: string[]; fileHash: string;
 }
 

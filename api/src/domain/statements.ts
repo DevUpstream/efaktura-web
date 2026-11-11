@@ -10,16 +10,18 @@ import { audit, type Actor } from "./audit.js";
 import { createPayment, openItems } from "./payments.js";
 import { looksLikeMkTxt, normAccount, parseMkTxt, type ParsedStatement } from "./bank-txt.js";
 import { parseStatement } from "./bank-import.js";
+import { looksLikeMt940, parseMt940 } from "./bank-mt940.js";
 import { matchLine, type MatchContext, type MatchResult } from "./matching.js";
 
 type Client = typeof clients.$inferSelect;
 export const clientOwnAccounts = (c: Client) =>
   new Set([c.iban, ...(c.pdfSettings?.bankAccounts ?? []).map((b) => b.account)].map(normAccount).filter(Boolean));
 
-/** TXT (avtomatski) ili CSV (po mapiranjeto na firmata). */
+/** TXT ili MT940 (avtomatski) ili CSV (po mapiranjeto na firmata). */
 export function parseAny(text: string, mapping: BankImportMapping | null): ParsedStatement {
   if (looksLikeMkTxt(text)) return parseMkTxt(text);
-  if (!mapping) throw new DomainError("validation", "Форматот не е препознаен како извод од банка (TXT). За CSV прво поставете ги колоните.", 422);
+  if (looksLikeMt940(text)) return parseMt940(text);
+  if (!mapping) throw new DomainError("validation", "Форматот не е препознаен како извод од банка (TXT или MT940). За CSV прво поставете ги колоните.", 422);
   const { rows, skipped } = parseStatement(text, mapping);
   if (!rows.length) throw new DomainError("validation", "Нема ставки во датотеката (провери ги колоните).", 422);
   return { format: "csv", statementNo: null, date: null, ownAccount: null, opening: null, closing: null,
@@ -100,9 +102,9 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
     for (const l of parsed.lines) {
       if (existing.has(l.key)) { skipped++; continue; }
       await tx.insert(bankStatementLines).values({ statementId: s!.id, clientId, lineNo: l.lineNo, lineKey: l.key, direction: l.direction, amount: l.amount,
-        valueDate: parsed.date ?? l.extra, counterpartyName: l.name || null, counterpartyAccount: l.account || null, counterpartyEdb: l.edb || null,
+        valueDate: parsed.format === "mt940" ? l.extra || parsed.date! : parsed.date ?? l.extra, counterpartyName: l.name || null, counterpartyAccount: l.account || null, counterpartyEdb: l.edb || null,
         paymentCode: l.paymentCode || null, purpose: l.purpose || null, refDebit: l.refDebit || null, refCredit: l.refCredit || null,
-        extra: parsed.format === "csv" ? null : l.extra || null });
+        extra: parsed.format === "mk-txt" ? l.extra || null : null });
     }
     if (skipped) warnings.push(`${skipped} ставки се веќе увезени со претходен извод и се прескокнати.`);
     await audit(tx, actor, { clientId, entity: "bank_statement", entityId: s!.id, action: "import", changes: { no: parsed.statementNo, lines: parsed.lines.length - skipped } });

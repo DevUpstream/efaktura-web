@@ -11,6 +11,7 @@ import { calcLine } from "../src/domain/calc.js";
 import { issueInvoice } from "../src/domain/issue.js";
 import { postPurchase } from "../src/domain/purchase.js";
 import { parseMkTxt } from "../src/domain/bank-txt.js";
+import { looksLikeMt940, parse86, parseMt940 } from "../src/domain/bank-mt940.js";
 import { matchLine, uniqueSubset } from "../src/domain/matching.js";
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/statements/${f}`, import.meta.url), "utf8");
@@ -40,6 +41,28 @@ describe("parser na TXT izvod (vistinski izvodi)", () => {
     expect(() => parseMkTxt(fx("sparkasse-29.txt").replace("71,768.00", "71,769.00"))).toThrow(/не е целосен/);
     const bad = fx("halk-11.txt").split("\r\n"); bad[5] = "    " + bad[5];
     expect(() => parseMkTxt(bad.join("\r\n"))).toThrow(/колоните не се на очекуваното место/);
+  });
+  it("NLB MT940: zaglavje, prekinati redovi na :86:, smer, povikuvanje, sostojba", () => {
+    const f = fx("nlb-mt940.txt");
+    expect(looksLikeMt940(f)).toBe(true);
+    expect(looksLikeMt940(fx("halk-11.txt"))).toBe(false);
+    const n = parseMt940(f);
+    expect(n).toMatchObject({ format: "mt940", statementNo: "1", date: "2026-10-09", ownAccount: "210-0000000001-59", opening: "0.00", closing: "134682.00" });
+    expect(n.lines).toHaveLength(4);
+    expect(n.lines[0]).toMatchObject({ direction: "out", amount: "130212.00", account: "200-0000000001-63", name: "ПРИМАЧ ЕДЕН ДОО", paymentCode: "200", refCredit: "fakturi", extra: "2026-10-09" });
+    expect(n.lines[0]!.purpose).toBe("Плаќање по основ на промет на производи и стоки помеѓу правните субјек");
+    expect(n.lines[1]).toMatchObject({ name: "ПРИМАЧ ДВА ДОО Скопје СКОПЈЕ - КИСЕЛА ВОДА", refCredit: "01344/99/26" });
+    expect(n.lines[2]).toMatchObject({ amount: "64.00", paymentCode: "666" });
+    expect(n.lines[3]).toMatchObject({ direction: "in", amount: "300000.00", account: "300-0000000001-19", name: "НАЛОГОДАВАЧ ТРИ АД Скопје СКОПЈЕ - ЦЕНТАР", paymentCode: "467" });
+    expect(new Set(n.lines.map((l) => l.key)).size).toBe(4);
+  });
+  it("MT940: odbiva necelosen, devizen i povekje izvodi vo edna datoteka", () => {
+    const f = fx("nlb-mt940.txt");
+    expect(() => parseMt940(f.replace(":62F:C261009MKD134682,00", ":62F:C261009MKD134683,00"))).toThrow(/не е целосен/);
+    expect(() => parseMt940(f.replace(/MKD/g, "EUR"))).toThrow(/EUR/);
+    expect(() => parseMt940(f + f)).toThrow(/2 изводи/);
+    expect(parse86("/BNAME/A/B ДОО/PRPD/по ф-ра 12/2026/CODE/200")).toEqual({ BNAME: "A/B ДОО", PRPD: "по ф-ра 12/2026", CODE: "200" });
+    expect(parseMt940(f.replace("2610091009C300000", "2610091009RD300000")).lines[3]!.direction).toBe("in");
   });
   it("kombinacija: edinstvena -> da, dvosmislena -> ne", () => {
     const it = (id: number, r: string) => ({ id, remaining: r }) as never;
@@ -93,6 +116,22 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     expect(d.counts).toMatchObject({ booked: 1, open: 1, ignored: 2 });
     const list = (await call("GET", `${C()}/bank-statements`)).body;
     expect(list[0]).toMatchObject({ statementNo: "30", lines: 4, open: 1, inflow: "1480.00", outflow: "535.00" });
+  });
+
+  it("MT940 (NLB): uvoz preku API, sigurna uplata se knizi, provizijata e trosok", async () => {
+    const a = await inv(1000);   // 1180
+    await t.db.update(clients).set({ iban: "210-0000000001-59" }).where(eq(clients.id, t.c1.id));
+    const mt = [":20:STM1", ":25:210000000000159", ":28C:7", ":60F:C261105MKD1000,00",
+      ":61:2611051105C1180,00NMSC300000000011122//" + a.number, ":86:/ORDP/300000000011122/BNAME/КУПУВАЧ А ДООЕЛ/PRPD/Плаќање по фактура/CODE/2", "20",
+      ":61:2611051105D50,00NMSC210009900010582//x", ":86:/BENM/210009900010582/BNAME/НЛБ Банка- Провизии/PRPD/[AutoProv]Дневна провизија/CODE/666",
+      ":62F:C261105MKD2130,00", "-}"].join("\r\n");
+    const r = (await call("POST", `${C()}/bank-statements`, { text: mt, fileName: "nlb.txt" })).body;
+    expect(r).toMatchObject({ statementNo: "7", lines: 2, booked: 1, categorized: 1 });
+    const d = (await call("GET", `${C()}/bank-statements/${r.id}`)).body;
+    expect(d).toMatchObject({ format: "mt940", ownAccount: "210-0000000001-59", openingBalance: "1000.00", closingBalance: "2130.00" });
+    expect(d.lines[0]).toMatchObject({ status: "booked", paymentCode: "220", valueDate: "2026-11-05", booking: { documents: a.number } });
+    expect(d.lines[1]).toMatchObject({ status: "ignored", category: "fee" });
+    expect((await call("POST", `${C()}/bank-statements`, { text: mt })).status).toBe(409);
   });
 
   it("racno knizenje ja ucи smetkata; sledniot izvod e sigurен po smetka + tocen iznos", async () => {
