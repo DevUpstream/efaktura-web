@@ -14,11 +14,12 @@ interface PaymentRow { id: number; direction: Dir; payDate: string; amount: stri
 const METHOD: Record<string, string> = { bank: "Банка", cash: "Готовина", card: "Картичка", compensation: "Компензација", other: "Друго" };
 const AGING: [keyof Aging, string][] = [["current", "Не е доспеано"], ["d30", "1–30 дена"], ["d60", "31–60"], ["d90", "61–90"], ["over90", "Над 90"]];
 
-function Tabs({ c }: { c: number }) {
+export function Tabs({ c }: { c: number }) {
   return <nav className="seg tabs" aria-label="Плаќања">
     <NavLink to={`/c/${c}/payments`} end>Наплата</NavLink><NavLink to={`/c/${c}/payments/out`}>Обврски</NavLink>
     <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/statements`}>Изводи</NavLink>
-    <NavLink to={`/c/${c}/payments/expenses`}>Трошоци</NavLink></nav>;
+    <NavLink to={`/c/${c}/payments/expenses`}>Трошоци</NavLink><NavLink to={`/c/${c}/payments/ios`}>ИОС</NavLink>
+    <NavLink to={`/c/${c}/payments/compensations`}>Компензации</NavLink><NavLink to={`/c/${c}/payments/dunning`}>Опомени</NavLink></nav>;
 }
 
 /* ------------------------------------------------- otvoreni stavki */

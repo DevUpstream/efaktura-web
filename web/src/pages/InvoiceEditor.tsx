@@ -109,7 +109,8 @@ export function InvoiceEditor() {
       advanceInvoiceId: canAdvance && head.advanceId ? head.advanceId : null,
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
       lines: realLines().map((l) => ({ itemId: l.itemId, description: l.description.trim(), unit: l.unit, qty: parseNum(l.qty),
-        unitPrice: parseNum(l.unitPrice), discountPct: parseNum(l.discountPct || "0"), vatRateId: l.vatRateId, priceSource: l.priceSource })),
+        unitPrice: parseNum(l.unitPrice), discountPct: parseNum(l.discountPct || "0"), vatRateId: l.vatRateId, priceSource: l.priceSource,
+        stockDocId: l.stockDocId ?? null })),
     };
   }
 
@@ -314,6 +315,7 @@ export function InvoiceEditor() {
                     {linesEditable ? <input inputMode="decimal" value={l.unitPrice} title={l.priceSource ?? undefined}
                       onChange={(e) => setLine(l.key, { unitPrice: e.target.value.replace(",", "."), priceSource: "Рачно внесена" })} aria-label="Цена без ДДВ" /> : money(l.unitPrice)}
                     {linesEditable && l.priceSource && <small className="src">{l.priceSource}</small>}
+                    {l.stockDocId ? <small className="src" title="Залихата е веќе издадена со испратницата">од испратница</small> : null}
                   </td>
                   <td className="num c-disc">{linesEditable ? <input inputMode="decimal" value={l.discountPct} onChange={(e) => setLine(l.key, { discountPct: e.target.value.replace(",", ".") })} aria-label="Попуст во проценти" /> : Number(l.discountPct)}</td>
                   <td className="c-vat">

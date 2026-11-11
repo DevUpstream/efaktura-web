@@ -43,7 +43,8 @@ export function Partners() {
       {edit && edit !== "ujp" && <PartnerForm client={client} p={edit === "new" ? null : edit} role={role} onDone={() => { setEdit(null); void load(); }}
         onCheck={edit !== "new" && edit.edb ? () => { setCheck(edit); setEdit(null); } : undefined} />}
       {check && <CheckPartner client={client} p={check} onDone={() => { setCheck(null); void load(); }} />}
-      <div className="toolbar"><input type="search" placeholder="Назив или ЕДБ" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" /></div>
+      <div className="toolbar"><input type="search" placeholder="Назив или ЕДБ" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
+        <span className="hint">Кирилица и латиница се различни: „Тонер“ не го наоѓа „Toner“. Пробајте и со другото писмо.</span></div>
       {rows && shown.length === 0 && <div className="empty"><p>{needle ? `Нема ${noun} со тоа име или ЕДБ.` : tab === "supplier" ? "Нема добавувачи. Се додаваат сами со влезна фактура или увоз на е-фактура, или рачно." : rows.length ? `Нема ${noun}и.` : "Сè уште нема партнери. Додадете го првиот."}</p></div>}
       {shown.length > 0 && (
         <div className="table-wrap"><table className="grid">

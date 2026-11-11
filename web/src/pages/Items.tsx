@@ -29,6 +29,7 @@ export function Items() {
           <input type="search" placeholder="Шифра или назив (на пр. tn 2421)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај артикли" autoFocus />
           <label className="check"><input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} /> Само активни</label>
           <span className="muted small">{shown.length} од {rows.length}</span>
+          <span className="hint">Кирилица и латиница се различни: „тонер“ не го наоѓа „Toner“. Пробајте и со другото писмо.</span>
         </div>
       )}
       {rows && rows.length === 0 && <div className="empty"><p>Сè уште нема артикли. Додадете го првиот.</p></div>}

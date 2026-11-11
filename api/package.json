@@ -24,6 +24,7 @@
     "pdfkit": "^0.17.2",
     "postgres": "^3.4.9",
     "qrcode": "^1.5.4",
+    "yazl": "^2.5.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -31,6 +32,7 @@
     "@types/node": "^22.20.5",
     "@types/pdfkit": "^0.17.7",
     "@types/qrcode": "^1.5.6",
+    "@types/yazl": "^2.4.6",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

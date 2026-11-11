@@ -28,7 +28,7 @@ export interface MoveIn {
 export interface StockDocIn {
   clientId: number; kind: Kind; warehouseId: number; toWarehouseId?: number | null; docDate: string;
   purchaseInvoiceId?: number | null; invoiceId?: number | null; workOrderId?: number | null; reversesDocId?: number | null; note?: string | null;
-  createdBy?: number | null; moves: MoveIn[];
+  partnerId?: number | null; createdBy?: number | null; moves: MoveIn[];
 }
 
 export function formatStockNumber(prefix: string, code: string, year: number, seq: number) {
@@ -85,7 +85,7 @@ async function createDoc(tx: Tx, client: StockClient, d: Omit<StockDocIn, "moves
     clientId: d.clientId, kind: d.kind, warehouseId: d.warehouseId, toWarehouseId: d.toWarehouseId ?? null, year, seqNo,
     number: formatStockNumber(client.invoicePrefix, STOCK_DOC_CODE[d.kind], year, seqNo), docDate: d.docDate,
     purchaseInvoiceId: d.purchaseInvoiceId ?? null, invoiceId: d.invoiceId ?? null, workOrderId: d.workOrderId ?? null, reversesDocId: d.reversesDocId ?? null,
-    note: d.note ?? null, createdBy: d.createdBy ?? null,
+    note: d.note ?? null, partnerId: d.partnerId ?? null, createdBy: d.createdBy ?? null,
   }).returning();
   return doc!;
 }
@@ -186,7 +186,7 @@ export async function reverseStockDoc(tx: Tx, docId: number, opts: { docDate: st
   const moves = await tx.select().from(stockMoves).where(eq(stockMoves.docId, orig.id)).orderBy(asc(stockMoves.id));
   return postStockDoc(tx, {
     clientId: orig.clientId, kind: orig.kind, warehouseId: orig.warehouseId, toWarehouseId: orig.toWarehouseId, docDate: opts.docDate,
-    purchaseInvoiceId: orig.purchaseInvoiceId, invoiceId: orig.invoiceId, workOrderId: orig.workOrderId, reversesDocId: orig.id,
+    purchaseInvoiceId: orig.purchaseInvoiceId, invoiceId: orig.invoiceId, workOrderId: orig.workOrderId, reversesDocId: orig.id, partnerId: orig.partnerId,
     note: opts.note ?? `Сторно на ${orig.number}`, createdBy: opts.createdBy,
     // obraten redosled: prvo se vrakja izlezot (kaj prenos), pa vlezot
     moves: moves.reverse().map((m) => ({ warehouseId: m.warehouseId, itemId: m.itemId, qty: new D(m.qty).neg(), unitCost: m.unitCost, value: new D(m.value).neg(), lotId: m.lotId })),

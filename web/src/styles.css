@@ -302,3 +302,14 @@ ul.plain { list-style: none; padding: 0; margin: 0; display: flex; flex-directio
 .tabs button.active { background: var(--ink); color: var(--paper); }
 .tabs button.active .muted { color: inherit; opacity: .7; }
 .menu .menu-sub { padding-left: 26px; font-size: .92em; }
+
+/* ------------------------------------------------ Денес (docs/12) */
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px 16px; text-decoration: none; color: inherit; display: block; }
+a.kpi:hover { border-color: var(--accent); }
+.kpi .k-label { font-size: 0.85rem; color: var(--muted); }
+.kpi .k-value { font-size: 1.5rem; font-weight: 600; line-height: 1.25; }
+.kpi .k-sub { font-size: 0.85rem; color: var(--ink-2); }
+.kpi.bad { border-left: 4px solid var(--err); } .kpi.warn { border-left: 4px solid var(--wait); } .kpi.good { border-left: 4px solid var(--ok); }
+.agent-banner { background: var(--err-bg); color: var(--err); padding: 8px 14px; border-radius: var(--r); margin-bottom: 14px; font-size: 0.9rem; }
+.hint { font-size: 0.8rem; color: var(--muted); }

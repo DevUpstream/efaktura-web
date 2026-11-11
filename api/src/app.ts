@@ -22,6 +22,10 @@ import { stockRoutes } from "./routes/stock.js";
 import { productionRoutes } from "./routes/production.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { recurringRoutes } from "./routes/recurring.js";
+import { dispatchRoutes } from "./routes/dispatch.js";
+import { receivableRoutes } from "./routes/receivables.js";
+import { todayRoutes } from "./routes/today.js";
+import { exportRoutes } from "./routes/export.js";
 
 export interface AppDeps {
   db: Db; version: string; logLevel?: string;
@@ -51,7 +55,8 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await app.register(rateLimit, { global: false });
   registerAuthContext(app, d.db);
 
-  app.get("/api/health", async (_req, reply) => {
+  // bez zapis vo dnevnikot: proverkata na Docker/Caddy/nadvoresniot monitor (na sekoi nekolku sekundi)
+  app.get("/api/health", { logLevel: "silent" }, async (_req, reply) => {
     try {
       await d.db.execute(sql`select 1`);
       return { status: "ok", version: d.version, db: "ok", time: new Date().toISOString() };
@@ -71,6 +76,10 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await productionRoutes(app, { db: d.db });
   await paymentRoutes(app, { db: d.db });
   await recurringRoutes(app, { db: d.db });
+  await dispatchRoutes(app, { db: d.db });
+  await receivableRoutes(app, { db: d.db });
+  await todayRoutes(app, { db: d.db });
+  await exportRoutes(app, { db: d.db });
   // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
   if (d.webDir && existsSync(d.webDir)) {
     await app.register(fastifyStatic, {

@@ -2,13 +2,14 @@
 import type { FastifyInstance } from "fastify";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
-import { invoiceLines, invoices, items, partners, vatRates, warehouses } from "../db/schema.js";
+import { invoiceLines, invoices, items, partners, stockDocs, vatRates, warehouses } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { calcLine, calcTotals } from "../domain/calc.js";
 import { issueInvoice } from "../domain/issue.js";
 import { renderInvoicePdf } from "../domain/pdf.js";
+import { assertDispatchesFree } from "../domain/dispatch.js";
 import { clients } from "../db/schema.js";
 import { assertClientAccess, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
@@ -23,6 +24,7 @@ const LineIn = z.object({
   discountPct: z.coerce.number().min(0).max(100).default(0),
   vatRateId: Id,
   priceSource: z.string().trim().max(80).optional().nullable(),
+  stockDocId: Id.optional().nullable(),   // stavka od ispratnica bez faktura (docs/12)
 });
 const DraftIn = z.object({
   partnerId: Id,
@@ -71,6 +73,12 @@ export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b:
     const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, itemIds)));
     if (own.length !== new Set(itemIds).size) throw new DomainError("validation", "Непознат артикл.", 422);
   }
+  // ispratnici (docs/12): samo vo faktura/korekcija, na istiot kupuvac, ne vo druga vazecka faktura
+  const docIds = [...new Set(b.lines.map((l) => l.stockDocId).filter((x): x is number => !!x))];
+  if (docIds.length) {
+    if (!["INV", "KR"].includes(b.docType)) throw new DomainError("validation", "Ставки од испратница може да има само во фактура.", 422);
+    await assertDispatchesFree(tx, clientId, b.partnerId, docIds, [invoiceId, ...(relatedId ? [relatedId] : [])]);
+  }
   await tx.delete(invoiceLines).where(eq(invoiceLines.invoiceId, invoiceId));
   const calc = [];
   for (const [i, l] of b.lines.entries()) {
@@ -81,6 +89,7 @@ export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b:
       invoiceId, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
       qty: String(sign * l.qty), unitPrice: String(l.unitPrice), discountPct: String(l.discountPct),
       vatRateId: rate.id, vatRatePct: rate.ratePct, netAmount: r.netAmount, vatAmount: r.vatAmount, priceSource: l.priceSource ?? null,
+      stockDocId: l.stockDocId ?? null,
     });
     calc.push({ ...r, vatRatePct: rate.ratePct });
   }
@@ -217,7 +226,7 @@ export async function invoiceRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const orig = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, o.id)).orderBy(asc(invoiceLines.lineNo));
     const copy = docType === "KZ" ? [] : orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit,
       qty: Math.abs(Number(l.qty)), unitPrice: Number(l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId,
-      priceSource: `Од ${o.number}` }));
+      priceSource: `Од ${o.number}`, ...(docType === "KR" ? { stockDocId: l.stockDocId } : {}) }));
     const b: Draft = { partnerId: o.partnerId, docType, issueDate: today(), supplyDate: o.supplyDate, dueDate: null,
       paymentMethod: o.paymentMethod, note: null, clauses: o.clauses, lines: copy,
       ...(docType === "KR" && o.advanceInvoiceId ? { advanceInvoiceId: o.advanceInvoiceId, advanceAmount: Number(o.advanceAmount) } : {}) };

@@ -202,7 +202,8 @@ export async function registryRoutes(app: FastifyInstance, { db }: { db: Db }) {
   });
 
   /* ----------------------------------------------------------------- agent */
-  app.get("/api/agent/registry-requests", async (req) => {
+  // agentot prashuva na sekoi 4 s: bez zapis vo dnevnikot (obrabotkata - POST - se zapishuva)
+  app.get("/api/agent/registry-requests", { logLevel: "silent" }, async (req) => {
     await requireAgent(db, req);
     return db.select({ id: registryRequests.id, edb: registryRequests.edb, sellerEdb: registryRequests.sellerEdb })
       .from(registryRequests).where(eq(registryRequests.status, "pending")).orderBy(asc(registryRequests.id)).limit(20);

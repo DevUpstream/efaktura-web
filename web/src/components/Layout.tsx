@@ -19,6 +19,14 @@ export function Layout() {
     window.addEventListener("followups-changed", get);
     return () => window.removeEventListener("followups-changed", get);
   }, [client?.id, crm, loc.pathname]);
+  // agentot kon UJP (docs/12): proverka na sekoja minuta; preporaka ako ne se javil 3 minuti
+  const [agent, setAgent] = useState<{ configured: boolean; ok: boolean; lastSeenAt: string | null } | null>(null);
+  useEffect(() => {
+    const get = () => api.get<{ agent: { configured: boolean; ok: boolean; lastSeenAt: string | null } }>("/api/status").then((r) => setAgent(r.agent), () => undefined);
+    void get();
+    const t = setInterval(get, 60_000);
+    return () => clearInterval(t);
+  }, []);
   if (!client) return <div className="center-card"><h1>Фирмата не е достапна</h1><p>Немате пристап или фирмата не постои.</p></div>;
 
   return (
@@ -27,7 +35,7 @@ export function Layout() {
         <div className="brand">е-Фактура</div>
         <label className="client-pick">
           <span className="sr-only">Фирма</span>
-          <select value={client.id} onChange={(e) => nav(`/c/${e.target.value}/invoices`)}>
+          <select value={client.id} onChange={(e) => nav(`/c/${e.target.value}/today`)}>
             {me!.clients!.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </label>
@@ -36,6 +44,7 @@ export function Layout() {
           <span className="seal-edb">ЕДБ<br />{client.edb}</span>
         </div>
         <nav className="menu">
+          <NavLink to={`/c/${client.id}/today`}>Денес</NavLink>
           <NavLink to={`/c/${client.id}/invoices`} end>Фактури</NavLink>
           {client.modules.includes("recurring") && <NavLink to={`/c/${client.id}/recurring`} className="menu-sub">Повторувачки</NavLink>}
           {client.modules.includes("incoming") && <NavLink to={`/c/${client.id}/purchases`}>Влезни фактури</NavLink>}
@@ -55,7 +64,12 @@ export function Layout() {
           <button className="link" onClick={logout}>Одјави се</button>
         </div>
       </aside>
-      <main className="main"><Outlet context={client} /></main>
+      <main className="main">
+        {agent?.configured && !agent.ok && <div className="agent-banner" role="status">
+          Агентот кон УЈП не работи{agent.lastSeenAt ? ` од ${new Date(agent.lastSeenAt).toLocaleString("mk-MK", { timeZone: "Europe/Skopje", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}.
+          Барањата кон УЈП чекаат. Проверете го компјутерот со агентот (вклучен, на интернет, задачата „eFaktura-Agent“).</div>}
+        <Outlet context={client} />
+      </main>
     </div>
   );
 }

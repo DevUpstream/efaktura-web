@@ -33,7 +33,8 @@ const StockLineIn = z.object({
   lotId: Id.optional().nullable(), lotNo: optText(50), expiryDate: Day.optional().nullable().or(z.literal("").transform(() => null)),
 });
 const StockDocIn = z.object({
-  kind: z.enum(["receipt", "writeoff", "inventory", "transfer"]), warehouseId: Id, toWarehouseId: Id.optional().nullable(),
+  kind: z.enum(["receipt", "issue", "writeoff", "inventory", "transfer"]), warehouseId: Id, toWarehouseId: Id.optional().nullable(),
+  partnerId: Id.optional().nullable(),   // ispratnica bez faktura (docs/12): zadolzitelen kupuvac
   docDate: Day, note: optText(1000), lines: z.array(StockLineIn).min(1).max(500),
 });
 
@@ -320,6 +321,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (q.kind) conds.push(eq(stockDocs.kind, q.kind));
     const docs = await db.select({ id: stockDocs.id, number: stockDocs.number, kind: stockDocs.kind, docDate: stockDocs.docDate, note: stockDocs.note,
       warehouseName: warehouses.name, reversesDocId: stockDocs.reversesDocId, invoiceId: stockDocs.invoiceId, purchaseInvoiceId: stockDocs.purchaseInvoiceId,
+      partnerName: sql<string | null>`(select p.name from partners p where p.id = ${stockDocs.partnerId})`,
       value: sql<string>`(select coalesce(sum(m.value), 0) from stock_moves m where m.doc_id = ${stockDocs.id} and m.warehouse_id = ${stockDocs.warehouseId})`,
       lines: sql<number>`(select count(*)::int from stock_moves m where m.doc_id = ${stockDocs.id})` })
       .from(stockDocs).innerJoin(warehouses, eq(warehouses.id, stockDocs.warehouseId)).where(and(...conds))
@@ -338,7 +340,10 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       .leftJoin(lots, eq(lots.id, stockMoves.lotId)).where(eq(stockMoves.docId, doc.d.id)).orderBy(asc(stockMoves.id));
     const [rev] = await db.select({ id: stockDocs.id, number: stockDocs.number }).from(stockDocs).where(eq(stockDocs.reversesDocId, doc.d.id));
     const [orig] = doc.d.reversesDocId ? await db.select({ id: stockDocs.id, number: stockDocs.number }).from(stockDocs).where(eq(stockDocs.id, doc.d.reversesDocId)) : [];
-    return { ...doc.d, author: doc.author, moves, reversedBy: rev ?? null, reverses: orig ?? null };
+    const [partner] = doc.d.partnerId ? await db.select({ id: partners.id, name: partners.name }).from(partners).where(eq(partners.id, doc.d.partnerId)) : [];
+    const billedBy = await db.execute(sql`select distinct i.id, i.number, i.status from invoice_lines l join invoices i on i.id = l.invoice_id
+      where l.stock_doc_id = ${doc.d.id} and i.status not in ('cancelled_draft','voided','rejected')`).then((x) => (x as unknown as { rows?: unknown[] }).rows ?? (x as unknown as unknown[]));
+    return { ...doc.d, author: doc.author, moves, reversedBy: rev ?? null, reverses: orig ?? null, partner: partner ?? null, billedBy };
   });
 
   /** Racni dokumenti: pocetna sostojba / priemnica, otpis, popis (izbroena kolicina), prenos. */
@@ -347,6 +352,11 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const b = StockDocIn.parse(req.body);
     await ownWarehouse(clientId, b.warehouseId);
     if (b.kind === "transfer") { if (!b.toWarehouseId) throw new DomainError("validation", "Изберете магацин во кој се пренесува.", 422); await ownWarehouse(clientId, b.toWarehouseId); }
+    if (b.kind === "issue") {
+      if (!b.partnerId) throw new DomainError("validation", "Испратница: изберете купувач.", 422);
+      const [p] = await db.select({ isActive: partners.isActive }).from(partners).where(and(eq(partners.id, b.partnerId), eq(partners.clientId, clientId)));
+      if (!p?.isActive) throw new DomainError("validation", "Купувачот не постои или е исклучен.", 422);
+    }
     const r = await db.transaction(async (tx0) => {
       const tx = tx0 as unknown as Db;
       const moves: MoveIn[] = [];
@@ -356,7 +366,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
           if (!(l.qty > 0)) throw new DomainError("validation", `Ставка ${i + 1}: количината мора да е поголема од 0.`, 422);
           if (l.unitCost === undefined) throw new DomainError("validation", `Ставка ${i + 1}: внесете набавна цена.`, 422);
           moves.push({ ...base, qty: l.qty, unitCost: l.unitCost, lotNo: l.lotNo, expiryDate: l.expiryDate });
-        } else if (b.kind === "writeoff" || b.kind === "transfer") {
+        } else if (b.kind === "writeoff" || b.kind === "transfer" || b.kind === "issue") {
           if (!(l.qty > 0)) throw new DomainError("validation", `Ставка ${i + 1}: количината мора да е поголема од 0.`, 422);
           moves.push({ ...base, qty: -l.qty });
         } else {
@@ -378,7 +388,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       }
       if (!moves.length) throw new DomainError("validation", "Нема разлика меѓу пописот и книжената залиха.", 422);
       return postStockDoc(tx, { clientId, kind: b.kind, warehouseId: b.warehouseId, toWarehouseId: b.toWarehouseId ?? null, docDate: b.docDate,
-        note: b.note, createdBy: u.id, moves });
+        note: b.note, createdBy: u.id, moves, partnerId: b.kind === "issue" ? b.partnerId : null });
     });
     await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "stock_doc", entityId: r.doc.id, action: "create", changes: { number: r.doc.number, kind: b.kind } });
     return reply.status(201).send({ id: r.doc.id, number: r.doc.number, warnings: r.warnings });
@@ -391,6 +401,9 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const [d] = await db.select().from(stockDocs).where(and(eq(stockDocs.id, id!), eq(stockDocs.clientId, clientId)));
     if (!d) throw new DomainError("not_found", "Документот не постои.", 404);
     if (d.invoiceId || d.purchaseInvoiceId) throw new DomainError("validation", "Документот е од фактура: сторнирајте ја фактурата.", 422);
+    const [billed] = await db.execute(sql`select i.number from invoice_lines l join invoices i on i.id = l.invoice_id
+      where l.stock_doc_id = ${d.id} and i.status not in ('cancelled_draft','voided','rejected') limit 1`).then((x) => (x as unknown as { rows?: { number: string | null }[] }).rows ?? (x as unknown as { number: string | null }[]));
+    if (billed) throw new DomainError("validation", `Испратницата е во фактура ${billed.number ?? "(нацрт)"}: прво откажете или сторнирајте ја фактурата.`, 422);
     const r = await db.transaction(async (tx) => reverseStockDoc(tx as unknown as Db, d.id, { docDate: date, createdBy: u.id }));
     await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "stock_doc", entityId: d.id, action: "reverse", changes: { by: r.doc.number } });
     return { id: r.doc.id, number: r.doc.number, warnings: r.warnings };

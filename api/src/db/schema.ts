@@ -366,7 +366,10 @@ export const invoiceLines = pgTable("invoice_lines", {
   netAmount: amount4("net_amount").notNull(),
   vatAmount: amount4("vat_amount").notNull(),
   priceSource: varchar("price_source", { length: 80 }),
+  /** Stavka od ispratnica bez faktura (docs/12): zalihata e vekje izdadena so ispratnicata -> pri izdavanje ne se izdava povtorno. */
+  stockDocId: integer("stock_doc_id").references(() => stockDocs.id, { onDelete: "restrict" }),
 }, (t) => [
+  index("invoice_lines_stock_doc_ix").on(t.stockDocId).where(sql`${t.stockDocId} is not null`),
   uniqueIndex("invoice_lines_no_uq").on(t.invoiceId, t.lineNo),
   index("invoice_lines_item_ix").on(t.itemId),
   check("invoice_lines_discount_ck", sql`${t.discountPct} >= 0 and ${t.discountPct} <= 100`),
@@ -662,10 +665,13 @@ export const stockDocs = pgTable("stock_docs", {
   invoiceId: integer("invoice_id").references(() => invoices.id, { onDelete: "restrict" }),
   workOrderId: integer("work_order_id"),  // FK vo 0008
   reversesDocId: integer("reverses_doc_id"),
+  /** Ispratnica bez faktura (docs/12): na koj kupuvac e isporacana stokata; fakturata podocna (invoice_lines.stock_doc_id). */
+  partnerId: integer("partner_id").references(() => partners.id, { onDelete: "restrict" }),
   note: text("note"),
   createdBy: integer("created_by").references(() => users.id),
   createdAt: created(),
 }, (t) => [
+  index("stock_docs_partner_ix").on(t.clientId, t.partnerId).where(sql`${t.partnerId} is not null`),
   uniqueIndex("stock_docs_seq_uq").on(t.clientId, t.kind, t.year, t.seqNo),
   uniqueIndex("stock_docs_reverses_uq").on(t.reversesDocId).where(sql`${t.reversesDocId} is not null`),
   index("stock_docs_client_ix").on(t.clientId, t.docDate),
@@ -908,3 +914,42 @@ export const partnerAccounts = pgTable("partner_accounts", {
   source: varchar("source", { length: 10 }).notNull().default("learned"),   // learned | manual
   createdAt: created(),
 }, (t) => [uniqueIndex("partner_accounts_uq").on(t.clientId, t.account)]);
+
+
+/* ------------------------------------------- kompenzacii i opomeni (docs/12) */
+
+/** Izjava za kompenzacija so partner: nashe pobaruvanje (izlezni) = nasha obvrska (vlezni). Dve plakjanja so nacin "compensation". */
+export const compensations = pgTable("compensations", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  year: smallint("year").notNull(),
+  seqNo: integer("seq_no").notNull(),
+  number: varchar("number", { length: 30 }).notNull(),
+  docDate: date("doc_date").notNull(),
+  amount: money("amount").notNull(),
+  inPaymentId: integer("in_payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  outPaymentId: integer("out_payment_id").notNull().references(() => payments.id, { onDelete: "restrict" }),
+  note: text("note"),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+  voidedAt: ts("voided_at"),
+  voidReason: text("void_reason"),
+}, (t) => [
+  uniqueIndex("compensations_seq_uq").on(t.clientId, t.year, t.seqNo),
+  index("compensations_partner_ix").on(t.clientId, t.partnerId),
+  check("compensations_amount_ck", sql`${t.amount} > 0`),
+]);
+
+/** Ispratena opomena (se pamti za nivoto i istorijata). */
+export const dunningLetters = pgTable("dunning_letters", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  partnerId: integer("partner_id").notNull().references(() => partners.id, { onDelete: "restrict" }),
+  docDate: date("doc_date").notNull(),
+  level: smallint("level").notNull(),
+  amount: money("amount").notNull(),
+  items: jsonb("items").$type<{ id: number; number: string; dueDate: string | null; remaining: string; daysOverdue: number }[]>().notNull(),
+  createdBy: integer("created_by").references(() => users.id),
+  createdAt: created(),
+}, (t) => [index("dunning_partner_ix").on(t.clientId, t.partnerId, t.docDate), check("dunning_level_ck", sql`${t.level} between 1 and 3`)]);

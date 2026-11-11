@@ -17,6 +17,9 @@ import { PurchaseEditor, Purchases } from "./pages/Purchases";
 import { BankExpenses, OpenItems, PaymentsList, Statements, StatementView } from "./pages/Payments";
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
 import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
+import { Today } from "./pages/Today";
+import { Dispatches } from "./pages/Dispatches";
+import { Compensations, Dunning, Ios } from "./pages/Receivables";
 
 function Gate() {
   const { me } = useSession();
@@ -28,6 +31,7 @@ function Gate() {
   return (
     <Routes>
       <Route path="/c/:clientId" element={<Layout />}>
+        <Route path="today" element={<Today />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceEditor />} />
         <Route path="invoices/:id" element={<InvoiceEditor />} />
@@ -41,6 +45,7 @@ function Gate() {
         <Route path="stock" element={<Stock />} />
         <Route path="stock/card/:itemId" element={<StockCard />} />
         <Route path="stock/docs" element={<StockDocs />} />
+        <Route path="stock/dispatches" element={<Dispatches />} />
         <Route path="stock/docs/new" element={<StockDocNew />} />
         <Route path="stock/docs/:docId" element={<StockDocView />} />
         <Route path="payments" element={<OpenItems direction="in" />} />
@@ -49,6 +54,9 @@ function Gate() {
         <Route path="payments/statements" element={<Statements />} />
         <Route path="payments/statements/:id" element={<StatementView />} />
         <Route path="payments/expenses" element={<BankExpenses />} />
+        <Route path="payments/ios" element={<Ios />} />
+        <Route path="payments/compensations" element={<Compensations />} />
+        <Route path="payments/dunning" element={<Dunning />} />
         <Route path="production" element={<WorkOrders />} />
         <Route path="production/new" element={<WorkOrderEditor />} />
         <Route path="production/:id" element={<WorkOrderEditor />} />
@@ -58,9 +66,9 @@ function Gate() {
         <Route path="admin" element={<Admin />} />
         <Route path="settings" element={<ClientSettings />} />
         <Route path="clients" element={<Clients />} />
-        <Route index element={<Navigate to="invoices" replace />} />
+        <Route index element={<Navigate to="today" replace />} />
       </Route>
-      <Route path="*" element={first ? <Navigate to={`/c/${first.id}/invoices`} replace /> : <NoClients />} />
+      <Route path="*" element={first ? <Navigate to={`/c/${first.id}/today`} replace /> : <NoClients />} />
     </Routes>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { api, ApiError, type ClientRef, type Item, type Warehouse } from "../api";
+import { api, ApiError, type ClientRef, type Item, type Partner, type Warehouse } from "../api";
 import { date, ITEM_TYPE, money, qtyFmt, STOCK_KIND, STOCK_TYPES, today } from "../format";
 
 interface StockRow { warehouseId: number; warehouseName: string; itemId: number; code: string; name: string; type: string; unit: string; trackLots: boolean;
@@ -13,8 +13,8 @@ function useWarehouses(clientId: number) {
   useEffect(() => { api.get<Warehouse[]>(`/api/clients/${clientId}/warehouses`).then(setW); }, [clientId]);
   return w;
 }
-function StockTabs({ clientId }: { clientId: number }) {
-  return <nav className="seg tabs" aria-label="Магацин"><NavLink to={`/c/${clientId}/stock`} end>Залиха</NavLink><NavLink to={`/c/${clientId}/stock/docs`}>Документи</NavLink></nav>;
+export function StockTabs({ clientId }: { clientId: number }) {
+  return <nav className="seg tabs" aria-label="Магацин"><NavLink to={`/c/${clientId}/stock`} end>Залиха</NavLink><NavLink to={`/c/${clientId}/stock/docs`}>Документи</NavLink><NavLink to={`/c/${clientId}/stock/dispatches`}>Испратници</NavLink></nav>;
 }
 const soon = (d: string | null) => !!d && d <= new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
 
@@ -130,6 +130,7 @@ export function StockDocs() {
 
 interface DocDetail { id: number; number: string; kind: string; docDate: string; note: string | null; author: string | null; invoiceId: number | null; purchaseInvoiceId: number | null;
   reversedBy: { id: number; number: string } | null; reverses: { id: number; number: string } | null;
+  partner: { id: number; name: string } | null; billedBy: { id: number; number: string | null; status: string }[];
   moves: { id: number; code: string; name: string; unit: string; warehouseName: string; lotNo: string | null; expiryDate: string | null; qty: string; unitCost: string; value: string }[] }
 export function StockDocView() {
   const client = useOutletContext<ClientRef>();
@@ -141,7 +142,7 @@ export function StockDocView() {
   useEffect(() => { void load(); }, [client.id, docId]);
   if (err && !d) return <p className="alert">{err}</p>;
   if (!d) return <p className="muted">Се вчитува…</p>;
-  const manual = !d.invoiceId && !d.purchaseInvoiceId && !d.reverses && !d.reversedBy;
+  const manual = !d.invoiceId && !d.purchaseInvoiceId && !d.reverses && !d.reversedBy && !d.billedBy?.length;
   async function reverse() {
     try { const r = await api.post<{ id: number }>(`/api/clients/${client.id}/stock-docs/${d!.id}/reverse`, { date: today() }); nav(`../${r.id}`, { relative: "path" }); }
     catch (e) { setErr((e as ApiError).message); }
@@ -151,7 +152,12 @@ export function StockDocView() {
     <>
       <Link className="back" to=".." relative="path">← Документи</Link>
       <header className="page-head"><div><h1>{d.number}</h1><p className="muted small">{STOCK_KIND[d.kind]} · {date(d.docDate)}{d.author ? ` · ${d.author}` : ""}</p></div>
-        {manual && <button className="btn" onClick={reverse}>Сторнирај</button>}</header>
+        <div className="row-actions"><a className="btn" href={`/api/clients/${client.id}/stock-docs/${d.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>
+        {manual && <button className="btn" onClick={reverse}>Сторнирај</button>}</div></header>
+      {d.partner && <p>Купувач: <Link to={`../../../partners/${d.partner.id}`} relative="path">{d.partner.name}</Link>
+        {d.kind === "issue" && !d.reversedBy && (d.billedBy?.length
+          ? <> · фактурирана во {d.billedBy.map((b) => <Link key={b.id} to={`../../../invoices/${b.id}`} relative="path">{b.number ?? "нацрт"}</Link>)}</>
+          : <> · <span className="chip wait">не е фактурирана</span> <Link to="../../dispatches" relative="path">Направи фактура</Link></>)}</p>}
       {err && <p className="alert">{err}</p>}
       {d.note && <p>{d.note}</p>}
       <p className="small">
@@ -175,6 +181,7 @@ export function StockDocView() {
 interface NLine { itemId: number | ""; qty: string; unitCost: string; lotNo: string; expiryDate: string; lotId: number | "" }
 const KIND_HELP: Record<string, string> = {
   receipt: "Прием без влезна фактура, на пр. почетна состојба. Внесете набавна цена.",
+  issue: "Испратница без фактура (реверс, консигнација, испорака пред фактура). Стоката излегува веднаш; фактурата ја правите подоцна од „Испратници“.",
   writeoff: "Отпис на расипана, исчезната или потрошена стока. Излегува по просечна набавна цена.",
   inventory: "Внесете ја изброената количина. Се книжи само разликата (вишок или кусок).",
   transfer: "Пренос меѓу магацини по истата набавна цена (и лот).",
@@ -185,7 +192,10 @@ export function StockDocNew() {
   const whs = useWarehouses(client.id).filter((w) => w.isActive);
   const [itemsList, setItems] = useState<Item[]>([]);
   const [stock, setStock] = useState<StockRow[]>([]);
-  const [kind, setKind] = useState("receipt");
+  const sp = new URLSearchParams(window.location.search);   // ?kind=issue (od „Испратници“)
+  const [kind, setKind] = useState(sp.get("kind") === "issue" ? "issue" : "receipt");
+  const [partners, setPartners] = useState<Partner[]>([]);
+  const [partnerId, setPartnerId] = useState<number | "">("");
   const [wh, setWh] = useState<number | "">("");
   const [toWh, setToWh] = useState<number | "">("");
   const [docDate, setDocDate] = useState(today());
@@ -196,6 +206,7 @@ export function StockDocNew() {
   useEffect(() => {
     api.get<Item[]>(`/api/clients/${client.id}/items`).then((x) => setItems(x.filter((i) => i.isActive && STOCK_TYPES.includes(i.type))));
     api.get<StockRow[]>(`/api/clients/${client.id}/stock`).then(setStock);
+    api.get<Partner[]>(`/api/clients/${client.id}/partners`).then((p) => setPartners(p.filter((x) => x.isActive)));
   }, [client.id]);
   useEffect(() => { if (wh === "" && whs.length) setWh(whs.find((w) => w.isDefault)?.id ?? whs[0]!.id); }, [whs.length]);
   const set = (i: number, k: keyof NLine, v: unknown) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
@@ -204,7 +215,7 @@ export function StockDocNew() {
     setBusy(true); setErr(null);
     try {
       const r = await api.post<{ id: number; warnings: string[] }>(`/api/clients/${client.id}/stock-docs`, {
-        kind, warehouseId: wh, toWarehouseId: kind === "transfer" ? toWh || null : null, docDate, note,
+        kind, warehouseId: wh, toWarehouseId: kind === "transfer" ? toWh || null : null, docDate, note, partnerId: kind === "issue" ? partnerId || null : null,
         lines: lines.filter((l) => l.itemId).map((l) => ({ itemId: l.itemId, qty: Number(l.qty.replace(",", ".")),
           ...(l.unitCost !== "" ? { unitCost: Number(l.unitCost.replace(",", ".")) } : {}), lotNo: l.lotNo || null, expiryDate: l.expiryDate || null, lotId: l.lotId || null })) });
       nav(`../${r.id}`, { relative: "path" });
@@ -215,13 +226,15 @@ export function StockDocNew() {
       <Link className="back" to=".." relative="path">← Документи</Link>
       <header className="page-head"><h1>Нов магацински документ</h1></header>
       <section className="doc">
-        <div className="seg" role="tablist" aria-label="Вид">{["receipt", "writeoff", "inventory", ...(whs.length > 1 ? ["transfer"] : [])].map((k) => (
+        <div className="seg" role="tablist" aria-label="Вид">{["receipt", "issue", "writeoff", "inventory", ...(whs.length > 1 ? ["transfer"] : [])].map((k) => (
           <button key={k} role="tab" aria-selected={kind === k} onClick={() => setKind(k)}>{k === "receipt" ? "Приемница / почетна состојба" : STOCK_KIND[k]}</button>))}</div>
         <p className="muted small">{KIND_HELP[kind]}</p>
         <div className="doc-head">
           {whs.length > 1 && <label>{kind === "transfer" ? "Од магацин" : "Магацин"}<select value={wh} onChange={(e) => setWh(Number(e.target.value))}>{whs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
           {kind === "transfer" && <label>Во магацин<select value={toWh} onChange={(e) => setToWh(e.target.value ? Number(e.target.value) : "")}><option value="">— изберете —</option>
             {whs.filter((w) => w.id !== wh).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
+          {kind === "issue" && <label className="span2">Купувач<select value={partnerId} onChange={(e) => setPartnerId(e.target.value ? Number(e.target.value) : "")} required>
+            <option value="">— изберете —</option>{partners.filter((p) => p.isCustomer || !p.isSupplier).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
           <label>Датум<input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} /></label>
           <label className="span2">Опис<input value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === "writeoff" ? "Причина за отпис" : ""} /></label>
         </div>
@@ -253,7 +266,7 @@ export function StockDocNew() {
         <button className="btn add-line" onClick={() => setLines([...lines, { itemId: "", qty: "", unitCost: "", lotNo: "", expiryDate: "", lotId: "" }])}>Додај ставка</button>
       </section>
       {err && <p className="alert" role="alert">{err}</p>}
-      <div className="actions"><button className="btn btn-primary" disabled={busy || !lines.some((l) => l.itemId)} onClick={submit}>Книжи {kind === "receipt" ? "приемница" : STOCK_KIND[kind]!.toLowerCase()}</button>
+      <div className="actions"><button className="btn btn-primary" disabled={busy || !lines.some((l) => l.itemId) || (kind === "issue" && !partnerId)} onClick={submit}>Книжи {kind === "receipt" ? "приемница" : STOCK_KIND[kind]!.toLowerCase()}</button>
         <span className="muted small">Книжен документ не се менува. Грешка се исправа со сторно.</span></div>
     </>
   );

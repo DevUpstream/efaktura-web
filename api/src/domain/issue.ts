@@ -10,6 +10,7 @@ import { clients, counters, invoiceLines, invoices, items, partners, STOCK_ITEM_
 import { defaultWarehouse, postStockDoc, reverseStockDoc } from "./stock.js";
 import type { Db } from "../db/types.js";
 import { calcTotals, round } from "./calc.js";
+import { assertDispatchesFree } from "./dispatch.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
 
@@ -40,6 +41,12 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
     const [partner] = await tx.select().from(partners).where(eq(partners.id, inv.partnerId));
     if (!client?.isActive) errors.push("Фирмата не е активна.");
     if (!partner?.isActive) errors.push("Купувачот не е активен.");
+    // ispratnici (docs/12): povtorna proverka pri izdavanje (nekoj mozel da ja stavi vo druga faktura vo megjuvreme)
+    const docIds = [...new Set(lines.map((l) => l.stockDocId).filter((x): x is number => !!x))];
+    if (docIds.length) {
+      try { await assertDispatchesFree(tx as unknown as Db, inv.clientId, inv.partnerId, docIds, [inv.id, ...(inv.relatedInvoiceId ? [inv.relatedInvoiceId] : [])]); }
+      catch (e) { errors.push((e as Error).message); }
+    }
 
     // Povrzana faktura (storno, odobrenie, zadolzuvanje, korekcija)
     let related: typeof inv | undefined;
@@ -136,7 +143,8 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
         const ids = [...new Set(lines.map((l) => l.itemId).filter((x): x is number => !!x))];
         const its = ids.length ? await stx.select().from(items).where(inArray(items.id, ids)) : [];
         const stockIds = new Set(its.filter((i) => (STOCK_ITEM_TYPES as readonly string[]).includes(i.type)).map((i) => i.id));
-        const moves = lines.filter((l) => l.itemId && stockIds.has(l.itemId));
+        // stavkite od ispratnica (docs/12) se vekje izdadeni od magacinot -> ne se izdavaat povtorno
+        const moves = lines.filter((l) => l.itemId && stockIds.has(l.itemId) && !l.stockDocId);
         if (moves.length) {
           const wh = inv.warehouseId ?? (await defaultWarehouse(stx, inv.clientId)).id;
           const r = await postStockDoc(stx, { clientId: inv.clientId, kind: "issue", warehouseId: wh, docDate, invoiceId: inv.id,
