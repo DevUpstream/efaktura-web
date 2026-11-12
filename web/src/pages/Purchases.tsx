@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
-import { api, ApiError, type ClientRef, type Item, type Partner, type VatRate, type Warehouse } from "../api";
+import { api, ApiError, type ClientRef, type CostCenter, type Item, type Partner, type VatRate, type Warehouse } from "../api";
 import { date, money, STOCK_KIND, STOCK_TYPES, today } from "../format";
 import { useYears, YearSelect } from "../components/YearSelect";
 
@@ -9,8 +9,8 @@ interface PurchaseRow { id: number; number: string | null; status: "draft" | "po
   issueDate: string; receivedDate: string; dueDate: string | null; netTotal: string; vatTotal: string; grossTotal: string; source?: string; fileCount?: number }
 interface PFile { id: number; fileName: string; contentType: string; size: number; createdAt: string }
 interface PLine { itemId: number | null; description: string; unit: string; qty: string; unitPrice: string; discountPct: string; vatRateId: number;
-  allocate: boolean; lotNo: string; expiryDate: string; unitCost?: string | null }
-interface Purchase extends PurchaseRow { partnerId: number; warehouseId: number | null; note: string | null; version: number; voidReason: string | null;
+  allocate: boolean; lotNo: string; expiryDate: string; unitCost?: string | null; id?: number; costCenterId?: number | null }
+interface Purchase extends PurchaseRow { partnerId: number; warehouseId: number | null; costCenterId?: number | null; note: string | null; version: number; voidReason: string | null;
   fixedAmounts: boolean; payableAmount: string | null; turnoverDate: string | null; files: PFile[];
   lines: (PLine & { qty: string; netAmount: string; vatAmount: string })[]; stockDocs: { id: number; number: string; kind: string; reversesDocId: number | null }[] }
 
@@ -142,7 +142,14 @@ export function PurchaseEditor() {
   const [rates, setRates] = useState<VatRate[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [allPartners, setAllPartners] = useState(false);
-  const [head, setHead] = useState({ partnerId: "" as number | "", supplierNumber: "", issueDate: today(), receivedDate: today(), dueDate: "", warehouseId: "" as number | "", note: "" });
+  const [head, setHead] = useState({ partnerId: "" as number | "", supplierNumber: "", issueDate: today(), receivedDate: today(), dueDate: "", warehouseId: "" as number | "", note: "",
+    costCenterId: "" as number | "" });
+  // trosковni mesta (docs/14)
+  const ccMode = client.costCenterMode ?? "off";
+  const [ccs, setCcs] = useState<CostCenter[]>([]);
+  const [ccLines, setCcLines] = useState(false);
+  const [ccDirty, setCcDirty] = useState(false);
+  useEffect(() => { if (ccMode !== "off") api.get<CostCenter[]>(`/api/clients/${client.id}/cost-centers`).then(setCcs); }, [client.id, ccMode]);
   const [lines, setLines] = useState<PLine[]>([]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -153,7 +160,8 @@ export function PurchaseEditor() {
     const x = await api.get<Purchase>(`/api/clients/${client.id}/purchases/${pid}`);
     setP(x);
     setHead({ partnerId: x.partnerId, supplierNumber: x.supplierNumber, issueDate: x.issueDate, receivedDate: x.receivedDate, dueDate: x.dueDate ?? "",
-      warehouseId: x.warehouseId ?? "", note: x.note ?? "" });
+      warehouseId: x.warehouseId ?? "", note: x.note ?? "", costCenterId: x.costCenterId ?? "" });
+    setCcLines(x.lines.some((l) => l.costCenterId)); setCcDirty(false);
     setLines(x.lines.map((l) => ({ ...l, qty: String(Number(l.qty)), unitPrice: String(Number(l.unitPrice)), discountPct: String(Number(l.discountPct)),
       lotNo: l.lotNo ?? "", expiryDate: l.expiryDate ?? "" })));
   }
@@ -185,7 +193,8 @@ export function PurchaseEditor() {
   async function save(): Promise<number | null> {
     if (!head.partnerId) { setMsg({ kind: "err", text: "Изберете добавувач." }); return null; }
     const body = { ...head, partnerId: Number(head.partnerId), warehouseId: head.warehouseId || null, dueDate: head.dueDate || null, version: p?.version,
-      lines: lines.filter((l) => l.description.trim()).map((l) => ({ ...l, qty: Number(String(l.qty).replace(",", ".")), unitPrice: Number(String(l.unitPrice).replace(",", ".")),
+      costCenterId: head.costCenterId || null,
+      lines: lines.filter((l) => l.description.trim()).map((l) => ({ ...l, costCenterId: ccLines ? l.costCenterId ?? null : null, qty: Number(String(l.qty).replace(",", ".")), unitPrice: Number(String(l.unitPrice).replace(",", ".")),
         discountPct: Number(l.discountPct) || 0, lotNo: l.lotNo || null, expiryDate: l.expiryDate || null })) };
     setBusy(true); setMsg(null);
     try {
@@ -194,6 +203,16 @@ export function PurchaseEditor() {
       nav(`../${r.id}`, { relative: "path", replace: true });
       return r.id;
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); return null; } finally { setBusy(false); }
+  }
+  /** Po knizenje: samo TM (docs/14), so revizija. */
+  async function saveCostCenter() {
+    if (!p) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.post(`/api/clients/${client.id}/purchases/${p.id}/cost-center`, { costCenterId: head.costCenterId || null,
+        lines: lines.filter((l) => l.id).map((l) => ({ id: l.id!, costCenterId: ccLines ? l.costCenterId ?? null : null })) });
+      setCcDirty(false); setMsg({ kind: "ok", text: "Трошковното место е зачувано." });
+    } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } finally { setBusy(false); }
   }
   async function post() {
     const pid = await save(); if (!pid) return;
@@ -235,6 +254,14 @@ export function PurchaseEditor() {
           {stock && whs.filter((w) => w.isActive).length > 1 && <label>Магацин{editable ? <select value={head.warehouseId} onChange={(e) => setHead({ ...head, warehouseId: e.target.value ? Number(e.target.value) : "" })}>
             <option value="">Главен</option>{whs.filter((w) => w.isActive && !w.isDefault).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
             : <output>{whs.find((w) => w.id === p?.warehouseId)?.name ?? "Главен"}</output>}</label>}
+          {ccMode !== "off" && <label>Трошковно место{ccMode === "required" ? " *" : ""}
+            <select value={head.costCenterId} disabled={p?.status === "voided"} onChange={(e) => { setHead({ ...head, costCenterId: e.target.value ? Number(e.target.value) : "" }); if (!editable) setCcDirty(true); }}>
+              <option value="">{ccLines ? "— по ставки —" : "— без —"}</option>
+              {ccs.filter((c) => c.isActive || c.id === head.costCenterId).map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select>
+            
+            {!editable && ccDirty && <button className="btn btn-small" onClick={saveCostCenter}>Зачувај ТМ</button>}</label>}
+          {ccMode !== "off" && <label className="check small cc-lines"><input type="checkbox" checked={ccLines} disabled={p?.status === "voided"} onChange={(e) => { setCcLines(e.target.checked); if (!editable) setCcDirty(true);
+              if (!e.target.checked) setLines((ls) => ls.map((l) => ({ ...l, costCenterId: null }))); }} /> по ставки</label>}
         </div>
 
         <div className="table-wrap"><table className="grid lines">
@@ -260,6 +287,10 @@ export function PurchaseEditor() {
                     ? <label className="check small"><input type="checkbox" checked={l.allocate} onChange={(e) => set(i, "allocate", e.target.checked)} /> Зависен трошок (се распоредува во набавната цена)</label>
                     : l.allocate && <span className="src">зависен трошок</span>)}
                   {!editable && l.unitCost && <span className="src">набавна цена {money(l.unitCost)}</span>}
+                  {ccMode !== "off" && ccLines && <select className="small" value={l.costCenterId ?? ""} disabled={p?.status === "voided"} aria-label={`Трошковно место, ставка ${i + 1}`}
+                    onChange={(e) => { set(i, "costCenterId", e.target.value ? Number(e.target.value) : null); if (!editable) setCcDirty(true); }}>
+                    <option value="">ТМ: од фактурата</option>
+                    {ccs.filter((c) => c.isActive || c.id === l.costCenterId).map((c) => <option key={c.id} value={c.id}>ТМ: {c.code} · {c.name}</option>)}</select>}
                 </td>
                 <td className="c-unit">{free ? <input value={l.unit} onChange={(e) => set(i, "unit", e.target.value)} /> : l.unit}</td>
                 <td className="c-qty num">{free ? <input inputMode="decimal" value={l.qty} onChange={(e) => set(i, "qty", e.target.value)} /> : Number(l.qty)}</td>

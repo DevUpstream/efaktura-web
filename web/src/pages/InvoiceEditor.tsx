@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
-import { api, ApiError, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
+import { api, ApiError, type CostCenter, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { GRADE, GradeChip, useScore } from "../components/Score";
 import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
 import { RecurringForm } from "./Recurring";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
-  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | "" }
+  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | ""; costCenterId: number | "" }
 interface Reason { code: string; name: string; kind: "void" | "correction" }
 interface Advance { id: number; number: string; issueDate: string; grossTotal: string; remaining: string }
 const DERIVED: DocType[] = ["ST", "OD", "KZ", "KR"];
@@ -32,7 +32,7 @@ export function InvoiceEditor() {
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
   const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: new URLSearchParams(window.location.search).get("type") === "PF" ? "PF" : "INV", issueDate: today(), supplyDate: today(),
-    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "" });
+    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "", costCenterId: "" });
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
   useEffect(() => { if (client.modules.includes("warehouse")) api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs); else setWhs([]); }, [client.id]);
@@ -43,6 +43,12 @@ export function InvoiceEditor() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirmIssue, setConfirmIssue] = useState(false);
   const [recurOpen, setRecurOpen] = useState(false);
+  // trosковni mesta (docs/14)
+  const ccMode = client.costCenterMode ?? "off";
+  const [ccs, setCcs] = useState<CostCenter[]>([]);
+  const [ccLines, setCcLines] = useState(false);
+  const [ccDirty, setCcDirty] = useState(false);
+  useEffect(() => { if (ccMode !== "off") api.get<CostCenter[]>(`/api/clients/${client.id}/cost-centers`).then(setCcs); }, [client.id, ccMode]);
 
   useEffect(() => {
     Promise.all([
@@ -55,8 +61,9 @@ export function InvoiceEditor() {
         setHead({ partnerId: i.partnerId, docType: i.docType, issueDate: i.issueDate,
           supplyDate: i.supplyDate ?? i.issueDate, dueDate: i.dueDate ?? "", paymentMethod: i.paymentMethod, note: i.note ?? "",
           reason: i.correctionReason ?? "", voidCode: i.voidReasonCode ?? "", corrCode: i.correctionReasonCode ?? "",
-          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "" });
+          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "", costCenterId: i.costCenterId ?? "" });
         setLines(i.lines.map(toEdit));
+        setCcLines(i.lines.some((l) => l.costCenterId));
       } else {
         // ?item=ID (od „Артикли“): prva stavka so toj artikl i negovata standardna cena
         const pre = it.find((x) => x.id === Number(new URLSearchParams(window.location.search).get("item")) && x.isActive);
@@ -100,17 +107,29 @@ export function InvoiceEditor() {
     }
   }
 
+  /** Po izdavanje: samo TM (docs/14), so revizija. */
+  async function saveCostCenter() {
+    if (!inv) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.post(`/api/invoices/${inv.id}/cost-center`, { costCenterId: head.costCenterId || null,
+        lines: lines.filter((l) => l.id).map((l) => ({ id: l.id!, costCenterId: ccLines ? l.costCenterId ?? null : null })) });
+      setCcDirty(false); setMsg({ kind: "ok", text: "Трошковното место е зачувано." });
+    } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } finally { setBusy(false); }
+  }
+
   function payload() {
     return {
       partnerId: Number(head.partnerId), docType: head.docType, issueDate: head.issueDate,
       supplyDate: head.docType === "AV" ? null : head.supplyDate || head.issueDate, dueDate: head.dueDate || null,
       paymentMethod: head.paymentMethod, note: head.note || null, version: inv?.version, warehouseId: head.warehouseId || null,
+      costCenterId: head.costCenterId || null,
       correctionReason: head.reason || null, voidReasonCode: head.voidCode || null, correctionReasonCode: head.corrCode || null,
       advanceInvoiceId: canAdvance && head.advanceId ? head.advanceId : null,
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
       lines: realLines().map((l) => ({ itemId: l.itemId, description: l.description.trim(), unit: l.unit, qty: parseNum(l.qty),
         unitPrice: parseNum(l.unitPrice), discountPct: parseNum(l.discountPct || "0"), vatRateId: l.vatRateId, priceSource: l.priceSource,
-        stockDocId: l.stockDocId ?? null })),
+        stockDocId: l.stockDocId ?? null, costCenterId: ccLines ? l.costCenterId ?? null : null })),
     };
   }
 
@@ -254,6 +273,16 @@ export function InvoiceEditor() {
               <option value="">Главен</option>{whs.filter((w) => w.isActive && !w.isDefault).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
               : <output>{whs.find((w) => w.id === inv?.warehouseId)?.name ?? "Главен"}</output>}
           </label>}
+          {ccMode !== "off" && head.docType !== "PF" && <label>Трошковно место{ccMode === "required" ? " *" : ""}
+            <select value={head.costCenterId} onChange={(e) => { set("costCenterId", e.target.value ? Number(e.target.value) : ""); if (!editable) setCcDirty(true); }}
+              disabled={!!inv && ["cancelled_draft", "voided"].includes(inv.status)}>
+              <option value="">{ccLines ? "— по ставки —" : "— без —"}</option>
+              {ccs.filter((c) => c.isActive || c.id === head.costCenterId).map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select>
+            
+            {!editable && ccDirty && <button className="btn btn-small" onClick={saveCostCenter}>Зачувај ТМ</button>}
+          </label>}
+          {ccMode !== "off" && head.docType !== "PF" && <label className="check small cc-lines"><input type="checkbox" checked={ccLines} onChange={(e) => { setCcLines(e.target.checked); if (!editable) setCcDirty(true);
+              if (!e.target.checked) setLines((ls) => ls.map((l) => ({ ...l, costCenterId: null }))); }} /> по ставки</label>}
           <label>Начин на плаќање
             {editable ? (
               <select value={head.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)}>
@@ -308,6 +337,11 @@ export function InvoiceEditor() {
                       </select>
                       <input value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} placeholder="Опис на ставката" aria-label={`Опис, ставка ${i + 1}`} />
                     </> : l.description}
+                    {ccMode !== "off" && ccLines && <select className="small" value={l.costCenterId ?? ""} aria-label={`Трошковно место, ставка ${i + 1}`}
+                      onChange={(e) => { setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, costCenterId: e.target.value ? Number(e.target.value) : null } : x)));
+                        if (editable) setDirty(true); else setCcDirty(true); }}>
+                      <option value="">ТМ: од фактурата</option>
+                      {ccs.filter((c) => c.isActive || c.id === l.costCenterId).map((c) => <option key={c.id} value={c.id}>ТМ: {c.code} · {c.name}</option>)}</select>}
                   </td>
                   <td className="c-unit">{linesEditable ? <input value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} aria-label="Единица мерка" /> : l.unit}</td>
                   <td className="num c-qty">{linesEditable ? <input inputMode="decimal" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value.replace(",", ".") })} aria-label="Количина" /> : Number(l.qty)}</td>

@@ -13,6 +13,7 @@ import { addFile, importUjpPurchase, MAX_FILE } from "../domain/ujp-import.js";
 import { balanceOf, postStockDoc, reverseStockDoc, StockDecimal as D, type MoveIn } from "../domain/stock.js";
 import { assertClientAccess, assertModule, requireAdmin, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
+import { assertCostCenters, setCostCenter } from "../domain/costcenters.js";
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Датум ГГГГ-ММ-ДД");
 const optText = (max: number) => z.string().trim().max(max).optional().nullable().transform((v) => (v ? v : null));
@@ -22,11 +23,13 @@ const PurchaseLineIn = z.object({
   itemId: Id.optional().nullable(), description: z.string().trim().min(1).max(500), unit: z.string().trim().min(1).max(10),
   qty: Qty, unitPrice: z.coerce.number().min(0).max(1e12), discountPct: z.coerce.number().min(0).max(100).default(0),
   vatRateId: Id, allocate: z.boolean().default(false), lotNo: optText(50), expiryDate: Day.optional().nullable().or(z.literal("").transform(() => null)),
+  costCenterId: Id.optional().nullable(),   // docs/14
 });
 const PurchaseIn = z.object({
   partnerId: Id, supplierNumber: z.string().trim().min(1).max(60), issueDate: Day, receivedDate: Day,
   dueDate: Day.optional().nullable().or(z.literal("").transform(() => null)), warehouseId: Id.optional().nullable(),
   note: optText(2000), lines: z.array(PurchaseLineIn).max(500), version: z.number().int().optional(),
+  costCenterId: Id.optional().nullable(),   // docs/14
 });
 const StockLineIn = z.object({
   itemId: Id, qty: z.coerce.number().min(0).max(1e9), unitCost: z.coerce.number().min(0).max(1e12).optional(),
@@ -181,6 +184,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (!sup) throw new DomainError("validation", "Добавувачот не постои.", 422);
     await tx.update(partners).set({ isSupplier: true }).where(and(eq(partners.id, sup.id), eq(partners.isSupplier, false)));
     if (b.warehouseId) await ownWarehouse(clientId, b.warehouseId);
+    await assertCostCenters(tx, clientId, [b.costCenterId, ...b.lines.map((l) => l.costCenterId)]);
     const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
     const ids = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
     if (ids.length) {
@@ -195,12 +199,12 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       const r = calcLine({ qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRatePct: rate.ratePct });
       await tx.insert(purchaseLines).values({ purchaseInvoiceId: id, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
         qty: String(l.qty), unitPrice: String(l.unitPrice), discountPct: String(l.discountPct), vatRateId: rate.id, vatRatePct: rate.ratePct,
-        netAmount: r.netAmount, vatAmount: r.vatAmount, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null });
+        netAmount: r.netAmount, vatAmount: r.vatAmount, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null });
       calc.push({ ...r, vatRatePct: rate.ratePct });
     }
     const t = calcTotals(calc);
     await tx.update(purchaseInvoices).set({ partnerId: b.partnerId, supplierNumber: b.supplierNumber, issueDate: b.issueDate, receivedDate: b.receivedDate,
-      dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note, year: Number(b.receivedDate.slice(0, 4)),
+      dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note, year: Number(b.receivedDate.slice(0, 4)), costCenterId: b.costCenterId ?? null,
       netTotal: t.netTotal, vatTotal: t.vatTotal, grossTotal: t.grossTotal, version: sql`${purchaseInvoices.version} + 1` })
       .where(eq(purchaseInvoices.id, id));
   }
@@ -220,9 +224,10 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, ids)));
       if (own.length !== new Set(ids).size) throw new DomainError("validation", "Непознат артикл.", 422);
     }
+    await assertCostCenters(tx, clientId, [b.costCenterId, ...b.lines.map((l) => l.costCenterId)]);
     for (const [i, l] of b.lines.entries())
-      await tx.update(purchaseLines).set({ itemId: l.itemId ?? null, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null }).where(eq(purchaseLines.id, cur[i]!.id));
-    await tx.update(purchaseInvoices).set({ receivedDate: b.receivedDate, dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note,
+      await tx.update(purchaseLines).set({ itemId: l.itemId ?? null, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null }).where(eq(purchaseLines.id, cur[i]!.id));
+    await tx.update(purchaseInvoices).set({ receivedDate: b.receivedDate, dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note, costCenterId: b.costCenterId ?? null,
       year: Number(b.receivedDate.slice(0, 4)), version: sql`${purchaseInvoices.version} + 1` }).where(eq(purchaseInvoices.id, p.id));
   }
 
@@ -270,6 +275,13 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const r = await postPurchase(db, id!, { userId: u.id, ip: req.ip }, (await clientMods(clientId)).includes("warehouse"));
     return { id: r.id, number: r.number, receiptNumber: r.receiptNumber };
   });
+  /** Trosковno mesto (docs/14): i po knizenje, so revizija. */
+  app.post("/api/clients/:clientId/purchases/:id/cost-center", async (req) => {
+    const { u, clientId, id } = await withModule(req, "incoming");
+    const b = z.object({ costCenterId: Id.nullable(), lines: z.array(z.object({ id: Id, costCenterId: Id.nullable() })).max(500).optional() }).parse(req.body);
+    return setCostCenter(db, "purchase", clientId, id!, b, { userId: u.id, ip: req.ip });
+  });
+
   app.post("/api/clients/:clientId/purchases/:id/void", async (req) => {
     const { u, clientId, id } = await withModule(req, "incoming");
     await loadPurchase(clientId, id!);

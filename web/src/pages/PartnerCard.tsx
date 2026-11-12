@@ -6,6 +6,8 @@ import { CheckPartner, PartnerForm } from "./Partners";
 import { CompanyWallLink, GRADE, type PartnerScore } from "../components/Score";
 
 /** Kartica na kupuvac: podatoci, kontakt lica, istorija na komunikacija so potsetnici, fakturi. */
+import { PartnerLedger } from "./Ledger";
+
 export function PartnerCard() {
   const client = useOutletContext<ClientRef>();
   const { id } = useParams();
@@ -93,6 +95,7 @@ export function PartnerCard() {
           </section>
         </div>
       </div>
+      <PartnerLedger client={client} partnerId={p.id} isCustomer={p.isCustomer} isSupplier={p.isSupplier} />
     </>
   );
 }

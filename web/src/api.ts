@@ -25,7 +25,7 @@ export const api = {
 /* --------------------------------------------------------------- tipovi */
 export type DocType = "INV" | "AV" | "OD" | "KZ" | "ST" | "KR" | "PF";
 export type Status = "draft" | "to_issue" | "issued" | "json_exported" | "sent_to_ujp" | "rejected" | "voided" | "corrected" | "cancelled_draft";
-export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[] }
+export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[]; costCenterMode?: "off" | "optional" | "required" }
 export interface Me {
   authenticated: boolean; entra?: boolean; pending?: "totp" | "totp_setup" | null;
   user?: { id: number; email: string; displayName: string; role: "admin" | "accountant"; provider: "entra" | "local" };
@@ -42,8 +42,10 @@ export interface InvoiceRow { id: number; number: string | null; docType: DocTyp
   ujpId: string | null; ujpStatusName: string | null; ujpError: string | null; source?: string }
 export interface Line { id?: number; itemId: number | null; description: string; unit: string; qty: string; unitPrice: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null;
-  stockDocId?: number | null }   // stavka od ispratnica (docs/12)
-export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; warehouseId: number | null; supplyDate: string | null; paymentMethod: string;
+  stockDocId?: number | null;   // stavka od ispratnica (docs/12)
+  costCenterId?: number | null }   // TM na stavkata (docs/14)
+export interface CostCenter { id: number; code: string; name: string; isActive: boolean }
+export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; warehouseId: number | null; costCenterId?: number | null; supplyDate: string | null; paymentMethod: string;
   note: string | null; clauses: string | null; version: number; lines: Line[]; advanceAmount: string | null; issuedAt: string | null;
   byRate: { vatRatePct: string; net: string; vat: string }[];
   relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;

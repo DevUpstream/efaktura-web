@@ -29,7 +29,12 @@ export async function iosFor(db: Db, clientId: number, partnerId: number, asOf: 
         where o.related_invoice_id = x.id and o.doc_type = 'OD' and o.status in (${RECV}) and o.issue_date <= ${asOf}), 0) credits,
       ${paidTo("invoice_id")} paid
     from invoices x where x.client_id = ${clientId} and x.partner_id = ${partnerId} and x.doc_type in ('INV','AV','KZ','KR')
-      and x.status in (${RECV}) and x.issue_date <= ${asOf} order by x.issue_date, x.id`));
+      and x.issue_date <= ${asOf}
+      and (x.status in (${RECV})
+        -- na denot bila vazecka: korekcijata / storno-to e izdadeno podocna (docs/14: kartica = IOS)
+        or (x.status in ('corrected','voided') and exists (select 1 from invoices k where k.related_invoice_id = x.id
+          and k.doc_type in ('KR','ST') and k.number is not null and k.issue_date > ${asOf})))
+    order by x.issue_date, x.id`));
   const pur = rowsOf(await db.execute(sql`
     select coalesce(x.number, '') || ' (' || x.supplier_number || ')' as number, x.issue_date d, x.due_date due,
       coalesce(x.payable_amount, x.gross_total) amount, 0 credits, ${paidTo("purchase_invoice_id")} paid

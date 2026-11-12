@@ -47,6 +47,7 @@ const TABLES = (c: number) => ({
   normativi: sql`select * from boms where client_id = ${c} order by id`,
   normativi_stavki: sql`select l.* from bom_lines l join boms b on b.id = l.bom_id where b.client_id = ${c} order by l.id`,
   rabotni_nalozi: sql`select * from work_orders where client_id = ${c} order by id`,
+  troskovni_mesta: sql`select * from cost_centers where client_id = ${c} order by id`,
   revizija: sql`select * from audit_log where client_id = ${c} order by id`,
 });
 

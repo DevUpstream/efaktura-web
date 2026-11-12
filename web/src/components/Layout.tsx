@@ -55,6 +55,7 @@ export function Layout() {
           <NavLink to={`/c/${client.id}/partners`}>Партнери</NavLink>
           {crm && <NavLink to={`/c/${client.id}/followups`}>Потсетници{fu.n > 0 && <span className={`badge ${fu.late ? "late" : ""}`} aria-label={`${fu.n} за денес`}>{fu.n}</span>}</NavLink>}
           <NavLink to={`/c/${client.id}/items`}>Артикли и услуги</NavLink>
+          <NavLink to={`/c/${client.id}/cost-centers`}>Трошковни места</NavLink>
           <NavLink to={`/c/${client.id}/settings`}>Поставки и PDF</NavLink>
           {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/clients`} className="menu-admin">Фирми</NavLink>}
           {me!.user!.role === "admin" && <NavLink to={`/c/${client.id}/admin`}>Корисници и пристап</NavLink>}

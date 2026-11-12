@@ -11,6 +11,7 @@ import { defaultWarehouse, postStockDoc, reverseStockDoc } from "./stock.js";
 import type { Db } from "../db/types.js";
 import { calcTotals, round } from "./calc.js";
 import { assertDispatchesFree } from "./dispatch.js";
+import { missingCostCenter } from "./costcenters.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
 
@@ -41,6 +42,7 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
     const [partner] = await tx.select().from(partners).where(eq(partners.id, inv.partnerId));
     if (!client?.isActive) errors.push("Фирмата не е активна.");
     if (!partner?.isActive) errors.push("Купувачот не е активен.");
+    if (inv.docType !== "PF") { const m = missingCostCenter(client!.costCenterMode, inv.costCenterId, lines); if (m) errors.push(m); }
     // ispratnici (docs/12): povtorna proverka pri izdavanje (nekoj mozel da ja stavi vo druga faktura vo megjuvreme)
     const docIds = [...new Set(lines.map((l) => l.stockDocId).filter((x): x is number => !!x))];
     if (docIds.length) {

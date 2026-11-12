@@ -10,6 +10,7 @@ import { clients, items, partners, purchaseInvoices, purchaseLines, STOCK_ITEM_T
 import type { Db } from "../db/types.js";
 import { calcTotals } from "./calc.js";
 import { DomainError } from "./errors.js";
+import { missingCostCenter } from "./costcenters.js";
 import { audit, type Actor } from "./audit.js";
 import { defaultWarehouse, formatStockNumber, nextStockNo, postStockDoc, reverseStockDoc } from "./stock.js";
 import { learnItems } from "./ujp-import.js";
@@ -33,6 +34,8 @@ export async function postPurchase(db: Db, id: number, actor: Actor & { userId: 
     if (!lines.length) errors.push("Фактурата нема ставки.");
     if (!supplier?.isActive) errors.push("Добавувачот не е активен.");
     if (p.receivedDate < p.issueDate) errors.push("Датумот на прием е пред датумот на фактурата.");
+    const ccMsg = missingCostCenter(client!.costCenterMode, p.costCenterId, lines);
+    if (ccMsg) errors.push(ccMsg);
     const [dup] = await tx.select({ n: purchaseInvoices.number }).from(purchaseInvoices).where(and(
       eq(purchaseInvoices.clientId, p.clientId), eq(purchaseInvoices.partnerId, p.partnerId),
       eq(purchaseInvoices.supplierNumber, p.supplierNumber), ne(purchaseInvoices.id, p.id), ne(purchaseInvoices.status, "voided")));

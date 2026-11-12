@@ -19,7 +19,7 @@ export function Tabs({ c }: { c: number }) {
     <NavLink to={`/c/${c}/payments`} end>Наплата</NavLink><NavLink to={`/c/${c}/payments/out`}>Обврски</NavLink>
     <NavLink to={`/c/${c}/payments/list`}>Уплати</NavLink><NavLink to={`/c/${c}/payments/statements`}>Изводи</NavLink>
     <NavLink to={`/c/${c}/payments/expenses`}>Трошоци</NavLink><NavLink to={`/c/${c}/payments/ios`}>ИОС</NavLink>
-    <NavLink to={`/c/${c}/payments/compensations`}>Компензации</NavLink><NavLink to={`/c/${c}/payments/dunning`}>Опомени</NavLink></nav>;
+    <NavLink to={`/c/${c}/payments/compensations`}>Компензации</NavLink><NavLink to={`/c/${c}/payments/dunning`}>Опомени</NavLink><NavLink to={`/c/${c}/payments/ledgers`}>Картици</NavLink></nav>;
 }
 
 /* ------------------------------------------------- otvoreni stavki */

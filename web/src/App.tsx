@@ -19,6 +19,8 @@ import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production
 import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 import { Today } from "./pages/Today";
 import { VatBooks } from "./pages/VatBooks";
+import { Ledgers } from "./pages/Ledger";
+import { CostCenters } from "./pages/CostCenters";
 import { Dispatches } from "./pages/Dispatches";
 import { Compensations, Dunning, Ios } from "./pages/Receivables";
 
@@ -34,6 +36,7 @@ function Gate() {
       <Route path="/c/:clientId" element={<Layout />}>
         <Route path="today" element={<Today />} />
         <Route path="vat-books" element={<VatBooks />} />
+        <Route path="cost-centers" element={<CostCenters />} />
         <Route path="invoices" element={<Invoices />} />
         <Route path="invoices/new" element={<InvoiceEditor />} />
         <Route path="invoices/:id" element={<InvoiceEditor />} />
@@ -59,6 +62,7 @@ function Gate() {
         <Route path="payments/ios" element={<Ios />} />
         <Route path="payments/compensations" element={<Compensations />} />
         <Route path="payments/dunning" element={<Dunning />} />
+        <Route path="payments/ledgers" element={<Ledgers />} />
         <Route path="production" element={<WorkOrders />} />
         <Route path="production/new" element={<WorkOrderEditor />} />
         <Route path="production/:id" element={<WorkOrderEditor />} />

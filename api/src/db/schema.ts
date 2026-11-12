@@ -67,6 +67,7 @@ export const paymentDirection = pgEnum("payment_direction", ["in", "out"]);  // 
 export const purchaseStatus = pgEnum("purchase_status", ["draft", "posted", "voided"]);
 export const paymentMethod = pgEnum("payment_method", ["bank", "cash", "card", "compensation", "other"]);
 export const vatGroup = pgEnum("vat_group", ["DDV-A", "DDV-B", "DDV-V", "DDV-G"]);
+export const costCenterMode = pgEnum("cost_center_mode", ["off", "optional", "required"]);
 export const vatImpact = pgEnum("vat_impact", ["STANDARD", "NULA", "OSLOBODEN", "PRENESEN"]);
 export const reasonKind = pgEnum("reason_kind", ["void", "correction"]);
 export const ujpAction = pgEnum("ujp_action", ["send", "status", "dry-run"]);
@@ -135,6 +136,8 @@ export const clients = pgTable("clients", {
   email: varchar("email", { length: 254 }),
   phone: varchar("phone", { length: 50 }),
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
+  /** Trosковни mesta (docs/14): off = ne se gledaat; optional; required = bez TM ne se izdava / knizi. */
+  costCenterMode: costCenterMode("cost_center_mode").notNull().default("off"),
   invoiceClauses: text("invoice_clauses"),
   pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
   productionSettings: jsonb("production_settings").$type<ProductionSettings>(),  // docs/07
@@ -336,7 +339,10 @@ export const invoices = pgTable("invoices", {
   version: integer("version").notNull().default(1), // optimisticko zaklucuvanje
   /** "app" ili "erpnext" (prenesena istoriska faktura, docs/11): izdadena nadvor od e-Faktura, NIKOGASH ne se prakja kon UJP. */
   source: varchar("source", { length: 12 }).notNull().default("app"),
+  /** Trosковno mesto (docs/14). Ne e del od fakturata kon kupuvacot; smee da se smeni i po izdavanje (so revizija). */
+  costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
 }, (t) => [
+  index("invoices_cost_center_ix").on(t.clientId, t.costCenterId).where(sql`${t.costCenterId} is not null`),
   index("invoices_client_year_ix").on(t.clientId, t.year, t.status),
   index("invoices_partner_ix").on(t.partnerId),
   index("invoices_related_ix").on(t.relatedInvoiceId),
@@ -368,6 +374,8 @@ export const invoiceLines = pgTable("invoice_lines", {
   priceSource: varchar("price_source", { length: 80 }),
   /** Stavka od ispratnica bez faktura (docs/12): zalihata e vekje izdadena so ispratnicata -> pri izdavanje ne se izdava povtorno. */
   stockDocId: integer("stock_doc_id").references(() => stockDocs.id, { onDelete: "restrict" }),
+  /** TM na stavkata ("по ставки"); prazno = TM od fakturata. */
+  costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
 }, (t) => [
   index("invoice_lines_stock_doc_ix").on(t.stockDocId).where(sql`${t.stockDocId} is not null`),
   uniqueIndex("invoice_lines_no_uq").on(t.invoiceId, t.lineNo),
@@ -573,10 +581,13 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   postedAt: ts("posted_at"),
   voidedAt: ts("voided_at"),
   voidReason: text("void_reason"),
+  /** Trosковno mesto (docs/14); smee da se smeni i po knizenje (so revizija). */
+  costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
   createdAt: created(),
   updatedAt: updated(),
 }, (t) => [
   index("purchase_client_ix").on(t.clientId, t.receivedDate),
+  index("purchases_cost_center_ix").on(t.clientId, t.costCenterId).where(sql`${t.costCenterId} is not null`),
   uniqueIndex("purchase_seq_uq").on(t.clientId, t.year, t.seqNo),
   uniqueIndex("purchase_supplier_no_uq").on(t.clientId, t.partnerId, t.supplierNumber).where(sql`${t.status} <> 'voided'`),
 ]);
@@ -598,6 +609,8 @@ export const purchaseLines = pgTable("purchase_lines", {
   allocate: boolean("allocate").notNull().default(false),   // zavisen trosok -> vo nabavnata cena
   lotNo: varchar("lot_no", { length: 50 }),
   expiryDate: date("expiry_date"),
+  /** TM na stavkata ("по ставки"); prazno = TM od fakturata. */
+  costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
   unitCost: amount4("unit_cost"),                            // presmetana pri knizenje
 }, (t) => [
   uniqueIndex("purchase_lines_no_uq").on(t.purchaseInvoiceId, t.lineNo),
@@ -953,3 +966,13 @@ export const dunningLetters = pgTable("dunning_letters", {
   createdBy: integer("created_by").references(() => users.id),
   createdAt: created(),
 }, (t) => [index("dunning_partner_ix").on(t.clientId, t.partnerId, t.docDate), check("dunning_level_ck", sql`${t.level} between 1 and 3`)]);
+
+/* ------------------------------------------------------- trosковni mesta (docs/14) */
+export const costCenters = pgTable("cost_centers", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  code: varchar("code", { length: 20 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: created(),
+}, (t) => [uniqueIndex("cost_centers_code_uq").on(t.clientId, sql`upper(${t.code})`)]);
