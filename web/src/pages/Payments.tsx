@@ -227,12 +227,12 @@ export function Statements() {
       <header className="page-head"><h1>Изводи од банка</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
       <section className="panel stack">
         <div className="row-actions upload-row">
-          <label className="drop">Изберете изводи (TXT или MT940 од е-банкарство, може повеќе одеднаш)
+          <label className="drop">Изберете изводи (TXT или MT940 од е-банкарство, може повеќе одеднаш; кај Стопанска – TXT)
             <input type="file" multiple accept=".txt,.sta,.mt940,.940,.csv,text/plain,text/csv" disabled={busy} onChange={(e) => { if (e.target.files?.length) void upload(e.target.files); e.target.value = ""; }} /></label>
           <label>Кодирање<select value={enc} onChange={(e) => setEnc(e.target.value)}><option value="utf-8">UTF-8</option><option value="windows-1251">Windows-1251</option></select></label>
           <label className="check"><input type="checkbox" checked={autoBook} onChange={(e) => setAutoBook(e.target.checked)} /> Автоматски прокнижи ги сигурните</label>
         </div>
-        <p className="muted small">Проверени формати: Халкбанк и Шпаркасе (TXT), НЛБ (MT940). Други банки: MT940 или CSV. Секој извод се проверува: дали сметката е на оваа фирма, дали претходна состојба + промет = нова состојба
+        <p className="muted small">Проверени формати: Халкбанк, Шпаркасе и Стопанска (TXT), НЛБ (MT940). Други банки: MT940 или CSV. Секој извод се проверува: дали сметката е на оваа фирма, дали претходна состојба + промет = нова состојба
           и дали се надоврзува на соседните изводи по датум. Повеќе датотеки се увезуваат по датум на изводот, без разлика на редоследот на избор.
           Сигурно е кога купувачот е препознаен по ЕДБ, жиро-сметка или број на фактура, <em>и</em> фактурата по број, точен износ или точен збир.</p>
         {busy && <p className="muted">Се увезува…</p>}
@@ -247,7 +247,7 @@ export function Statements() {
           <tbody>{rows.map((r) => (
             <tr key={r.id}>
               <td><Link className="docno" to={`/c/${client.id}/payments/statements/${r.id}`}>{r.statementNo ? `бр. ${r.statementNo}` : r.fileName ?? `#${r.id}`}</Link>
-                {r.format !== "mk-txt" && <span className="doctype">{r.format === "mt940" ? "MT940" : "CSV"}</span>}
+                {r.format !== "mk-txt" && r.format !== "stb-txt" && <span className="doctype">{r.format === "mt940" ? "MT940" : "CSV"}</span>}
                 {gapBefore(r) && <div><span className="chip err" title={`Нова состојба на бр. ${r.prevNo ?? "?"}: ${money(r.prevClosing)}; претходна состојба тука: ${money(r.openingBalance)}`}>недостасува извод пред овој</span></div>}</td>
               <td>{date(r.statementDate)}</td><td className="small">{r.ownAccount ?? "–"}</td>
               <td className="num">{money(r.inflow)}</td><td className="num">{money(r.outflow)}</td><td className="num">{r.closingBalance ? money(r.closingBalance) : "–"}</td>
