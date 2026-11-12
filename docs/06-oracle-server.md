@@ -174,6 +174,7 @@
 | O34 | PowerShell + ssh: `\"` не е бегство во PowerShell → psql добива само `select` („extra command-line argument … ignored“). SQL се праќа преку влез: `'select … where c.edb=''4015023508550'';' \| ssh … "cd /opt/efaktura && sudo docker compose exec -T db psql -U efaktura -d efaktura"`. Во PowerShell низа со `'…'` единечниот наводник се пишува `''`. |
 | O35 | PowerShell 5.1 (`powershell -File`): `$PSScriptRoot` е **празен** во почетните вредности на `param()` → патеката станува `\датотека`. Се поставува во телото на скриптата (`if (-not $File) { $File = Join-Path $PSScriptRoot … }`). |
 | O36 | `03-deploy.sh` заврши со **код 141** по `api: healthy`: `systemctl list-timers … \| head -2` → `head` ја затвора цевката (SIGPIPE), а `set -o pipefail` го брои тоа како грешка. Распоредувањето е успешно. Поправено со `sed -n 1,2p` (ја чита целата цевка); на серверот важи по следното копирање на `deploy` (O6). |
+| O37 | Задачата „eFaktura-Agent“ беше регистрирана со `$d = (Get-Location).Path` од `C:\Users\User` → патеката до `Sync-ServerRegistry.ps1` беше погрешна и задачата тивко паѓаше на секои 5 мин. Патеката се пишува **експлицитно**: `C:\Users\User\OneDrive - FKK VIDI\eFakturi\agent`. Проверка: `(Get-ScheduledTask eFaktura-Agent).Actions` и `Get-ScheduledTaskInfo eFaktura-Agent` (LastTaskResult 0 или 267009 = работи). Лентата „Агентот не работи“ во апликацијата го покажа проблемот. |
 | O32 | Изводите содржат лични податоци (имиња, сметки на вработени) → во тестовите само анонимизирани, со иста ширина на колоните. |
 
 ## Следно
