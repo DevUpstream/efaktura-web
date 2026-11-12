@@ -55,7 +55,7 @@
 | `20261107-62f2320` | Фирми, улоги купувач/добавувач, CompanyWall, понуда → фактура, копирај, повторувачки фактури (docs/10) | чека потврда |
 
 Команда (PowerShell, една линија):
-`ssh -i "$env:USERPROFILE\.ssh\oracle-efaktura.key" ubuntu@92.5.149.62 "sudo bash ~/efaktura-deploy/03-deploy.sh 20261112-eca33da"`
+`ssh -i "$env:USERPROFILE\.ssh\oracle-efaktura.key" ubuntu@92.5.149.62 "sudo bash ~/efaktura-deploy/03-deploy.sh 20261112-db07390"`
 
 Миграциите на базата (`api/drizzle/0000`–`0014`) се применуваат автоматски при старт.
 
