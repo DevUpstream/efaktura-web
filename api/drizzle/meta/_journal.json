@@ -134,6 +134,13 @@
       "when": 1794473518713,
       "tag": "0018_cost_centers",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794505366434,
+      "tag": "0019_ujp_jobs",
+      "breakpoints": true
     }
   ]
 }

@@ -29,6 +29,7 @@ import { exportRoutes } from "./routes/export.js";
 import { vatBookRoutes } from "./routes/vatbooks.js";
 import { costCenterRoutes } from "./routes/costcenters.js";
 import { partnerCardRoutes } from "./routes/partnercard.js";
+import { ujpRoutes } from "./routes/ujp.js";
 
 export interface AppDeps {
   db: Db; version: string; logLevel?: string;
@@ -86,6 +87,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await vatBookRoutes(app, { db: d.db });
   await costCenterRoutes(app, { db: d.db });
   await partnerCardRoutes(app, { db: d.db });
+  await ujpRoutes(app, { db: d.db });
   // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
   if (d.webDir && existsSync(d.webDir)) {
     await app.register(fastifyStatic, {

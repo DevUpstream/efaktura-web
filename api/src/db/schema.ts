@@ -409,8 +409,34 @@ export const ujpLog = pgTable("ujp_log", {
   httpStatus: smallint("http_status"),
   euid: varchar("euid", { length: 40 }),
   message: text("message"),
+  /** Потпишаниот JSON што е испратен (без JWS) – точно тоа што УЈП го примил (docs/15). */
+  request: text("request"),
   createdAt: created(),
 }, (t) => [index("ujp_log_invoice_ix").on(t.invoiceId)]);
+
+/**
+ * Редица за праќање на УЈП (docs/15). Корисникот бара („Прати на УЈП“); агентот на компјутерот со токенот зема,
+ * потпишува и праќа. queued -> sending (агентот зел) -> sent | error; queued -> cancelled.
+ */
+export const ujpJobStatus = pgEnum("ujp_job_status", ["queued", "sending", "sent", "error", "cancelled"]);
+export const ujpJobs = pgTable("ujp_jobs", {
+  id: serial("id").primaryKey(),
+  invoiceId: integer("invoice_id").notNull().references(() => invoices.id, { onDelete: "restrict" }),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  status: ujpJobStatus("status").notNull().default("queued"),
+  queuedBy: integer("queued_by").references(() => users.id),
+  queuedAt: created(),
+  takenAt: ts("taken_at"),
+  doneAt: ts("done_at"),
+  agentKeyId: integer("agent_key_id").references(() => agentKeys.id),
+  /** Порака: грешка од УЈП / проверка, или зошто чека (оригиналот уште не е на УЈП). */
+  note: text("note"),
+}, (t) => [
+  index("ujp_jobs_status_ix").on(t.status, t.id),
+  index("ujp_jobs_invoice_ix").on(t.invoiceId),
+  // една активна задача по фактура: не смее да се прати двапати
+  uniqueIndex("ujp_jobs_active_uq").on(t.invoiceId).where(sql`${t.status} in ('queued', 'sending')`),
+]);
 
 /** Kluchevi za lokalniot agent (se cuva samo SHA-256 hash). */
 export const agentKeys = pgTable("agent_keys", {

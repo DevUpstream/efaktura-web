@@ -29,6 +29,18 @@ export function Invoices() {
     api.get<InvoiceRow[]>(`/api/clients/${client.id}/invoices${year ? `?year=${year}` : ""}`).then(setRows).catch((e) => setErr(e.message));
   }, [client.id, year]);
 
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+  const waiting = (rows ?? []).filter((r) => r.status === "issued" && !r.ujpId && r.docType !== "PF" && r.source !== "erpnext").length;
+  async function sendAll() {
+    setBusy(true); setInfo(null); setErr(null);
+    try {
+      const r = await api.post<{ queued: string[]; skipped: { number: string | null; problems: string[] }[] }>(`/api/clients/${client.id}/ujp-send-all`, {});
+      setInfo(`Во редица за УЈП: ${r.queued.length}.` + (r.skipped.length ? ` Не се подготвени: ${r.skipped.map((x) => `${x.number} (${x.problems[0] ?? ""})`).join("; ")}.` : "")
+        + " Ги праќа агентот на компјутерот со токенот.");
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+
   const shown = useMemo(() => {
     const f = FILTERS.find((x) => x.key === filter)!;
     const needle = q.trim().toLowerCase();
@@ -41,7 +53,9 @@ export function Invoices() {
     <>
       <header className="page-head">
         <h1>Фактури</h1>
-        <div className="row-actions"><Link className="btn" to="../invoices/new?type=PF" relative="path">Нова понуда</Link>
+        <div className="row-actions">{waiting > 0 && <button className="btn" onClick={sendAll} disabled={busy}
+            title="Издадените фактури што уште не се на УЈП оди во редицата; ги праќа агентот на компјутерот со токенот">Прати на УЈП ({waiting})</button>}
+          <Link className="btn" to="../invoices/new?type=PF" relative="path">Нова понуда</Link>
           <Link className="btn btn-primary" to="../invoices/new" relative="path">Нова фактура</Link></div>
       </header>
       <div className="toolbar">
@@ -54,6 +68,7 @@ export function Invoices() {
         <YearSelect years={years} year={year} onChange={setYear} allowAll />
       </div>
       {err && <p className="alert">{err}</p>}
+      {info && <p className="notice">{info}</p>}
       {!rows && !err && <p className="muted">Се вчитува…</p>}
       {rows && shown.length === 0 && (
         <div className="empty">

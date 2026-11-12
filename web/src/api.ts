@@ -39,7 +39,7 @@ export interface Item { id: number; code: string; name: string; type: ItemType; 
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
 export interface InvoiceRow { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; dueDate: string | null;
   buyerName: string; netTotal: string; vatTotal: string; grossTotal: string; payableAmount: string | null;
-  ujpId: string | null; ujpStatusName: string | null; ujpError: string | null; source?: string }
+  ujpId: string | null; ujpStatusName: string | null; ujpError: string | null; source?: string; ujpQrLink?: string | null; ujpSentAt?: string | null }
 export interface Line { id?: number; itemId: number | null; description: string; unit: string; qty: string; unitPrice: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null;
   stockDocId?: number | null;   // stavka od ispratnica (docs/12)
