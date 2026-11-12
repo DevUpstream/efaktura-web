@@ -12,6 +12,7 @@ import { issueInvoice } from "../src/domain/issue.js";
 import { postPurchase } from "../src/domain/purchase.js";
 import { parseMkTxt } from "../src/domain/bank-txt.js";
 import { looksLikeMt940, parse86, parseMt940 } from "../src/domain/bank-mt940.js";
+import { looksLikeStbTxt, parseStbTxt } from "../src/domain/bank-stb.js";
 import { matchLine, uniqueSubset } from "../src/domain/matching.js";
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/statements/${f}`, import.meta.url), "utf8");
@@ -56,6 +57,27 @@ describe("parser na TXT izvod (vistinski izvodi)", () => {
     expect(n.lines[3]).toMatchObject({ direction: "in", amount: "300000.00", account: "300-0000000001-19", name: "НАЛОГОДАВАЧ ТРИ АД Скопје СКОПЈЕ - ЦЕНТАР", paymentCode: "467" });
     expect(new Set(n.lines.map((l) => l.key)).size).toBe(4);
   });
+  it("Stopanska TXT: zaglavje, priliv/odliv, povikuvanje 24 i 35 znaci, sifra 3 cifri i 4 bukvi", () => {
+    const a = parseStbTxt(fx("stb-0805.txt"));
+    expect(a).toMatchObject({ format: "stb-txt", statementNo: "132", date: "2026-08-05", ownAccount: "200-0041150536-90", opening: "2939.00", closing: "17324.00" });
+    expect(a.lines[1]).toMatchObject({ direction: "in", amount: "8780.00", account: "270-0652471001-33", name: "БЦСДН Скопје", edb: "", paymentCode: "262",
+      refDebit: "20266/8/1", refCredit: "20266/8/1", extra: "2026-08-05" });
+    const b = parseStbTxt(fx("stb-0812.txt"));
+    expect(b.lines.map((l) => [l.direction, l.amount])).toEqual([["in", "13200.00"], ["in", "16000.00"], ["in", "40000.00"], ["out", "6000.00"], ["out", "6000.00"], ["out", "19116.00"]]);
+    expect(b.lines[3]).toMatchObject({ name: "ФИЗИЧКО ЛИЦЕ А", account: "300-0000000009-99", paymentCode: "469", refCredit: "12082026" });
+    expect(b.closing).toBe("63701.00");
+    const c = parseStbTxt(fx("stb-1111.txt"));
+    expect(c.lines[0]).toMatchObject({ paymentCode: "GOVT", account: "100-0000000630-95", refDebit: "Административна такса за", refCredit: "84013803161 72231300" });
+    expect(c.closing).toBe("9652.00");
+    expect(new Set([...a.lines, ...b.lines, ...c.lines].map((l) => l.key)).size).toBe(a.lines.length + b.lines.length + c.lines.length);
+    // ne e Halk/Sparkasse ni MT940; odbiva necelosen (izbrishana stavka) i pomesten red
+    const f = fx("stb-0812.txt");
+    expect(looksLikeStbTxt(f) && !looksLikeMt940(f)).toBe(true);
+    expect(looksLikeStbTxt(fx("halk-11.txt"))).toBe(false);
+    expect(() => parseStbTxt(f.split("\n").filter((_, i) => i !== 2).join("\n"))).toThrow(/не е целосен/);
+    expect(() => parseStbTxt(f.split("\n").map((l, i) => (i === 2 ? l.slice(0, 200) + l.slice(201) : l)).join("\n"))).toThrow(/Ставка 2/);
+  });
+
   it("MT940: odbiva necelosen, devizen i povekje izvodi vo edna datoteka", () => {
     const f = fx("nlb-mt940.txt");
     expect(() => parseMt940(f.replace(":62F:C261009MKD134682,00", ":62F:C261009MKD134683,00"))).toThrow(/не е целосен/);
@@ -218,6 +240,18 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     expect(w43).toHaveLength(1);
     expect(w43[0]).toMatch(/бр\. 44/);
     expect(((await call("GET", `${C()}/bank-statements`)).body as { statementNo: string }[]).map((r) => r.statementNo)).toEqual(["44", "43", "42", "41", "40"]);
+  });
+
+  it("Stopanska TXT preku API: uvoz po datum, partner po smetka, provizija i Trezor", async () => {
+    await t.db.update(clients).set({ iban: "200-0041150536-90" }).where(eq(clients.id, t.c1.id));
+    await t.db.update(partners).set({ bankAccount: "270-0652471001-33" }).where(eq(partners.id, t.p1.id));
+    const r1 = (await call("POST", `${C()}/bank-statements`, { text: fx("stb-1111.txt") })).body;
+    expect(r1.categorized).toBe(3);   // 2x Trezor, provizija; prenosot kon 210-... (nasha smetka vo druga banka) ne e vnesen -> ceka
+    const r2 = (await call("POST", `${C()}/bank-statements`, { text: fx("stb-0805.txt") })).body;
+    expect(r2.warnings.join(" ")).toMatch(/постар од веќе увезениот бр\. 176/);
+    const d = (await call("GET", `${C()}/bank-statements/${r2.id}`)).body;
+    expect(d.lines[1].suggestion).toMatchObject({ partnerId: t.p1.id, partnerBy: "account" });
+    expect((await call("POST", `${C()}/bank-statements/peek`, { text: fx("stb-0812.txt") })).body).toMatchObject({ ok: true, date: "2026-08-12", statementNo: "138" });
   });
 
   it("naziv na latinica = kirilica", async () => {

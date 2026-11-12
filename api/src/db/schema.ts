@@ -873,7 +873,7 @@ export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
 export const bankStatements = pgTable("bank_statements", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
-  format: varchar("format", { length: 10 }).notNull(),           // mk-txt | mt940 | csv
+  format: varchar("format", { length: 10 }).notNull(),           // mk-txt | stb-txt | mt940 | csv
   ownAccount: varchar("own_account", { length: 40 }),
   statementNo: varchar("statement_no", { length: 20 }),
   statementDate: date("statement_date"),

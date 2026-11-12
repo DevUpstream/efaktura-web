@@ -11,6 +11,7 @@ import { createPayment, openItems } from "./payments.js";
 import { looksLikeMkTxt, normAccount, parseMkTxt, type ParsedStatement } from "./bank-txt.js";
 import { parseStatement } from "./bank-import.js";
 import { looksLikeMt940, parseMt940 } from "./bank-mt940.js";
+import { looksLikeStbTxt, parseStbTxt } from "./bank-stb.js";
 import { matchLine, type MatchContext, type MatchResult } from "./matching.js";
 
 type Client = typeof clients.$inferSelect;
@@ -21,7 +22,8 @@ export const clientOwnAccounts = (c: Client) =>
 export function parseAny(text: string, mapping: BankImportMapping | null): ParsedStatement {
   if (looksLikeMkTxt(text)) return parseMkTxt(text);
   if (looksLikeMt940(text)) return parseMt940(text);
-  if (!mapping) throw new DomainError("validation", "Форматот не е препознаен како извод од банка (TXT или MT940). За CSV прво поставете ги колоните.", 422);
+  if (looksLikeStbTxt(text)) return parseStbTxt(text);
+  if (!mapping) throw new DomainError("validation", "Форматот не е препознаен како извод од банка (TXT од Халк, Шпаркасе или Стопанска, или MT940). За CSV прво поставете ги колоните.", 422);
   const { rows, skipped } = parseStatement(text, mapping);
   if (!rows.length) throw new DomainError("validation", "Нема ставки во датотеката (провери ги колоните).", 422);
   return { format: "csv", statementNo: null, date: null, ownAccount: null, opening: null, closing: null,
@@ -102,7 +104,7 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
     for (const l of parsed.lines) {
       if (existing.has(l.key)) { skipped++; continue; }
       await tx.insert(bankStatementLines).values({ statementId: s!.id, clientId, lineNo: l.lineNo, lineKey: l.key, direction: l.direction, amount: l.amount,
-        valueDate: parsed.format === "mt940" ? l.extra || parsed.date! : parsed.date ?? l.extra, counterpartyName: l.name || null, counterpartyAccount: l.account || null, counterpartyEdb: l.edb || null,
+        valueDate: parsed.format === "mt940" || parsed.format === "stb-txt" ? l.extra || parsed.date! : parsed.date ?? l.extra, counterpartyName: l.name || null, counterpartyAccount: l.account || null, counterpartyEdb: l.edb || null,
         paymentCode: l.paymentCode || null, purpose: l.purpose || null, refDebit: l.refDebit || null, refCredit: l.refCredit || null,
         extra: parsed.format === "mk-txt" ? l.extra || null : null });
     }
