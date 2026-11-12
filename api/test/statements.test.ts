@@ -193,6 +193,33 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     expect((await call("POST", `/api/clients/${t.c2.id}/bank-statements`, { text: txt(35, "06.11.2026", OWN, 1180, [{ name: "y", acc: "300-0000000222-22", amount: 5 }]) })).body.message).toMatch(/веќе има изводи/);
   });
 
+  it("redosled po datum: postar izvod si go zazema mestoto; kontinuitet; peek; praznina vo listata", async () => {
+    const A = (no: number, d: string, open: number, amt: number) => txt(no, d, OWN, open, [{ name: "Анонимен", acc: "300-0000000111-22", amount: amt }]);
+    // 40 (03.11: 0 -> 100), 42 (05.11: 150 -> 200) - nedostasuva 41
+    expect((await call("POST", `${C()}/bank-statements`, { text: A(40, "03.11.2026", 0, 100) })).body.warnings).toEqual([]);
+    const w42 = (await call("POST", `${C()}/bank-statements`, { text: A(42, "05.11.2026", 150, 50) })).body.warnings as string[];
+    expect(w42.join(" ")).toMatch(/Недостасува извод помеѓу бр\. 40 од 03\.11\.2026 и овој/);
+    // peek ne zapisuva
+    expect((await call("POST", `${C()}/bank-statements/peek`, { text: A(41, "04.11.2026", 100, 50) })).body).toMatchObject({ ok: true, date: "2026-11-04", statementNo: "41", lines: 1 });
+    expect((await call("GET", `${C()}/bank-statements`)).body).toHaveLength(2);
+    expect((await call("POST", `${C()}/bank-statements/peek`, { text: "глупост" })).body.ok).toBe(false);
+    let list = (await call("GET", `${C()}/bank-statements`)).body as { statementNo: string; prevClosing: string | null; openingBalance: string }[];
+    expect(list.find((r) => r.statementNo === "42")).toMatchObject({ prevClosing: "100.00", openingBalance: "150.00" });
+    // 41 uvezen podocna: predupreduva deka e postar, nema praznina okolu nego
+    const w41 = (await call("POST", `${C()}/bank-statements`, { text: A(41, "04.11.2026", 100, 50) })).body.warnings as string[];
+    expect(w41).toHaveLength(1);
+    expect(w41[0]).toMatch(/постар од веќе увезениот бр\. 42 од 05\.11\.2026/);
+    list = (await call("GET", `${C()}/bank-statements`)).body;
+    expect(list.map((r) => r.statementNo)).toEqual(["42", "41", "40"]);
+    expect(list.map((r) => r.prevClosing)).toEqual(["150.00", "100.00", null]);
+    // ist datum: po broj, ne po vreme na uvoz
+    await call("POST", `${C()}/bank-statements`, { text: A(44, "06.11.2026", 210, 5) });
+    const w43 = (await call("POST", `${C()}/bank-statements`, { text: A(43, "06.11.2026", 200, 10) })).body.warnings as string[];
+    expect(w43).toHaveLength(1);
+    expect(w43[0]).toMatch(/бр\. 44/);
+    expect(((await call("GET", `${C()}/bank-statements`)).body as { statementNo: string }[]).map((r) => r.statementNo)).toEqual(["44", "43", "42", "41", "40"]);
+  });
+
   it("naziv na latinica = kirilica", async () => {
     const { normalizeName } = await import("../src/domain/bank-import.js");
     expect(normalizeName("ELEKTRO LINK DOO SKOPJE")).toBe(normalizeName("ЕЛЕКТРО ЛИНК ДОО Скопје"));
