@@ -179,7 +179,12 @@ interface Mapping { delimiter: string; skipRows: number; dateCol: number; dateFo
   decimal: "," | "."; nameCol?: number; accountCol?: number; referenceCols: number[] }
 const DEFAULT_MAP: Mapping = { delimiter: ";", skipRows: 1, dateCol: 0, dateFormat: "dd.MM.yyyy", amountMode: "split", creditCol: 1, debitCol: 2, decimal: ",", referenceCols: [] };
 interface StatementRow { id: number; format: string; ownAccount: string | null; statementNo: string | null; statementDate: string | null; openingBalance: string | null;
-  closingBalance: string | null; fileName: string | null; createdAt: string; lines: number; open: number; inflow: string; outflow: string }
+  closingBalance: string | null; fileName: string | null; createdAt: string; lines: number; open: number; inflow: string; outflow: string;
+  prevClosing: string | null; prevNo: string | null }
+/** Praznina pred izvodot: novata sostojba na prethodniot (po datum) ne e ednakva na prethodnata sostojba na ovoj. */
+const gapBefore = (r: StatementRow) => r.prevClosing !== null && r.openingBalance !== null && Number(r.prevClosing).toFixed(2) !== Number(r.openingBalance).toFixed(2);
+type Peek = { ok: true; date: string | null; statementNo: string | null } | { ok: false };
+const noNum = (x: string | null) => { const d = (x ?? "").replace(/\D/g, ""); return d ? Number(d) : Number.MAX_SAFE_INTEGER; };
 
 /** Cita datoteka so izbranoto kodiranje (izvodite od bankite se UTF-8 ili Windows-1251). */
 const readText = (f: File, enc: string) => new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = bad; r.readAsText(f, enc); });
@@ -190,19 +195,25 @@ export function Statements() {
   const [enc, setEnc] = useState("utf-8");
   const [autoBook, setAutoBook] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<{ file: string; ok: boolean; text: string; id?: number }[]>([]);
+  const [results, setResults] = useState<{ file: string; ok: boolean; text: string; id?: number; warn?: string[] }[]>([]);
   const [csv, setCsv] = useState<{ text: string; name: string } | null>(null);
   const load = () => api.get<StatementRow[]>(`/api/clients/${client.id}/bank-statements`).then(setRows);
   useEffect(() => { setRows(null); setResults([]); void load(); }, [client.id]);
   async function upload(files: FileList | File[], textOverride?: { text: string; name: string }) {
     setBusy(true);
     const out: typeof results = [];
-    const list = textOverride ? [textOverride] : await Promise.all([...files].map(async (f) => ({ text: await readText(f, enc), name: f.name })));
+    let list = textOverride ? [textOverride] : await Promise.all([...files].map(async (f) => ({ text: await readText(f, enc), name: f.name })));
+    if (list.length > 1) {
+      // prvo se citaat site, pa se uvezuvaat po datum na izvodot (pa po broj); necitlivite odat na kraj, po redot na izbor
+      const peeks = await Promise.all(list.map((f) => api.post<Peek>(`/api/clients/${client.id}/bank-statements/peek`, { text: f.text }).catch((): Peek => ({ ok: false }))));
+      const key = (i: number) => { const p = peeks[i]!; return p.ok && p.date ? [p.date, noNum(p.statementNo)] as const : ["9999", 0] as const; };
+      list = list.map((f, i) => ({ f, i })).sort((a, b) => { const [da, na] = key(a.i), [db, nb] = key(b.i); return da < db ? -1 : da > db ? 1 : na - nb || a.i - b.i; }).map((x) => x.f);
+    }
     for (const f of list) {
       try {
         const r = await api.post<{ id: number; statementNo: string | null; lines: number; booked: number; categorized: number; warnings: string[] }>(`/api/clients/${client.id}/bank-statements`,
           { text: f.text, fileName: f.name, autoBook });
-        out.push({ file: f.name, ok: true, id: r.id, text: `Извод${r.statementNo ? ` бр. ${r.statementNo}` : ""}: ${r.lines} ставки, автоматски прокнижени ${r.booked} уплати/плаќања и ${r.categorized} трошоци/преноси.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
+        out.push({ file: f.name, ok: true, id: r.id, warn: r.warnings, text: `Извод${r.statementNo ? ` бр. ${r.statementNo}` : ""}: ${r.lines} ставки, автоматски прокнижени ${r.booked} уплати/плаќања и ${r.categorized} трошоци/преноси.` });
       } catch (e) {
         const m = (e as ApiError).message;
         if (/CSV прво поставете/.test(m)) setCsv(f);
@@ -221,10 +232,12 @@ export function Statements() {
           <label>Кодирање<select value={enc} onChange={(e) => setEnc(e.target.value)}><option value="utf-8">UTF-8</option><option value="windows-1251">Windows-1251</option></select></label>
           <label className="check"><input type="checkbox" checked={autoBook} onChange={(e) => setAutoBook(e.target.checked)} /> Автоматски прокнижи ги сигурните</label>
         </div>
-        <p className="muted small">Проверени формати: Халкбанк и Шпаркасе (TXT), НЛБ (MT940). Други банки: MT940 или CSV. Секој извод се проверува: дали сметката е на оваа фирма и дали претходна состојба + промет = нова состојба.
+        <p className="muted small">Проверени формати: Халкбанк и Шпаркасе (TXT), НЛБ (MT940). Други банки: MT940 или CSV. Секој извод се проверува: дали сметката е на оваа фирма, дали претходна состојба + промет = нова состојба
+          и дали се надоврзува на соседните изводи по датум. Повеќе датотеки се увезуваат по датум на изводот, без разлика на редоследот на избор.
           Сигурно е кога купувачот е препознаен по ЕДБ, жиро-сметка или број на фактура, <em>и</em> фактурата по број, точен износ или точен збир.</p>
         {busy && <p className="muted">Се увезува…</p>}
-        {results.map((r, i) => <p key={i} className={r.ok ? "notice" : "alert"}><strong>{r.file}</strong>: {r.text} {r.id && <Link to={`/c/${client.id}/payments/statements/${r.id}`}>Отвори</Link>}</p>)}
+        {results.map((r, i) => <div key={i} className={!r.ok ? "alert" : r.warn?.length ? "notice wait" : "notice"}><strong>{r.file}</strong>: {r.text} {r.id && <Link to={`/c/${client.id}/payments/statements/${r.id}`}>Отвори</Link>}
+          {r.warn?.map((w, j) => <div key={j} className="small">⚠ {w}</div>)}</div>)}
       </section>
       {csv && <CsvMapping client={client} sample={csv.text} onSaved={() => { const f = csv; setCsv(null); void upload([], f); }} onCancel={() => setCsv(null)} />}
       {rows && rows.length === 0 && <div className="empty"><p>Сè уште нема увезени изводи.</p></div>}
@@ -234,7 +247,8 @@ export function Statements() {
           <tbody>{rows.map((r) => (
             <tr key={r.id}>
               <td><Link className="docno" to={`/c/${client.id}/payments/statements/${r.id}`}>{r.statementNo ? `бр. ${r.statementNo}` : r.fileName ?? `#${r.id}`}</Link>
-                {r.format !== "mk-txt" && <span className="doctype">{r.format === "mt940" ? "MT940" : "CSV"}</span>}</td>
+                {r.format !== "mk-txt" && <span className="doctype">{r.format === "mt940" ? "MT940" : "CSV"}</span>}
+                {gapBefore(r) && <div><span className="chip err" title={`Нова состојба на бр. ${r.prevNo ?? "?"}: ${money(r.prevClosing)}; претходна состојба тука: ${money(r.openingBalance)}`}>недостасува извод пред овој</span></div>}</td>
               <td>{date(r.statementDate)}</td><td className="small">{r.ownAccount ?? "–"}</td>
               <td className="num">{money(r.inflow)}</td><td className="num">{money(r.outflow)}</td><td className="num">{r.closingBalance ? money(r.closingBalance) : "–"}</td>
               <td>{r.open > 0 ? <span className="chip wait">{r.open} за обработка</span> : <span className="chip ok">готово</span>} <span className="muted small">од {r.lines}</span></td>

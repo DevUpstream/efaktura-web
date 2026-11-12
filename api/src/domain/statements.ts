@@ -111,6 +111,8 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
     return s!;
   });
 
+  warnings.push(...await continuityWarnings(db, clientId, st.id));
+
   let booked = 0, categorized = 0; const errors: string[] = [];
   if (opts.autoBook) {
     // ednа po edna: sekoe knizenje go menuva "otvoreno", pa prepoznavanjeto se pravi odnovo
@@ -125,6 +127,44 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
   }
   return { id: st.id, statementNo: st.statementNo, lines: (await db.select({ n: sql<number>`count(*)::int` }).from(bankStatementLines).where(eq(bankStatementLines.statementId, st.id)))[0]!.n,
     booked, categorized, warnings: [...warnings, ...errors] };
+}
+
+/** Redosled na izvodite na edna smetka: datum, pa broj na izvod (kako broj), pa id. */
+export const STATEMENT_ORDER = sql.raw(`statement_date, nullif(regexp_replace(coalesce(statement_no, ''), '\\D', '', 'g'), '')::numeric nulls last, id`);
+
+/**
+ * Kontinuitet (docs/08): prethodnata sostojba na izvodot = novata sostojba na prethodniot izvod (po datum, ne po vreme na uvoz).
+ * Postar izvod uvezen podocna si go zazema mestoto po datum; se predupreduva, bidejki avtomatskoto povrzuvanje gi gleda
+ * fakturite otvoreni vo momentot na uvozot.
+ */
+export async function continuityWarnings(db: Db, clientId: number, statementId: number): Promise<string[]> {
+  const [me] = await db.select().from(bankStatements).where(eq(bankStatements.id, statementId));
+  if (!me?.ownAccount || !me.statementDate) return [];
+  const rows = (await db.execute(sql`select id, statement_no, statement_date, opening_balance, closing_balance from bank_statements
+    where client_id = ${clientId} and own_account = ${me.ownAccount} and statement_date is not null order by ${STATEMENT_ORDER}`)) as unknown;
+  const list = (Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows) as { id: number; statement_no: string | null; statement_date: string; opening_balance: string | null; closing_balance: string | null }[];
+  const i = list.findIndex((r) => Number(r.id) === me.id);
+  const prev = list[i - 1], next = list[i + 1];
+  const d = (x: string) => `${x.slice(8, 10)}.${x.slice(5, 7)}.${x.slice(0, 4)}`;
+  const name = (r: typeof prev) => `бр. ${r!.statement_no ?? "?"} од ${d(r!.statement_date)}`;
+  const eq2 = (a: string | null, b: string | null) => a === null || b === null || Number(a).toFixed(2) === Number(b).toFixed(2);
+  const out: string[] = [];
+  if (next) out.push(`Изводот е постар од веќе увезениот ${name(next)}. Се подредува по датум. Автоматски се прокнижени само сигурните ставки; проверете ги ставките „за обработка“.`);
+  if (prev && !eq2(prev.closing_balance, me.openingBalance))
+    out.push(`Недостасува извод помеѓу ${name(prev)} и овој: новата состојба таму е ${Number(prev.closing_balance).toFixed(2)}, а претходната состојба тука е ${Number(me.openingBalance).toFixed(2)}.`);
+  if (next && !eq2(me.closingBalance, next.opening_balance))
+    out.push(`Недостасува извод помеѓу овој и ${name(next)}: новата состојба тука е ${Number(me.closingBalance).toFixed(2)}, а претходната состојба таму е ${Number(next.opening_balance).toFixed(2)}.`);
+  return out;
+}
+
+/** Samo citanje (bez zapis): datum, broj i smetka - za uvoz na povekje datoteki po red na datum. */
+export async function peekStatement(db: Db, clientId: number, text: string) {
+  const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
+  try {
+    const p = parseAny(text, client!.bankImportMapping);
+    const dates = p.lines.map((l) => (p.format === "csv" ? l.extra : null)).filter((x): x is string => !!x).sort();
+    return { ok: true as const, date: p.date ?? dates[0] ?? null, statementNo: p.statementNo, ownAccount: p.ownAccount, lines: p.lines.length };
+  } catch (e) { return { ok: false as const, error: (e as Error).message }; }
 }
 
 export type LineStatus = "booked" | "ignored" | "open";

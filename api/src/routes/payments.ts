@@ -6,7 +6,7 @@ import { bankStatementLines, bankStatements, clients, EXPENSE_CATEGORIES, type E
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { aging, allocateExisting, createPayment, openItems, unallocated, voidPayment } from "../domain/payments.js";
-import { bookLine, bookSure, clientOwnAccounts, importStatement, setCategory, statementDetail } from "../domain/statements.js";
+import { bookLine, bookSure, clientOwnAccounts, importStatement, peekStatement, setCategory, STATEMENT_ORDER, statementDetail } from "../domain/statements.js";
 import { normAccount } from "../domain/bank-txt.js";
 import { partnerScores } from "../domain/score.js";
 import { audit } from "../domain/audit.js";
@@ -126,13 +126,22 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
       open: sql<number>`(select count(*)::int from bank_statement_lines l left join payments y on y.id = l.payment_id
         where l.statement_id = bank_statements.id and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
       inflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'in')`,
-      outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'out')` })
-      .from(bankStatements).where(eq(bankStatements.clientId, clientId)).orderBy(desc(bankStatements.statementDate), desc(bankStatements.id)).limit(500);
+      outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'out')`,
+      // kontinuitet: novata sostojba na prethodniot izvod (po datum) za istata smetka
+      prevClosing: sql<string | null>`lag(${bankStatements.closingBalance}) over (partition by ${bankStatements.ownAccount} order by ${STATEMENT_ORDER})`,
+      prevNo: sql<string | null>`lag(${bankStatements.statementNo}) over (partition by ${bankStatements.ownAccount} order by ${STATEMENT_ORDER})` })
+      .from(bankStatements).where(eq(bankStatements.clientId, clientId)).orderBy(sql`${bankStatements.statementDate} desc nulls last, nullif(regexp_replace(coalesce(${bankStatements.statementNo}, ''), '\\D', '', 'g'), '')::numeric desc nulls last`, desc(bankStatements.id)).limit(500);
   });
   app.post("/api/clients/:clientId/bank-statements", async (req, reply) => {
     const { clientId, actor } = await ctx(req);
     const b = z.object({ text: z.string().min(1).max(2_000_000), fileName: z.string().max(200).optional().nullable(), autoBook: z.boolean().default(true) }).parse(req.body);
     return reply.status(201).send(await importStatement(db, clientId, b.text, b.fileName ?? null, actor, { autoBook: b.autoBook }));
+  });
+  /** Samo citanje na datotekata (datum, broj) – za uvoz na povekje izvodi po red na datum. */
+  app.post("/api/clients/:clientId/bank-statements/peek", async (req) => {
+    const { clientId } = await ctx(req);
+    const b = z.object({ text: z.string().min(1).max(2_000_000) }).parse(req.body);
+    return peekStatement(db, clientId, b.text);
   });
   app.get("/api/clients/:clientId/bank-statements/:id", async (req) => {
     const { clientId, id } = await ctx(req);
