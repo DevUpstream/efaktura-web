@@ -9,6 +9,7 @@ Ovde se cuvaat samo skriptite sto zboruvaat so noviot server.
 | Skripta | Namena |
 | --- | --- |
 | Sync-ServerRegistry.ps1 | Baranja do registarot na UJP od aplikacijata ("Повлечи од УЈП", "Провери во УЈП") |
+| Send-ServerInvoices.ps1 | Prakjanje fakturi na UJP ("Прати на УЈП"): zema od redicata, potpisuva so tokenot, prakja, go vrakja EUID (docs/15) |
 
 Kluchot za serverot: aplikacija -> Корисници и пристап -> Агент -> Нов клуч, pa `.\Sync-ServerRegistry.ps1 -SetKey`
 (se cuva so Windows DPAPI vo `server-agent.key`, nikogas vo Git).

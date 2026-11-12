@@ -5,6 +5,7 @@ import { api, ApiError, type CostCenter, type ClientRef, type DocType, type Invo
 import { GRADE, GradeChip, useScore } from "../components/Score";
 import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
+import { UjpPanel } from "../components/UjpPanel";
 import { RecurringForm } from "./Recurring";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
@@ -425,6 +426,9 @@ export function InvoiceEditor() {
           {recurOpen && <RecurringForm client={client} invoiceId={inv.id} defaultName={`${inv.buyerName} – месечно`} onDone={(ok) => { setRecurOpen(false); if (ok) setMsg({ kind: "ok", text: "Повторувачката фактура е зачувана. Секој месец на избраниот ден ќе се направи нацрт." }); }} />}
         </section>
       )}
+
+      {inv && !editable && inv.docType !== "PF" && inv.status !== "cancelled_draft" && (
+        <UjpPanel inv={inv} onChange={async () => setInv(await api.get<Invoice>(`/api/invoices/${inv.id}`))} />)}
 
       {inv && !editable && (canDerive || (inv.derived?.length ?? 0) > 0) && (
         <section className="after">
