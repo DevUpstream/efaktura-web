@@ -4,7 +4,7 @@
  * go zema, go prasuva UJP (GET /api/v1/companies/{EDB}) i go vrakja rezultatot. UJP e primaren izvor.
  */
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { agentKeys, clients, partners, registryRequests, type UjpCompany } from "../db/schema.js";
 import type { Db } from "../db/types.js";
@@ -179,38 +179,50 @@ export async function registryRoutes(app: FastifyInstance, { db }: { db: Db }) {
   });
 
   /* --------------------------------------------------------- kluchevi za agent */
+  const assertClients = async (ids: number[] | null) => {
+    if (!ids?.length) return;
+    const found = await db.select({ id: clients.id }).from(clients).where(inArray(clients.id, ids));
+    if (found.length !== new Set(ids).size) throw new DomainError("validation", "Непозната фирма.", 422);
+  };
   app.get("/api/agent-keys", async (req) => {
     requireAdmin(req);
-    return db.select({ id: agentKeys.id, name: agentKeys.name, isActive: agentKeys.isActive, lastUsedAt: agentKeys.lastUsedAt, createdAt: agentKeys.createdAt })
+    return db.select({ id: agentKeys.id, name: agentKeys.name, isActive: agentKeys.isActive, lastUsedAt: agentKeys.lastUsedAt, createdAt: agentKeys.createdAt,
+      clientIds: agentKeys.clientIds, agentVersion: agentKeys.agentVersion, agentInfo: agentKeys.agentInfo })
       .from(agentKeys).orderBy(asc(agentKeys.id));
   });
   app.post("/api/agent-keys", async (req, reply) => {
     const u = requireAdmin(req);
-    const { name } = z.object({ name: z.string().trim().min(2).max(100) }).parse(req.body);
+    const { name, clientIds } = z.object({ name: z.string().trim().min(2).max(100), clientIds: z.array(Id).max(50).nullable().default(null) }).parse(req.body);
+    await assertClients(clientIds);
     const key = `efa_${randomToken(32)}`;
-    const [k] = await db.insert(agentKeys).values({ name, keyHash: sha256(key) }).returning();
-    await audit(db, { userId: u.id, ip: req.ip }, { entity: "agent_key", entityId: k!.id, action: "create", changes: { name } });
+    const [k] = await db.insert(agentKeys).values({ name, keyHash: sha256(key), clientIds: clientIds?.length ? clientIds : null }).returning();
+    await audit(db, { userId: u.id, ip: req.ip }, { entity: "agent_key", entityId: k!.id, action: "create", changes: { name, clientIds } });
     return reply.status(201).send({ id: k!.id, name, key });   // klucot se prikazuva SAMO sega
   });
   app.patch("/api/agent-keys/:id", async (req) => {
     const u = requireAdmin(req);
     const id = Id.parse((req.params as { id: string }).id);
-    const { isActive } = z.object({ isActive: z.boolean() }).parse(req.body);
-    await db.update(agentKeys).set({ isActive }).where(eq(agentKeys.id, id));
-    await audit(db, { userId: u.id, ip: req.ip }, { entity: "agent_key", entityId: id, action: isActive ? "enable" : "disable" });
+    const b = z.object({ isActive: z.boolean().optional(), clientIds: z.array(Id).max(50).nullable().optional() }).parse(req.body);
+    if (b.clientIds !== undefined) await assertClients(b.clientIds);
+    await db.update(agentKeys).set({ ...(b.isActive !== undefined ? { isActive: b.isActive } : {}),
+      ...(b.clientIds !== undefined ? { clientIds: b.clientIds?.length ? b.clientIds : null } : {}) }).where(eq(agentKeys.id, id));
+    await audit(db, { userId: u.id, ip: req.ip }, { entity: "agent_key", entityId: id,
+      action: b.isActive === undefined ? "update" : b.isActive ? "enable" : "disable", changes: b.clientIds !== undefined ? { clientIds: b.clientIds } : undefined });
     return { ok: true };
   });
 
   /* ----------------------------------------------------------------- agent */
   // agentot prashuva na sekoi 4 s: bez zapis vo dnevnikot (obrabotkata - POST - se zapishuva)
   app.get("/api/agent/registry-requests", { logLevel: "silent" }, async (req) => {
-    await requireAgent(db, req);
+    const k = await requireAgent(db, req);
+    if (k.clientIds) return [];   // агент на клиент: само праќање за неговите фирми, регистарот го води бирото
     return db.select({ id: registryRequests.id, edb: registryRequests.edb, sellerEdb: registryRequests.sellerEdb })
       .from(registryRequests).where(eq(registryRequests.status, "pending")).orderBy(asc(registryRequests.id)).limit(20);
   });
 
   app.post("/api/agent/registry-requests/:id", async (req) => {
     const k = await requireAgent(db, req);
+    if (k.clientIds) throw new DomainError("forbidden", "Агентот на клиент не го води регистарот.", 403);
     const id = Id.parse((req.params as { id: string }).id);
     const b = z.union([z.object({ ok: z.literal(true), company: CompanyIn }), z.object({ ok: z.literal(false), error: z.string().max(2000) })]).parse(req.body);
     const [r] = await db.update(registryRequests).set(b.ok

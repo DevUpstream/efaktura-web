@@ -25,6 +25,8 @@ COPY --from=api --chown=node:node /app/dist ./dist
 COPY --from=web --chown=node:node /src/web/dist ./public
 COPY --chown=node:node api/drizzle ./drizzle
 COPY --chown=node:node api/assets ./assets
+# скриптите на агентот (пакет за компјутерот на клиентот, docs/15)
+COPY --chown=node:node agent ./agent
 COPY --chown=node:node api/package.json ./
 ARG APP_VERSION=dev
 ENV APP_VERSION=${APP_VERSION}

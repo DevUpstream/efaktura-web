@@ -7,7 +7,7 @@
  * Фактура не се праќа двапати: една активна задача по фактура (уникатен индекс) и проверка на EUID.
  */
 import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { invoices, ujpJobs, ujpLog } from "../db/schema.js";
+import { agentKeys, invoices, ujpJobs, ujpLog } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
@@ -60,8 +60,11 @@ export async function cancelJob(db: Db, invoiceId: number, actor: Actor & { user
 }
 
 /** Агентот зема задачи. Секоја се гради сега (свежи податоци); со проблем -> error без праќање; чека оригинал -> останува. */
-export async function takeJobs(db: Db, agentKeyId: number, limit = 10) {
-  const q = await db.select().from(ujpJobs).where(eq(ujpJobs.status, "queued")).orderBy(asc(ujpJobs.invoiceId)).limit(50);
+export async function takeJobs(db: Db, agent: { id: number; clientIds: number[] | null }, limit = 10) {
+  const agentKeyId = agent.id;
+  // агент на клиент: само фактури од неговите фирми (неговиот токен); бирото (null): сите
+  const q = await db.select().from(ujpJobs).where(and(eq(ujpJobs.status, "queued"), agent.clientIds ? inArray(ujpJobs.clientId, agent.clientIds) : undefined))
+    .orderBy(asc(ujpJobs.invoiceId)).limit(50);
   const out: { jobId: number; invoiceId: number; number: string; sellerEdb: string; docType: string; payload: unknown }[] = [];
   for (const j of q) {
     if (out.length >= limit) break;
@@ -108,6 +111,18 @@ export async function finishJob(db: Db, jobId: number, agentKeyId: number, r: Jo
   });
 }
 
+/** Агент активен = јавил во последните 3 мин. (агентот праша на секои 10 с; lastUsedAt се запишува најмногу еднаш во минута). */
+export const AGENT_ACTIVE_MS = 3 * 60_000;
+
+/** Агенти што можат да пратат за оваа фирма: врзани за неа или на бирото (без ограничување). */
+export async function agentsForClient(db: Db, clientId: number) {
+  const ks = await db.select({ id: agentKeys.id, name: agentKeys.name, lastUsedAt: agentKeys.lastUsedAt, clientIds: agentKeys.clientIds, agentVersion: agentKeys.agentVersion })
+    .from(agentKeys).where(and(eq(agentKeys.isActive, true), sql`(${agentKeys.clientIds} is null or ${clientId} = any(${agentKeys.clientIds}))`));
+  const list = ks.map((k) => ({ name: k.name, own: !!k.clientIds, lastUsedAt: k.lastUsedAt, version: k.agentVersion,
+    active: !!k.lastUsedAt && Date.now() - k.lastUsedAt.getTime() < AGENT_ACTIVE_MS }));
+  return { active: list.some((k) => k.active), agents: list };
+}
+
 /** За екранот на фактурата: JSON, проверки, задачи и записи. */
 export async function invoiceUjpState(db: Db, invoiceId: number) {
   const b = await buildInvoiceUjp(db, invoiceId);
@@ -116,5 +131,6 @@ export async function invoiceUjpState(db: Db, invoiceId: number) {
     .from(ujpLog).where(eq(ujpLog.invoiceId, invoiceId)).orderBy(desc(ujpLog.id)).limit(20);
   const active = jobs.find((x) => x.status === "queued" || x.status === "sending") ?? null;
   const stuck = active?.status === "sending" && Date.now() - active.takenAt!.getTime() > STUCK_MINUTES * 60_000;
-  return { ...b, jobs, log, active, stuck };
+  const [inv] = await db.select({ clientId: invoices.clientId }).from(invoices).where(eq(invoices.id, invoiceId));
+  return { ...b, jobs, log, active, stuck, agent: await agentsForClient(db, inv!.clientId) };
 }
