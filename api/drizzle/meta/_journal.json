@@ -148,6 +148,13 @@
       "when": 1794646041696,
       "tag": "0020_agent_po_klient",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794657471098,
+      "tag": "0021_devizni_fakturi",
+      "breakpoints": true
     }
   ]
 }

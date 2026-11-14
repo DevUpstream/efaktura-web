@@ -55,3 +55,22 @@ export function calcTotals(lines: (LineResult & { vatRatePct: Num })[], advanceA
       .map(([k, g]) => ({ vatRatePct: k, net: round(g.net, 2).toFixed(2), vat: round(g.vat, 2).toFixed(2) })),
   };
 }
+
+/* ------------------------------------------- devizna faktura (docs/16) */
+
+export const toMkd = (v: Num, rate: Num, dp = 2) => round(new D(v).times(rate), dp);
+
+/**
+ * Збир на девизна фактура. fx = документот (правилата на calcTotals; „за плаќање“ = вкупно, без заокружување на цел број
+ * [ПРЕТПОСТАВКА]). mkd = денарска противвредност: основица и ДДВ по курсот, заокружени на 2 децимали; вкупно = збир.
+ */
+export function calcFxTotals(fxLines: (LineResult & { vatRatePct: Num })[], rate: Num): { fx: Totals; mkd: Totals } {
+  const t = calcTotals(fxLines, 0);
+  const fx = { ...t, payableAmount: t.grossTotal };
+  const net = toMkd(t.netTotal, rate), vat = toMkd(t.vatTotal, rate), gross = net.plus(vat);
+  const mkd: Totals = {
+    netTotal: net.toFixed(2), vatTotal: vat.toFixed(2), grossTotal: gross.toFixed(2), payableAmount: gross.toFixed(2),
+    byRate: t.byRate.map((g) => ({ vatRatePct: g.vatRatePct, net: toMkd(g.net, rate).toFixed(2), vat: toMkd(g.vat, rate).toFixed(2) })),
+  };
+  return { fx, mkd };
+}

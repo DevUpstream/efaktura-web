@@ -10,6 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { clients, invoiceLines, invoices, PdfSettings } from "../db/schema.js";
 import { calcTotals } from "./calc.js";
+import { calcFxTotals } from "./fx.js";
 
 type Client = typeof clients.$inferSelect;
 type Inv = typeof invoices.$inferSelect;
@@ -56,7 +57,11 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   const { inv, client } = d;
   const ps: PdfSettings = client.pdfSettings ?? {};
   const lines = [...d.lines].sort((a, b) => a.lineNo - b.lineNo);
-  const totals = calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })), inv.advanceAmount ?? 0);
+  // Devizna faktura (docs/16): dokumentot vo valutata + denarska protivrednost po sredniot kurs na NBRM
+  const fx = !!inv.currency && inv.currency !== "MKD";
+  const ft = fx ? calcFxTotals(lines.map((l) => ({ netAmount: l.fxNetAmount ?? "0", vatAmount: l.fxVatAmount ?? "0", unitNet: "0", vatRatePct: l.vatRatePct })), inv.exchangeRate) : null;
+  const totals = ft ? ft.fx : calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })), inv.advanceAmount ?? 0);
+  const CUR = fx ? inv.currency : "ден.";
   const rates = [...totals.byRate].sort((a, b) => Number(a.vatRatePct) - Number(b.vatRatePct));   // 5% pred 18% (kako vo primerot)
   const qr = inv.ujpQrLink ? await QRCode.toBuffer(inv.ujpQrLink, { margin: 0, width: 220 }) : null;
 
@@ -114,6 +119,7 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   if (inv.docType !== "PF" && inv.supplyDate && inv.supplyDate !== inv.issueDate) kv("Датум на промет", day(inv.supplyDate));
   if (inv.docType === "AV") kv("Датум на авансно плаќање", day(inv.issueDate));
   if (inv.dueDate) kv(inv.docType === "PF" ? "Важи до" : "Рок за плаќање", day(inv.dueDate));
+  if (fx) kv("Валута", inv.currency);
   if (d.relatedNumber) ry = text(`по фактура бр. ${d.relatedNumber}${d.relatedDate ? ` од ${day(d.relatedDate)}` : ""}`, RX, ry + 2, { size: 9.5, width: RW });
   ry += 14;
   ry = text("Купувач:", RX + 6, ry, { font: "b", size: 12 });
@@ -151,9 +157,9 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   const LIMIT = 395;   // posle ova odi na nova strana (podnozjeto bara prostor)
   const qtyAbs = (l: Line) => nfQ.format(Number(l.qty));
   lines.forEach((l, i) => {
-    const net = Number(l.netAmount), vat = Number(l.vatAmount);
+    const net = Number(fx ? l.fxNetAmount : l.netAmount), vat = Number(fx ? l.fxVatAmount : l.vatAmount);
     const cells: Record<string, string> = {
-      no: String(i + 1), code: l.itemId ? d.itemCodes?.[l.itemId] ?? "" : "", desc: l.description, unit: l.unit, qty: qtyAbs(l), price: nfP.format(Number(l.unitPrice)),
+      no: String(i + 1), code: l.itemId ? d.itemCodes?.[l.itemId] ?? "" : "", desc: l.description, unit: l.unit, qty: qtyAbs(l), price: nfP.format(Number(fx ? l.fxUnitPrice : l.unitPrice)),
       disc: Number(l.discountPct) ? nfQ.format(Number(l.discountPct)) : "", net: m2(net), vatp: nfQ.format(Number(l.vatRatePct)),
       vat: m2(vat), gross: m2(Math.round((net + vat) * 100) / 100),
     };
@@ -181,14 +187,25 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   y2 += 12;
   for (const g of rates) {
     text(`${nfQ.format(Number(g.vatRatePct))}%`, c1 + 8, y2, { size: 8.5, width: 40 });
-    text(`${m2(g.net)} ден.`, c2 - 60, y2, { size: 8.5, width: 100, align: "right" });
-    text(`${m2(g.vat)} ден.`, c3 - 60, y2, { size: 8.5, width: 110, align: "right" });
+    text(`${m2(g.net)} ${CUR}`, c2 - 60, y2, { size: 8.5, width: 100, align: "right" });
+    text(`${m2(g.vat)} ${CUR}`, c3 - 60, y2, { size: 8.5, width: 110, align: "right" });
     y2 += 11;
   }
   doc.moveTo(RL, y2).lineTo(c3 + 50, y2).lineWidth(0.6).stroke();
   text("Вкупно:", RL + 8, y2 + 1, { font: "b", size: 8.5 });
-  text(`${m2(totals.netTotal)} ден.`, c2 - 60, y2 + 1, { font: "b", size: 8.5, width: 100, align: "right" });
-  text(`${m2(totals.vatTotal)} ден.`, c3 - 60, y2 + 1, { font: "b", size: 8.5, width: 110, align: "right" });
+  text(`${m2(totals.netTotal)} ${CUR}`, c2 - 60, y2 + 1, { font: "b", size: 8.5, width: 100, align: "right" });
+  text(`${m2(totals.vatTotal)} ${CUR}`, c3 - 60, y2 + 1, { font: "b", size: 8.5, width: 110, align: "right" });
+  if (ft) {
+    // denarska protivrednost [ПРЕТПОСТАВКА: ЗДДВ бара ДДВ во денари; да потврди сметководител]
+    y2 += 16;
+    const r = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 4, maximumFractionDigits: 6 }).format(Number(inv.exchangeRate));
+    y2 = text(`Противвредност во денари по среден курс на НБРМ: 1 ${inv.currency} = ${r} ден.${inv.exchangeRateDate ? ` (на ${day(inv.exchangeRateDate)})` : ""}`,
+      RL, y2, { font: "b", size: 7.8, width: c3 + 50 - RL }) + 1;
+    for (const g of [...ft.mkd.byRate].sort((a, b) => Number(a.vatRatePct) - Number(b.vatRatePct)))
+      y2 = text(`ДДВ ${nfQ.format(Number(g.vatRatePct))}%: основица ${m2(g.net)} ден., ДДВ ${m2(g.vat)} ден.`, RL + 8, y2, { size: 7.8, width: c3 + 50 - RL });
+    y2 = text(`Вкупно: основица ${m2(ft.mkd.netTotal)} ден., ДДВ ${m2(ft.mkd.vatTotal)} ден., со ДДВ ${m2(ft.mkd.grossTotal)} ден.`,
+      RL + 8, y2, { font: "b", size: 7.8, width: c3 + 50 - RL }) - 11;
+  }
 
   // desno: blok so vkupno (istaknato)
   const BX = 430, BW = PAGE.r - BX;
@@ -206,7 +223,7 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
   }
   doc.moveTo(BX + 10, by).lineTo(PAGE.r, by).lineWidth(0.6).stroke();
   text(inv.docType === "PF" ? "Вкупно:" : "За плаќање вкупно:", BX, by + 2, { font: "b", size: 9, width: BW, align: "right" });
-  text(`${m0(totals.payableAmount)} ден.`, BX - 40, by + 15, { font: "b", size: 12.5, width: BW + 40, align: "right" });
+  text(fx ? `${m2(totals.payableAmount)} ${CUR}` : `${m0(totals.payableAmount)} ден.`, BX - 40, by + 15, { font: "b", size: 12.5, width: BW + 40, align: "right" });
 
   /* ------------------------------------------------- klauzuli i potpisi */
   let cy = Math.max(y2 + 28, by + 40);

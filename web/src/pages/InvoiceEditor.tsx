@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { calcLine, calcTotals } from "@calc";
+import { calcFxTotals, calcLine, calcTotals } from "@calc";
 import { api, ApiError, type CostCenter, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { GRADE, GradeChip, useScore } from "../components/Score";
 import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf } from "../format";
@@ -9,13 +9,16 @@ import { UjpPanel } from "../components/UjpPanel";
 import { RecurringForm } from "./Recurring";
 
 interface Head { partnerId: number | ""; docType: DocType; issueDate: string; supplyDate: string; dueDate: string;
-  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | ""; costCenterId: number | "" }
+  paymentMethod: string; note: string; reason: string; voidCode: string; corrCode: string; advanceId: number | ""; advanceAmount: string; warehouseId: number | ""; costCenterId: number | "";
+  currency: string; rate: string; rateDate: string; rateNote: string }
+/** Devizna faktura (docs/16): valutite od kursnata lista na NBRM. */
+const CURRENCIES = ["MKD", "EUR", "USD", "CHF", "GBP", "SEK", "NOK", "DKK", "JPY", "CAD", "AUD"];
 interface Reason { code: string; name: string; kind: "void" | "correction" }
 interface Advance { id: number; number: string; issueDate: string; grossTotal: string; remaining: string }
 const DERIVED: DocType[] = ["ST", "OD", "KZ", "KR"];
 /** "250.5000" -> "250.5"; kolicinata bez znak (znakot go dava vidot na dokumentot). */
 const toEdit = (l: Line): EditLine => ({ ...l, key: ++seq, itemId: l.itemId ?? null, qty: String(Math.abs(Number(l.qty))),
-  unitPrice: String(Number(l.unitPrice)), discountPct: String(Number(l.discountPct)) });
+  unitPrice: String(Number(l.fxUnitPrice ?? l.unitPrice)), discountPct: String(Number(l.discountPct)) });
 const signOf = (d: DocType): 1 | -1 => (d === "OD" || d === "ST" ? -1 : 1);
 type EditLine = Omit<Line, "itemId"> & { key: number; itemId: number | null };
 let seq = 0;
@@ -33,7 +36,8 @@ export function InvoiceEditor() {
   const [rates, setRates] = useState<VatRate[]>([]);
   const [inv, setInv] = useState<Invoice | null>(null);
   const [head, setHead] = useState<Head>({ partnerId: Number(new URLSearchParams(window.location.search).get("partner")) || "", docType: new URLSearchParams(window.location.search).get("type") === "PF" ? "PF" : "INV", issueDate: today(), supplyDate: today(),
-    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "", costCenterId: "" });
+    dueDate: addDays(today(), 15), paymentMethod: "bank", note: "", reason: "", voidCode: "", corrCode: "", advanceId: "", advanceAmount: "", warehouseId: "", costCenterId: "",
+    currency: "MKD", rate: "", rateDate: "", rateNote: "" });
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
   useEffect(() => { if (client.modules.includes("warehouse")) api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs); else setWhs([]); }, [client.id]);
@@ -62,7 +66,8 @@ export function InvoiceEditor() {
         setHead({ partnerId: i.partnerId, docType: i.docType, issueDate: i.issueDate,
           supplyDate: i.supplyDate ?? i.issueDate, dueDate: i.dueDate ?? "", paymentMethod: i.paymentMethod, note: i.note ?? "",
           reason: i.correctionReason ?? "", voidCode: i.voidReasonCode ?? "", corrCode: i.correctionReasonCode ?? "",
-          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "", costCenterId: i.costCenterId ?? "" });
+          advanceId: i.advanceInvoiceId ?? "", advanceAmount: i.advanceAmount ? String(Number(i.advanceAmount)) : "", warehouseId: i.warehouseId ?? "", costCenterId: i.costCenterId ?? "",
+          currency: i.currency ?? "MKD", rate: i.currency && i.currency !== "MKD" ? String(Number(i.exchangeRate)) : "", rateDate: i.exchangeRateDate ?? "", rateNote: "" });
         setLines(i.lines.map(toEdit));
         setCcLines(i.lines.some((l) => l.costCenterId));
       } else {
@@ -77,7 +82,27 @@ export function InvoiceEditor() {
   const editable = !inv || inv.status === "draft";
   const sign = signOf(head.docType);
   const linesEditable = editable && head.docType !== "ST";
-  const canAdvance = head.docType === "INV" || head.docType === "KR";
+  const fx = head.currency !== "MKD";
+  const canAdvance = (head.docType === "INV" || head.docType === "KR") && !fx;
+  const isDerivedDoc = DERIVED.includes(head.docType);
+  /** Kursot vazi za datumot na promet (avansna/ponuda: datum na izdavanje) [ПРЕТПОСТАВКА, docs/16]. */
+  const rateBase = head.docType === "AV" || head.docType === "PF" ? head.issueDate : head.supplyDate || head.issueDate;
+  async function fetchRate(currency = head.currency, d = rateBase) {
+    if (currency === "MKD") return;
+    try {
+      const r = await api.get<{ rate: string; listDate: string }>(`/api/fx/rate?currency=${currency}&date=${d}`);
+      setHead((h) => ({ ...h, rate: String(Number(r.rate)), rateDate: d, rateNote: `НБРМ, курсна листа од ${date(r.listDate)}` }));
+    } catch (e) {
+      setHead((h) => ({ ...h, rateDate: d, rateNote: "" }));
+      setMsg({ kind: "err", text: `${(e as ApiError).message}` });
+    }
+    setDirty(true);
+  }
+  // nov datum ili valuta -> nov kurs (samo nacrt; izvedeniot dokument go nosi kursot od originalot)
+  useEffect(() => {
+    if (!loaded || !editable || isDerivedDoc || !fx || !rateBase || head.rateDate === rateBase) return;
+    void fetchRate(head.currency, rateBase);
+  }, [loaded, editable, isDerivedDoc, fx, head.currency, rateBase]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!editable || !canAdvance || !head.partnerId) return setAdvances([]);
@@ -92,7 +117,9 @@ export function InvoiceEditor() {
     try { return { ...calcLine({ qty: l.qty || 0, unitPrice: l.unitPrice || 0, discountPct: l.discountPct || 0, vatRatePct: pct }, sign), vatRatePct: pct }; }
     catch { return { unitNet: "0", netAmount: "0", vatAmount: "0", vatRatePct: pct }; }
   }), [lines, rateById, sign]);
-  const totals = editable ? calcTotals(computed, canAdvance && head.advanceId ? Number(head.advanceAmount || 0).toFixed(2) : 0) : null;
+  const rateNum = Number(head.rate);
+  const fxT = editable && fx && rateNum > 0 ? calcFxTotals(computed, head.rate) : null;
+  const totals = editable ? (fx ? fxT?.fx ?? calcTotals(computed, 0) : calcTotals(computed, canAdvance && head.advanceId ? Number(head.advanceAmount || 0).toFixed(2) : 0)) : null;
 
   const set = <K extends keyof Head>(k: K, v: Head[K]) => { setHead((h) => ({ ...h, [k]: v })); setDirty(true); };
   const setLine = (key: number, patch: Partial<EditLine>) => { setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l))); setDirty(true); };
@@ -126,6 +153,7 @@ export function InvoiceEditor() {
       paymentMethod: head.paymentMethod, note: head.note || null, version: inv?.version, warehouseId: head.warehouseId || null,
       costCenterId: head.costCenterId || null,
       correctionReason: head.reason || null, voidReasonCode: head.voidCode || null, correctionReasonCode: head.corrCode || null,
+      currency: head.currency, exchangeRate: fx ? parseNum(head.rate) : null, exchangeRateDate: fx ? head.rateDate || rateBase : null,
       advanceInvoiceId: canAdvance && head.advanceId ? head.advanceId : null,
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
       lines: realLines().map((l) => ({ itemId: l.itemId, description: l.description.trim(), unit: l.unit, qty: parseNum(l.qty),
@@ -138,6 +166,7 @@ export function InvoiceEditor() {
   const realLines = () => lines.filter((l) => l.description.trim() || l.itemId || parseNum(l.unitPrice) > 0);
   /** Proverka pred zacuvuvanje, so jasna poraka po stavka (ne "Неисправни податоци"). */
   function check(): string | null {
+    if (fx && !(parseNum(head.rate) > 0)) return `Внесете курс за ${head.currency} (среден курс на НБРМ, денари за 1 ${head.currency}).`;
     if (!head.partnerId) return partners.length ? "Изберете купувач." : "Оваа фирма уште нема купувачи. Додајте купувач во „Партнери“ (од регистарот на УЈП или рачно).";
     const errs: string[] = [];
     realLines().forEach((l, i) => {
@@ -215,12 +244,17 @@ export function InvoiceEditor() {
   }
 
   const partner = partners.find((p) => p.id === head.partnerId);
-  const newAmount = totals ? Number(totals.payableAmount ?? totals.grossTotal ?? 0) : 0;
+  const newAmount = fx ? Number(fxT?.mkd.payableAmount ?? 0) : totals ? Number(totals.payableAmount ?? totals.grossTotal ?? 0) : 0;
   const score = useScore(client.id, head.partnerId, inv?.status === "draft" || !inv ? newAmount : 0, client.modules.includes("payments") && ["INV", "AV", "KZ", "KR"].includes(head.docType));
   const isDerived = DERIVED.includes(head.docType);
   const canDerive = inv && !editable && (inv.docType === "INV" || inv.docType === "KR") && ["issued", "json_exported", "sent_to_ujp"].includes(inv.status);
-  const shown = editable ? totals : inv && { netTotal: inv.netTotal, vatTotal: inv.vatTotal, grossTotal: inv.grossTotal,
-    payableAmount: inv.payableAmount ?? String(Math.round(Number(inv.grossTotal))), byRate: inv.byRate };
+  const invFx = !!inv && (inv.currency ?? "MKD") !== "MKD";
+  const shown = editable ? totals : inv && (invFx
+    ? { netTotal: inv.fxNetTotal ?? "0", vatTotal: inv.fxVatTotal ?? "0", grossTotal: inv.fxGrossTotal ?? "0", payableAmount: inv.fxPayableAmount ?? inv.fxGrossTotal ?? "0", byRate: inv.fxByRate ?? [] }
+    : { netTotal: inv.netTotal, vatTotal: inv.vatTotal, grossTotal: inv.grossTotal, payableAmount: inv.payableAmount ?? String(Math.round(Number(inv.grossTotal))), byRate: inv.byRate });
+  /** Denarska protivrednost (devizna): od presmetkata na ekranot ili od zacuvanata faktura. */
+  const mkdShown = editable ? fxT?.mkd ?? null : invFx ? { netTotal: inv!.netTotal, vatTotal: inv!.vatTotal, grossTotal: inv!.grossTotal, byRate: inv!.byRate } : null;
+  const curLabel = fx ? head.currency : "ден.";
 
   return (
     <>
@@ -256,7 +290,7 @@ export function InvoiceEditor() {
           <label>Вид
             {editable && !isDerived ? (
               <select value={head.docType} onChange={(e) => set("docType", e.target.value as Head["docType"])}>
-                <option value="INV">Фактура</option><option value="AV">Авансна фактура</option><option value="PF">Понуда / профактура</option>
+                <option value="INV">Фактура</option>{!fx && <option value="AV">Авансна фактура</option>}<option value="PF">Понуда / профактура</option>
               </select>
             ) : <output>{DOC[head.docType]}</output>}
           </label>
@@ -284,6 +318,23 @@ export function InvoiceEditor() {
           </label>}
           {ccMode !== "off" && head.docType !== "PF" && <label className="check small cc-lines"><input type="checkbox" checked={ccLines} onChange={(e) => { setCcLines(e.target.checked); if (!editable) setCcDirty(true);
               if (!e.target.checked) setLines((ls) => ls.map((l) => ({ ...l, costCenterId: null }))); }} /> по ставки</label>}
+          <label>Валута
+            {editable && !isDerived ? (
+              <select value={head.currency} onChange={(e) => { const c = e.target.value;
+                setHead((h) => ({ ...h, currency: c, rate: c === "MKD" ? "" : h.rate, rateDate: "", rateNote: "", advanceId: c === "MKD" ? h.advanceId : "", advanceAmount: c === "MKD" ? h.advanceAmount : "" })); setDirty(true); }}
+                disabled={head.docType === "AV"} title={head.docType === "AV" ? "Авансна фактура засега е само во денари" : undefined}>
+                {CURRENCIES.map((c) => <option key={c} value={c}>{c === "MKD" ? "MKD (денари)" : c}</option>)}
+              </select>
+            ) : <output>{head.currency}</output>}
+          </label>
+          {fx && <label>Курс (ден. за 1 {head.currency})
+            {editable && !isDerived ? <>
+              <input inputMode="decimal" value={head.rate} onChange={(e) => { const v = e.target.value.replace(",", ".");
+                setHead((h) => ({ ...h, rate: v, rateDate: rateBase, rateNote: "рачно внесен" })); setDirty(true); }} aria-label="Курс" />
+              <small className="src">{head.rateNote || (head.rateDate ? `за ${date(head.rateDate)}` : "")}{" "}
+                <button type="button" className="link" onClick={() => fetchRate()}>Земи од НБРМ</button></small>
+            </> : <output>{Number(inv?.exchangeRate ?? head.rate).toLocaleString("de-DE", { maximumFractionDigits: 6 })}{inv?.exchangeRateDate ? ` (${date(inv.exchangeRateDate)})` : ""}</output>}
+          </label>}
           <label>Начин на плаќање
             {editable ? (
               <select value={head.paymentMethod} onChange={(e) => set("paymentMethod", e.target.value)}>
@@ -323,8 +374,8 @@ export function InvoiceEditor() {
           <table className="grid lines">
             <thead><tr>
               <th className="c-no">#</th><th className="c-item">Артикл / опис</th><th className="c-unit">Ед.</th>
-              <th className="num c-qty">Кол.</th><th className="num c-price">Цена без ДДВ</th><th className="num c-disc">Попуст %</th>
-              <th className="c-vat">ДДВ</th><th className="num c-amt">Износ без ДДВ</th>{linesEditable && <th className="c-x" />}
+              <th className="num c-qty">Кол.</th><th className="num c-price">Цена без ДДВ{fx ? ` (${head.currency})` : ""}</th><th className="num c-disc">Попуст %</th>
+              <th className="c-vat">ДДВ</th><th className="num c-amt">Износ без ДДВ{fx ? ` (${head.currency})` : ""}</th>{linesEditable && <th className="c-x" />}
             </tr></thead>
             <tbody>
               {lines.map((l, i) => (
@@ -360,7 +411,7 @@ export function InvoiceEditor() {
                       </select>
                     ) : `${Number(l.vatRatePct)}%`}
                   </td>
-                  <td className="num c-amt">{money(linesEditable || editable ? computed[i]!.netAmount : l.netAmount)}</td>
+                  <td className="num c-amt">{money(linesEditable || editable ? computed[i]!.netAmount : l.fxNetAmount ?? l.netAmount)}</td>
                   {linesEditable && <td className="c-x"><button className="icon" onClick={() => { setLines((ls) => ls.filter((x) => x.key !== l.key)); setDirty(true); }} aria-label={`Избриши ставка ${i + 1}`}>×</button></td>}
                 </tr>
               ))}
@@ -402,7 +453,14 @@ export function InvoiceEditor() {
               <div><dt>ДДВ вкупно</dt><dd>{money(shown.vatTotal)}</dd></div>
               <div><dt>Вкупно</dt><dd>{money(shown.grossTotal)}</dd></div>
               {inv?.advanceAmount && Number(inv.advanceAmount) > 0 && <div><dt>Одбиен аванс</dt><dd>−{money(inv.advanceAmount)}</dd></div>}
-              <div className="payable"><dt>{head.docType === "PF" ? "Вкупно по понудата" : "За плаќање"}</dt><dd>{money0(shown.payableAmount)} <span>ден.</span></dd></div>
+              <div className="payable"><dt>{head.docType === "PF" ? "Вкупно по понудата" : "За плаќање"}</dt><dd>{fx ? money(shown.payableAmount) : money0(shown.payableAmount)} <span>{curLabel}</span></dd></div>
+              {fx && mkdShown && <>
+                <div className="by-rate"><dt>Во денари по курс {Number(head.rate || inv?.exchangeRate).toLocaleString("de-DE", { maximumFractionDigits: 6 })}</dt><dd /></div>
+                {mkdShown.byRate.map((g) => <div key={`m${g.vatRatePct}`} className="by-rate"><dt>ДДВ {Number(g.vatRatePct)}% на {money(g.net)} ден.</dt><dd>{money(g.vat)} ден.</dd></div>)}
+                <div className="by-rate"><dt>Основица / ДДВ</dt><dd>{money(mkdShown.netTotal)} / {money(mkdShown.vatTotal)} ден.</dd></div>
+                <div className="by-rate"><dt>Вкупно во денари</dt><dd>{money(mkdShown.grossTotal)} ден.</dd></div>
+              </>}
+              {fx && !mkdShown && <div className="by-rate"><dt>Во денари</dt><dd>внесете курс</dd></div>}
             </dl>
           )}
         </div>

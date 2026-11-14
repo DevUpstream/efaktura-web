@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { userRoutes } from "./routes/users.js";
 import { masterRoutes } from "./routes/master.js";
 import { invoiceRoutes } from "./routes/invoices.js";
+import type { FxFetch } from "./domain/fx.js";
 import { registryRoutes } from "./routes/registry.js";
 import { crmRoutes } from "./routes/crm.js";
 import { stockRoutes } from "./routes/stock.js";
@@ -36,6 +37,7 @@ export interface AppDeps {
   publicUrl: string; appKey: string; bootstrapAdminEmail?: string;
   entra?: { provider: OidcProvider; tenantId: string };
   webDir?: string;      // izgradenata React aplikacija (index.html + assets)
+  fxFetch?: FxFetch;    // kursna lista na NBRM (docs/16); vo testovite – lazna
 }
 
 export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
@@ -73,7 +75,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
     bootstrapAdminEmail: d.bootstrapAdminEmail, entra: d.entra });
   await userRoutes(app, { db: d.db, publicUrl: d.publicUrl });
   await masterRoutes(app, { db: d.db });
-  await invoiceRoutes(app, { db: d.db });
+  await invoiceRoutes(app, { db: d.db, fxFetch: d.fxFetch });
   await registryRoutes(app, { db: d.db });
   await crmRoutes(app, { db: d.db });
   await stockRoutes(app, { db: d.db });

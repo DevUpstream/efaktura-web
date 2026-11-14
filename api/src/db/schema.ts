@@ -264,6 +264,18 @@ export const counters = pgTable("counters", {
   lastNo: integer("last_no").notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.clientId, t.docType, t.year] })]);
 
+/* ------------------------------------------------- kursna lista (docs/16) */
+
+/** Sreden kurs na NBRM vazen za rate_date (od kursnata lista list_date <= rate_date). Kes: istiot datum ne se bara dvapati. */
+export const exchangeRates = pgTable("exchange_rates", {
+  rateDate: date("rate_date").notNull(),
+  currency: char("currency", { length: 3 }).notNull(),
+  rate: numeric("rate", { precision: 18, scale: 6 }).notNull(),     // denari za 1 edinica (Sreden / Nomin)
+  listDate: date("list_date").notNull(),
+  source: varchar("source", { length: 10 }).notNull().default("nbrm"),
+  fetchedAt: ts("fetched_at").notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.rateDate, t.currency] }), check("exchange_rates_rate_ck", sql`${t.rate} > 0`)]);
+
 /* ------------------------------------------------------------- fakturi */
 
 export const invoices = pgTable("invoices", {
@@ -282,7 +294,9 @@ export const invoices = pgTable("invoices", {
   supplyDate: date("supply_date"),                   // avansna: bez datum na promet
   dueDate: date("due_date"),
   currency: char("currency", { length: 3 }).notNull().default("MKD"),
-  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6 }).notNull().default("1"),
+  exchangeRate: numeric("exchange_rate", { precision: 18, scale: 6 }).notNull().default("1"),   // denari za 1 edinica valuta
+  /** Datum za koj vazi kursot (sreden kurs na NBRM, docs/16); null kaj MKD. */
+  exchangeRateDate: date("exchange_rate_date"),
   paymentMethod: paymentMethod("payment_method").notNull().default("bank"),
 
   netTotal: money("net_total").notNull().default("0"),
@@ -292,6 +306,11 @@ export const invoices = pgTable("invoices", {
   advanceInvoiceId: integer("advance_invoice_id"),
   advanceAmount: money("advance_amount"),
   payableAmount: money("payable_amount"),            // round(gross, 0) - advance
+  // Devizna faktura (docs/16): iznosite od DOKUMENTOT vo valutata. net/vat/gross/payable gore se VO DENARI (osnova za KIF, naplata, kartica).
+  fxNetTotal: money("fx_net_total"),
+  fxVatTotal: money("fx_vat_total"),
+  fxGrossTotal: money("fx_gross_total"),
+  fxPayableAmount: money("fx_payable_amount"),
 
   relatedInvoiceId: integer("related_invoice_id"),   // storno / odobrenie / zadolzuvanje / korekcija
   sourceInvoiceId: integer("source_invoice_id"),     // napravena od (kopija / ponuda -> faktura)
@@ -353,6 +372,8 @@ export const invoices = pgTable("invoices", {
   check("invoices_issued_has_number_ck", sql`${t.status} in ('draft','to_issue','cancelled_draft') or (${t.seqNo} is not null and ${t.number} is not null)`),
   check("invoices_supply_ck", sql`${t.docType} = 'AV' or ${t.status} in ('draft','cancelled_draft') or ${t.supplyDate} is not null`),
   check("invoices_rate_ck", sql`${t.exchangeRate} > 0`),
+  // stari zapisi (SharePoint/ERPNext) se izuzeti: nemaat iznosi vo valuta
+  check("invoices_fx_ck", sql`${t.legacySpId} is not null or ${t.source} <> 'app' or (${t.currency} = 'MKD' and ${t.exchangeRate} = 1 and ${t.fxGrossTotal} is null) or (${t.currency} <> 'MKD' and ${t.fxGrossTotal} is not null)`),
   check("invoices_source_ck", sql`${t.source} in ('app', 'erpnext')`),
 ]);
 
@@ -371,6 +392,10 @@ export const invoiceLines = pgTable("invoice_lines", {
   vatRatePct: numeric("vat_rate_pct", { precision: 5, scale: 2 }).notNull(),   // snimka
   netAmount: amount4("net_amount").notNull(),
   vatAmount: amount4("vat_amount").notNull(),
+  /** Devizna faktura (docs/16): cena i iznosi vo valutata (dokumentot); unit_price/net/vat gore se denarska protivrednost. */
+  fxUnitPrice: amount4("fx_unit_price"),
+  fxNetAmount: amount4("fx_net_amount"),
+  fxVatAmount: amount4("fx_vat_amount"),
   priceSource: varchar("price_source", { length: 80 }),
   /** Stavka od ispratnica bez faktura (docs/12): zalihata e vekje izdadena so ispratnicata -> pri izdavanje ne se izdava povtorno. */
   stockDocId: integer("stock_doc_id").references(() => stockDocs.id, { onDelete: "restrict" }),

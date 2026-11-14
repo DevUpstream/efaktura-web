@@ -88,6 +88,6 @@ describe("УЈП: мапирање (json_primeri_21.10.2026, primer_za_json_2)",
     const w: string[] = [];
     expect(checkUjpPayload(toUjpPayload(inv(), [L(1, 100, 18, "DDV-A", "DDV-A")], party, { ...party, number: "" }, null), undefined, 0.05, {}, w)).toEqual([]);
     expect(w.join()).toMatch(/Купувач: адресата нема број/);
-    expect(checkUjpPayload(toUjpPayload(inv({ currency: "EUR" }), [L(1, 100, 18, "DDV-A", "DDV-A")], party, party, null)).join()).toMatch(/MKD/);
+    expect(checkUjpPayload(toUjpPayload(inv({ currency: "EUR" }), [L(1, 100, 18, "DDV-A", "DDV-A")], party, party, null)).join()).toMatch(/Девизна фактура \(EUR\) засега не се праќа/);
   });
 });

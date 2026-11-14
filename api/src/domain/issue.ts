@@ -10,6 +10,7 @@ import { clients, counters, invoiceLines, invoices, items, partners, STOCK_ITEM_
 import { defaultWarehouse, postStockDoc, reverseStockDoc } from "./stock.js";
 import type { Db } from "../db/types.js";
 import { calcTotals, round } from "./calc.js";
+import { calcFxTotals, rateDateProblem } from "./fx.js";
 import { assertDispatchesFree } from "./dispatch.js";
 import { missingCostCenter } from "./costcenters.js";
 import { DomainError } from "./errors.js";
@@ -56,6 +57,8 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
       if (!inv.relatedInvoiceId) errors.push("Недостасува поврзана фактура.");
       else {
         [related] = await tx.select().from(invoices).where(eq(invoices.id, inv.relatedInvoiceId)).for("update");
+        if (related && (related.currency !== inv.currency || related.exchangeRate !== inv.exchangeRate))
+          errors.push("Валутата и курсот мора да се исти како кај оригиналната фактура.");
         if (!related || related.clientId !== inv.clientId || !ISSUED_LIKE.includes(related.status as never)
             || !["INV", "KR"].includes(related.docType))
           errors.push("Поврзаната фактура не постои, не е издадена или е сторнирана.");
@@ -65,22 +68,32 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
         errors.push("Корекција бара C-шифра и опис.");
     }
 
+    // Devizna faktura (docs/16): dokumentot vo valutata, denari po kursot; proverkite na iznosite se vo valutata.
+    const fx = inv.currency !== "MKD";
+    const ft = fx ? calcFxTotals(lines.map((l) => ({ netAmount: l.fxNetAmount ?? "0", vatAmount: l.fxVatAmount ?? "0", unitNet: "0", vatRatePct: l.vatRatePct })), inv.exchangeRate) : null;
+    if (fx) {
+      if (lines.some((l) => l.fxNetAmount === null)) errors.push("Девизна фактура: ставките немаат износи во валута. Зачувајте го нацртот повторно.");
+      if (inv.docType === "AV" || inv.advanceInvoiceId) errors.push("Аванс засега е само во денари (MKD).");
+      if (!NEEDS_RELATED.includes(inv.docType)) { const p = rateDateProblem(inv.exchangeRateDate, inv.supplyDate ?? inv.issueDate); if (p) errors.push(p); }
+    }
+
     // Pravila od tekot v5: znak na iznosot, pricina, storno tocno ja ponistuva fakturata, odobrenija <= faktura
-    const totals = calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })), inv.advanceAmount ?? 0);
-    const gross = Number(totals.grossTotal);
+    const totals = ft ? ft.mkd : calcTotals(lines.map((l) => ({ ...l, unitNet: "0" })), inv.advanceAmount ?? 0);
+    const docTotal = (x: { grossTotal: string | null; fxGrossTotal: string | null }) => Number((fx ? x.fxGrossTotal : x.grossTotal) ?? 0);
+    const gross = Number((ft ? ft.fx : totals).grossTotal);
     if (["OD", "ST"].includes(inv.docType) ? gross >= 0 : gross <= 0)
       errors.push(["OD", "ST"].includes(inv.docType) ? "Износот мора да е негативен (намалување)." : "Износот мора да е поголем од 0.");
     if (NEEDS_RELATED.includes(inv.docType) && !inv.correctionReason?.trim()) errors.push("Внесете причина.");
     if (related && (inv.docType === "OD" || inv.docType === "ST")) {
-      const [od] = await tx.select({ s: sum(invoices.grossTotal) }).from(invoices).where(and(
+      const [od] = await tx.select({ s: sum(fx ? invoices.fxGrossTotal : invoices.grossTotal) }).from(invoices).where(and(
         eq(invoices.relatedInvoiceId, related.id), eq(invoices.docType, "OD"), ne(invoices.id, inv.id),
         inArray(invoices.status, [...ISSUED_LIKE])));
       const priorOd = Number(od?.s ?? 0);
-      if (inv.docType === "OD" && Number(related.grossTotal) + priorOd + gross < -0.005)
+      if (inv.docType === "OD" && docTotal(related) + priorOd + gross < -0.005)
         errors.push("Вкупните одобренија се поголеми од фактурата.");
       if (inv.docType === "ST") {
         if (priorOd < -0.001) errors.push("Фактурата има издадени книжни одобренија: наместо сторно направете книжно одобрение за остатокот.");
-        else if (Math.abs(gross + Number(related.grossTotal)) > 0.005 || Math.abs(Number(totals.vatTotal) + Number(related.vatTotal)) > 0.005)
+        else if (Math.abs(gross + docTotal(related)) > 0.005 || Math.abs(Number(totals.vatTotal) + Number(related.vatTotal)) > 0.005)
           errors.push("Сторното мора точно да ја поништи фактурата (ист износ со минус).");
       }
     }
@@ -116,6 +129,7 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
       status: "issued", seqNo, number, issuedBy: actor.userId, issuedAt: now, statusMessage: null,
       netTotal: totals.netTotal, vatTotal: totals.vatTotal, grossTotal: totals.grossTotal,
       payableAmount: totals.payableAmount, lineCount: lines.length,
+      fxNetTotal: ft?.fx.netTotal ?? null, fxVatTotal: ft?.fx.vatTotal ?? null, fxGrossTotal: ft?.fx.grossTotal ?? null, fxPayableAmount: ft?.fx.payableAmount ?? null,
       sellerName: client!.name, sellerEdb: client!.edb, sellerVatNumber: client!.vatNumber,
       sellerAddress: client!.address, sellerCity: client!.city, sellerIban: client!.iban, sellerBank: client!.bankName,
       buyerName: partner!.name, buyerEdb: partner!.edb, buyerVatNumber: partner!.vatNumber,
@@ -158,7 +172,9 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
     }
     await audit(tx as unknown as Db, actor, {
       clientId: inv.clientId, entity: "invoice", entityId: inv.id, action: "issue",
-      changes: { number, seqNo, totals: { net: totals.netTotal, vat: totals.vatTotal, gross: totals.grossTotal }, stockDocNumber, stockWarnings },
+      changes: { number, seqNo, totals: { net: totals.netTotal, vat: totals.vatTotal, gross: totals.grossTotal },
+        ...(ft ? { currency: inv.currency, rate: inv.exchangeRate, rateDate: inv.exchangeRateDate, fx: { net: ft.fx.netTotal, vat: ft.fx.vatTotal, gross: ft.fx.grossTotal } } : {}),
+        stockDocNumber, stockWarnings },
     });
     return { ...issued!, stockDocNumber, stockWarnings };
   });

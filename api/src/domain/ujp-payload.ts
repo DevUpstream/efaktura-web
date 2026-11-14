@@ -155,7 +155,8 @@ export function checkUjpPayload(p: UjpPayload, stored?: { net?: Decimal.Value; v
     if (tt.docAvansAmount > tt.docGrossAmountR) out.push("Авансот е поголем од износот на фактурата.");
     if (!tt.docAvansDesc || !tt.docAvansDate) out.push("Аванс: недостасува број/датум на авансната фактура.");
   }
-  if (d.docPayment.docCurrency !== "MKD") out.push("Засега се праќаат само фактури во MKD.");
+  if (d.docPayment.docCurrency !== "MKD")
+    out.push(`Девизна фактура (${d.docPayment.docCurrency}) засега не се праќа на УЈП: чека официјално правило за валута и курс (docs/16).`);
   for (const role of ["seller", "buyer"] as const) {
     const x = d[role], who = role === "seller" ? "Продавач" : "Купувач";
     if (!x[`${role}CCode`] || !x[`${role}Tin`] || !x[`${role}Name`]) out.push(`${who}: недостасува држава, ЕДБ или назив.`);
@@ -221,7 +222,8 @@ export async function buildInvoiceUjp(db: Db, invoiceId: number): Promise<{ payl
   const rows = await db.select({ l: invoiceLines, v: vatRates, code: items.code }).from(invoiceLines)
     .innerJoin(vatRates, eq(vatRates.id, invoiceLines.vatRateId)).leftJoin(items, eq(items.id, invoiceLines.itemId))
     .where(eq(invoiceLines.invoiceId, inv.id)).orderBy(invoiceLines.lineNo);
-  const lines: UjpLineIn[] = rows.map(({ l, v, code }) => ({ title: l.description, itemCode: code, unit: l.unit, qty: l.qty, unitPrice: l.unitPrice,
+  // devizna faktura: dokumentot e vo valutata (fx_unit_price); prakjanjeto e blokirano vo checkUjpPayload (docs/16)
+  const lines: UjpLineIn[] = rows.map(({ l, v, code }) => ({ title: l.description, itemCode: code, unit: l.unit, qty: l.qty, unitPrice: l.fxUnitPrice ?? l.unitPrice,
     discountPct: l.discountPct, vatPct: l.vatRatePct, taxIndicator: v.ujpCode, vatGroup: v.vatGroup, vatImpact: v.vatImpact }));
   // Фирма што НЕ е ДДВ обврзник: целиот промет е DDV-G (член 51 став 3 ЗДДВ), без ДДВ
   if (!client!.vatPayer) for (const l of lines) {
@@ -260,6 +262,8 @@ export async function buildInvoiceUjp(db: Db, invoiceId: number): Promise<{ payl
   }, lines, seller, buyer, ref ?? (UJP_DOC_TYPES[kind].refType ? fake : null), names);
   // адреса: агентот ги зема продавачот и купувачот од регистарот на УЈП пред праќање -> тука само предупредување
   const warnings: string[] = [];
-  problems.push(...checkUjpPayload(payload, { net: inv.netTotal, vat: inv.vatTotal, gross: inv.grossTotal, payable: inv.payableAmount }, 0.05, names, warnings));
+  const fxDoc = inv.currency !== "MKD";
+  problems.push(...checkUjpPayload(payload, fxDoc ? { net: inv.fxNetTotal ?? 0, vat: inv.fxVatTotal ?? 0, gross: inv.fxGrossTotal ?? 0 }
+    : { net: inv.netTotal, vat: inv.vatTotal, gross: inv.grossTotal, payable: inv.payableAmount }, 0.05, names, warnings));
   return { payload, problems, warnings, waitFor, sellerEdb, docTypeCode: UJP_DOC_TYPES[kind].code };
 }

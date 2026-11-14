@@ -39,15 +39,19 @@ export interface Item { id: number; code: string; name: string; type: ItemType; 
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
 export interface InvoiceRow { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; dueDate: string | null;
   buyerName: string; netTotal: string; vatTotal: string; grossTotal: string; payableAmount: string | null;
-  ujpId: string | null; ujpStatusName: string | null; ujpError: string | null; source?: string; ujpQrLink?: string | null; ujpSentAt?: string | null }
+  ujpId: string | null; ujpStatusName: string | null; ujpError: string | null; source?: string; ujpQrLink?: string | null; ujpSentAt?: string | null;
+  currency?: string; fxGrossTotal?: string | null; fxPayableAmount?: string | null }   // devizna faktura (docs/16)
 export interface Line { id?: number; itemId: number | null; description: string; unit: string; qty: string; unitPrice: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null;
   stockDocId?: number | null;   // stavka od ispratnica (docs/12)
-  costCenterId?: number | null }   // TM na stavkata (docs/14)
+  costCenterId?: number | null;    // TM na stavkata (docs/14)
+  fxUnitPrice?: string | null; fxNetAmount?: string | null; fxVatAmount?: string | null }   // devizna faktura (docs/16)
 export interface CostCenter { id: number; code: string; name: string; isActive: boolean }
 export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; warehouseId: number | null; costCenterId?: number | null; supplyDate: string | null; paymentMethod: string;
   note: string | null; clauses: string | null; version: number; lines: Line[]; advanceAmount: string | null; issuedAt: string | null;
   byRate: { vatRatePct: string; net: string; vat: string }[];
+  exchangeRate: string; exchangeRateDate: string | null; fxNetTotal: string | null; fxVatTotal: string | null;
+  fxByRate: { vatRatePct: string; net: string; vat: string }[] | null;
   relatedInvoiceId: number | null; relatedNumber: string | null; advanceInvoiceId: number | null; advanceNumber: string | null;
   correctionReason: string | null; voidReasonCode: string | null; correctionReasonCode: string | null;
   derived?: { id: number; number: string | null; docType: DocType; status: Status }[];

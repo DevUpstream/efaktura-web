@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api, type ClientRef, type InvoiceRow } from "../api";
-import { DOC, date, money0, statusOf } from "../format";
+import { DOC, date, money, money0, statusOf } from "../format";
 import { UjpState } from "../components/UjpState";
 import { useYears, YearSelect } from "../components/YearSelect";
 
@@ -31,7 +31,7 @@ export function Invoices() {
 
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
-  const waiting = (rows ?? []).filter((r) => r.status === "issued" && !r.ujpId && r.docType !== "PF" && r.source !== "erpnext").length;
+  const waiting = (rows ?? []).filter((r) => r.status === "issued" && !r.ujpId && r.docType !== "PF" && r.source !== "erpnext" && (r.currency ?? "MKD") === "MKD").length;   // devizni: cekaat pravilo na UJP (docs/16)
   async function sendAll() {
     setBusy(true); setInfo(null); setErr(null);
     try {
@@ -93,7 +93,8 @@ export function Invoices() {
                   </td>
                   <td>{date(r.issueDate)}</td>
                   <td className="buyer">{r.buyerName}</td>
-                  <td className="num">{money0(r.payableAmount ?? Math.round(Number(r.grossTotal)))}</td>
+                  <td className="num">{r.currency && r.currency !== "MKD" ? money(r.payableAmount) : money0(r.payableAmount ?? Math.round(Number(r.grossTotal)))}
+                    {r.currency && r.currency !== "MKD" && <small className="muted" title="Девизна фактура: износот лево е во денари по курсот на фактурата"><br />{money(r.fxPayableAmount ?? r.fxGrossTotal)} {r.currency}</small>}</td>
                   <td><span className={`chip st-${r.status}`}>{statusOf(r.docType, r.status)}</span></td>
                   <td>{r.docType === "PF" ? <span className="muted small">не се праќа</span> : <UjpState r={r} />}</td>
                 </tr>
