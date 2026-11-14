@@ -87,7 +87,7 @@ export async function buildApp(d: AppDeps): Promise<FastifyInstance> {
   await vatBookRoutes(app, { db: d.db });
   await costCenterRoutes(app, { db: d.db });
   await partnerCardRoutes(app, { db: d.db });
-  await ujpRoutes(app, { db: d.db });
+  await ujpRoutes(app, { db: d.db, publicUrl: d.publicUrl });
   // Veb-aplikacija: assets so dolg kes (imeto ima hash), index.html bez kes; SPA - nepoznatite pateki -> index.html
   if (d.webDir && existsSync(d.webDir)) {
     await app.register(fastifyStatic, {

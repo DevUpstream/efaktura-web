@@ -24,7 +24,13 @@ param([switch]$Watch, [int]$Minutes = 480,
       [string]$ConfigPath = "$PSScriptRoot\agent.config.psd1",
       [string]$ServerUrl)
 $ErrorActionPreference = "Stop"
+$AgentVersion = "2026.11.14"
 $KeyFile = Join-Path $PSScriptRoot "server-agent.key"
+
+# Само еден агент на компјутерот (закажаната задача + „Вклучи агент“ од прелистувачот не смеат да работат двапати)
+$mutex = [Threading.Mutex]::new($false, "Local\eFaktura-agent")
+if (-not $mutex.WaitOne(0)) { Write-Host "Агентот веќе работи на овој компјутер." -ForegroundColor Yellow; Start-Sleep -Seconds 3; return }
+$Host.UI.RawUI.WindowTitle = "е-Фактура агент"
 
 Import-Module "$PSScriptRoot\UjpAgent.psm1" -Force
 $cfg = Import-PowerShellDataFile $ConfigPath
@@ -32,7 +38,7 @@ if (-not $cfg.AllowProduction -and ($cfg.SendUrl -notmatch 'efakturatest\.' -or 
     throw "Конфигурацијата не покажува кон тест околината на УЈП (efakturatest). За производство: AllowProduction = `$true."
 }
 if (-not $ServerUrl) { $ServerUrl = if ($cfg.ServerUrl) { $cfg.ServerUrl } else { "https://92-5-149-62.sslip.io" } }
-if (-not (Test-Path $KeyFile)) { throw "Нема клуч за серверот. Пушти: .\Sync-ServerRegistry.ps1 -SetKey" }
+if (-not (Test-Path $KeyFile)) { throw "Нема клуч за серверот. Пушти: .\Install-Agent.ps1 (или кај бирото .\Sync-ServerRegistry.ps1 -SetKey)" }
 $key = [Net.NetworkCredential]::new("", ((Get-Content $KeyFile -Raw).Trim() | ConvertTo-SecureString)).Password
 $Headers = @{ "x-agent-key" = $key; "x-efaktura" = "1" }
 
@@ -53,6 +59,9 @@ if ($cfg.CertSerialNumber -and [string]$cfg.CertSerialNumber -ne $serialDec) {
 }
 if ($cert.NotAfter -lt (Get-Date)) { throw "Сертификатот е истечен ($($cert.NotAfter.ToString('dd.MM.yyyy')))." }
 Write-Host "Сертификат: $($cert.Subject) (сериски $serialDec, важи до $($cert.NotAfter.ToString('dd.MM.yyyy')))"
+$hello = Invoke-Server POST "/api/agent/hello" @{ version = $AgentVersion; computer = [Environment]::MachineName; user = [Environment]::UserName; certSubject = $cert.Subject
+    certSerial = $serialDec; certNotAfter = $cert.NotAfter.ToString("yyyy-MM-dd"); eujpId = [string]$cfg.EujpId }
+Write-Host "Агент „$($hello.name)“ за: $(if ($hello.firms) { ($hello.firms | ForEach-Object { $_.name }) -join ', ' } else { 'сите фирми (бирото)' })"
 $off = Sync-UjpClock -Config $cfg
 Write-Host "Сервер: $ServerUrl   УЈП: $($cfg.SendUrl)   часовник: $([int]$off.TotalSeconds) s $(if ($Watch) { "  (следи $Minutes мин., Ctrl+C за крај)" })" -ForegroundColor Cyan
 

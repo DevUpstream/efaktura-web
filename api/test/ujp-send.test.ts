@@ -107,4 +107,43 @@ describe("праќање на УЈП (docs/15)", () => {
     const f = await app.inject({ method: "GET", url: `/api/invoices/${a}/ujp.json`, headers: { cookie } });
     expect(JSON.parse(f.body).document.header.docType).toBe("100");
   });
+
+  it("агент по клиент: гледа само свои фирми; без регистар; hello; статус; пакет", async () => {
+    const id = await issued();
+    await call("POST", `/api/invoices/${id}/ujp-send`);
+    const k2 = (await call("POST", "/api/agent-keys", { name: "Друга фирма", clientIds: [t.c2.id] })).body;
+    const k1 = (await call("POST", "/api/agent-keys", { name: "МЦМС", clientIds: [t.c1.id] })).body;
+    expect((await call("POST", "/api/agent-keys", { name: "Непостоечка", clientIds: [99999] })).body.message).toMatch(/Непозната фирма/);
+    const as = async (k: string, url: string, payload: unknown = {}, method = "POST") =>
+      (await app.inject({ method: method as never, url, payload: method === "GET" ? undefined : payload as never, headers: { "x-agent-key": k, "x-efaktura": "1" } }));
+    // статус пред агентот: бирото (k без фирми) и k1 никогаш не се јавиле
+    let st = (await call("GET", `${C()}/ujp-agent`)).body;
+    expect(st.active).toBe(false);
+    expect(st.agents.map((a: { name: string }) => a.name).sort()).toEqual(["Токен", "МЦМС"].sort());
+    // туѓ агент не ја гледа фактурата; регистар не води
+    expect((await as(k2.key, "/api/agent/ujp-jobs/take")).json()).toEqual([]);
+    expect((await as(k2.key, "/api/agent/registry-requests", undefined, "GET")).json()).toEqual([]);
+    expect((await as(k2.key, "/api/agent/registry-requests/1", { ok: false, error: "x" })).statusCode).toBe(403);
+    // hello: верзија и сертификат; фирмите назад
+    const h = (await as(k1.key, "/api/agent/hello", { version: "2026.11.14", computer: "PC-MC", certSubject: "CN=Test", certNotAfter: "2028-03-05", eujpId: "11821" })).json();
+    expect(h.firms).toEqual([{ name: t.c1.name, edb: "4030994180119" }]);
+    st = (await call("GET", `${C()}/ujp-agent`)).body;
+    expect(st.active).toBe(true);
+    const keys = (await call("GET", "/api/agent-keys")).body;
+    expect(keys.find((k: { name: string }) => k.name === "МЦМС")).toMatchObject({ clientIds: [t.c1.id], agentVersion: "2026.11.14", agentInfo: { computer: "PC-MC", eujpId: "11821" } });
+    // свој агент ја зема
+    const jobs = (await as(k1.key, "/api/agent/ujp-jobs/take")).json();
+    expect(jobs.map((j: { invoiceId: number }) => j.invoiceId)).toEqual([id]);
+    // пакет: скрипти + поставки со адресата на серверот, без клучот
+    const z = await app.inject({ method: "GET", url: `/api/agent-keys/${k1.id}/package.zip`, headers: { cookie } });
+    expect(z.statusCode).toBe(200);
+    expect(z.headers["content-type"]).toBe("application/zip");
+    const body = z.rawPayload.toString("latin1");
+    for (const f of ["UjpAgent.psm1", "Send-ServerInvoices.ps1", "Install-Agent.ps1", "agent.config.psd1"]) expect(body).toContain(`eFaktura-agent/${f}`);
+    expect(z.rawPayload.includes(Buffer.from(k1.key))).toBe(false);
+    // промена на фирмите и деактивирање
+    expect((await call("PATCH", `/api/agent-keys/${k1.id}`, { clientIds: [t.c1.id, t.c2.id] })).status).toBe(200);
+    await call("PATCH", `/api/agent-keys/${k1.id}`, { isActive: false });
+    expect((await as(k1.key, "/api/agent/ujp-jobs/take")).statusCode).toBe(401);
+  });
 });

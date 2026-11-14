@@ -88,7 +88,7 @@ export function Admin() {
       )}
       {modUser !== null && users?.find((x) => x.id === modUser) && <UserModules u={users.find((x) => x.id === modUser)!} clients={clients} catalog={catalog}
         onDone={() => { setModUser(null); void load(); }} />}
-      <AgentKeys />
+      <AgentKeys clients={clients} />
       <p className="muted small">Microsoft корисниците се најавуваат со својата сметка од организацијата (MFA е кај Microsoft). Сопствените сметки добиваат линк за лозинка и при првата најава поставуваат апликација за кодови.</p>
     </>
   );
@@ -117,42 +117,68 @@ function NewUser({ onDone }: { onDone: (msg?: string) => void }) {
   );
 }
 
-interface Key { id: number; name: string; isActive: boolean; lastUsedAt: string | null; createdAt: string }
+interface Key { id: number; name: string; isActive: boolean; lastUsedAt: string | null; createdAt: string; clientIds: number[] | null; agentVersion: string | null;
+  agentInfo: { computer?: string; user?: string; certSubject?: string; certNotAfter?: string; eujpId?: string } | null }
+const ACTIVE_MS = 3 * 60_000;
+const cn = (s?: string) => /CN=([^,]+)/.exec(s ?? "")?.[1] ?? s ?? "";
 
-/** Kluchevi za lokalniot agent (kompjuterot so tokenot). Klucot se gleda samo pri kreiranje. */
-function AgentKeys() {
+/**
+ * Клучеви за агентите (docs/15). Бирото: клуч без фирми (регистар на УЈП + праќање за сите).
+ * Клиент: клуч за неговите фирми – неговиот агент зема само нивните фактури. Клучот се гледа само при креирање.
+ */
+function AgentKeys({ clients }: { clients: ClientRef[] }) {
   const [keys, setKeys] = useState<Key[]>([]);
-  const [fresh, setFresh] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<{ key: string; id: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [firms, setFirms] = useState<number[]>([]);
   const load = () => api.get<Key[]>("/api/agent-keys").then(setKeys);
   useEffect(() => { void load(); }, []);
+  const name = (id: number) => clients.find((c) => c.id === id)?.prefix ?? `#${id}`;
   async function create(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+    e.preventDefault(); setErr(null);
     const form = e.currentTarget;
-    const name = String(new FormData(form).get("name"));
-    try { setFresh((await api.post<{ key: string }>("/api/agent-keys", { name })).key); form.reset(); await load(); }
+    const n = String(new FormData(form).get("name"));
+    try { const r = await api.post<{ key: string; id: number }>("/api/agent-keys", { name: n, clientIds: firms.length ? firms : null }); setFresh(r); form.reset(); setFirms([]); await load(); }
     catch (x) { setErr((x as ApiError).message); }
   }
+  const soon = (d?: string) => !!d && new Date(d).getTime() - Date.now() < 30 * 86400_000;
   return (
     <section className="panel stack">
-      <h2>Агент (компјутер со токенот)</h2>
-      <p className="muted">Агентот ги извршува барањата кон УЈП (регистар, подоцна праќање фактури) бидејќи УЈП не е достапен од серверот. Секој компјутер со агент добива свој клуч.</p>
+      <h2>Агенти (компјутери со токен)</h2>
+      <p className="muted">Агентот ги прави барањата кон УЈП (регистар, праќање фактури), бидејќи УЈП не е достапен од серверот, а потписот бара токен.
+        <strong> Клиент што потпишува сам</strong>: клуч само за неговата фирма → „Преземи агент“ → на неговиот компјутер <code>Install-Agent.ps1</code>.
+        Клуч <strong>без фирми</strong> = бирото (регистар и праќање за сите фирми).</p>
       {err && <p className="alert">{err}</p>}
       {fresh && <div className="notice stack">
-        <strong>Клучот се прикажува само сега. Копирајте го во agent.config.psd1 (ServerAgentKey) на компјутерот со токенот.</strong>
-        <div className="row-actions"><input readOnly value={fresh} className="key-box" onFocus={(e) => e.currentTarget.select()} aria-label="Клуч за агентот" />
-          <button className="btn" onClick={() => navigator.clipboard.writeText(fresh)}>Копирај</button>
+        <strong>Клучот се прикажува само сега. Install-Agent.ps1 го бара еднаш (залепете го таму).</strong>
+        <div className="row-actions"><input readOnly value={fresh.key} className="key-box" onFocus={(e) => e.currentTarget.select()} aria-label="Клуч за агентот" />
+          <button className="btn" onClick={() => navigator.clipboard.writeText(fresh.key)}>Копирај</button>
+          <a className="btn" href={`/api/agent-keys/${fresh.id}/package.zip`}>Преземи агент (ZIP)</a>
           <button className="link" onClick={() => setFresh(null)}>Готово</button></div>
       </div>}
       {keys.length > 0 && <div className="table-wrap"><table className="grid">
-        <thead><tr><th>Име</th><th>Последно се јавил</th><th>Активен</th></tr></thead>
-        <tbody>{keys.map((k) => <tr key={k.id} className={k.isActive ? "" : "row-inactive"}>
-          <td>{k.name}</td><td>{k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("mk-MK") : "никогаш"}</td>
-          <td><input type="checkbox" checked={k.isActive} onChange={(e) => api.patch(`/api/agent-keys/${k.id}`, { isActive: e.target.checked }).then(load)} aria-label={`${k.name} активен`} /></td>
-        </tr>)}</tbody></table></div>}
-      <form onSubmit={create} className="row-actions">
-        <label className="grow">Име на компјутерот<input name="name" required minLength={2} placeholder="Сметководство – компјутер со токен" /></label>
-        <button className="btn">Нов клуч</button>
+        <thead><tr><th>Име</th><th>Фирми</th><th>Компјутер / сертификат</th><th>Последно се јавил</th><th>Активен</th><th /></tr></thead>
+        <tbody>{keys.map((k) => {
+          const on = !!k.lastUsedAt && Date.now() - new Date(k.lastUsedAt).getTime() < ACTIVE_MS;
+          return <tr key={k.id} className={k.isActive ? "" : "row-inactive"}>
+            <td>{k.name}{k.agentVersion && <div className="muted small">верзија {k.agentVersion}</div>}</td>
+            <td>{k.clientIds ? k.clientIds.map(name).join(", ") : <span className="muted">сите (бирото)</span>}</td>
+            <td className="small">{k.agentInfo?.computer ?? "—"}{k.agentInfo?.user ? ` · ${k.agentInfo.user}` : ""}
+              {k.agentInfo?.certSubject && <div>{cn(k.agentInfo.certSubject)}, важи до <span className={soon(k.agentInfo.certNotAfter) ? "chip err" : ""}>{date(k.agentInfo.certNotAfter!)}</span>
+                {k.agentInfo.eujpId ? ` · ЕУЈП ИД ${k.agentInfo.eujpId}` : ""}</div>}</td>
+            <td>{on ? <span className="chip ok">работи</span> : k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString("sv-SE", { timeZone: "Europe/Skopje" }).slice(0, 16) : "никогаш"}</td>
+            <td><input type="checkbox" checked={k.isActive} onChange={(e) => api.patch(`/api/agent-keys/${k.id}`, { isActive: e.target.checked }).then(load)} aria-label={`${k.name} активен`} /></td>
+            <td><a className="btn btn-small" href={`/api/agent-keys/${k.id}/package.zip`}>Преземи агент</a></td>
+          </tr>; })}</tbody></table></div>}
+      <form onSubmit={create} className="stack">
+        <div className="row-actions">
+          <label className="grow">Име<input name="name" required minLength={2} placeholder="МЦМС – компјутер на клиентот" /></label>
+          <button className="btn">Нов клуч</button>
+        </div>
+        <fieldset className="radio-set"><legend>Фирми за кои праќа (празно = бирото, сите)</legend>
+          {clients.map((c) => <label key={c.id} className="check"><input type="checkbox" checked={firms.includes(c.id)}
+            onChange={(e) => setFirms(e.target.checked ? [...firms, c.id] : firms.filter((x) => x !== c.id))} /> {c.prefix} · {c.name}</label>)}
+        </fieldset>
       </form>
     </section>
   );

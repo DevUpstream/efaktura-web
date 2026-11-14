@@ -3,7 +3,8 @@ import { api, ApiError, type Invoice } from "../api";
 
 interface Job { id: number; status: "queued" | "sending" | "sent" | "error" | "cancelled"; queuedAt: string; takenAt: string | null; doneAt: string | null; note: string | null }
 interface Log { id: number; at: string; success: boolean; httpStatus: number | null; euid: string | null; message: string | null }
-interface State { problems: string[]; warnings: string[]; waitFor: string | null; active: Job | null; stuck: boolean; jobs: Job[]; log: Log[] }
+interface AgentState { active: boolean; agents: { name: string; own: boolean; lastUsedAt: string | null; version: string | null; active: boolean }[] }
+interface State { problems: string[]; warnings: string[]; waitFor: string | null; active: Job | null; stuck: boolean; jobs: Job[]; log: Log[]; agent: AgentState }
 /** „12.11 18:49“ по Скопје (без зависност од јазикот на прелистувачот). */
 const tm = (s: string | null) => { if (!s) return ""; const x = new Date(s).toLocaleString("sv-SE", { timeZone: "Europe/Skopje" }); return `${x.slice(8, 10)}.${x.slice(5, 7)} ${x.slice(11, 16)}`; };
 
@@ -39,6 +40,7 @@ export function UjpPanel({ inv, onChange }: { inv: Invoice; onChange: () => void
             {a.status === "queued" ? <>Чека агентот (во редица од {tm(a.queuedAt)}). Агентот на компјутерот со токенот ја потпишува и праќа.</>
               : <>Агентот ја праќа (од {tm(a.takenAt)})…</>}
             {a.note && <div className="small">{a.note}</div>}
+            {!s.agent.active && <AgentOff agent={s.agent} />}
             {(a.status === "queued" || s.stuck) && <div className="row-actions">
               {s.stuck && <span className="small">Нема одговор од агентот подолго од 15 мин. Проверете на efakturatest.ujp.gov.mk дали е примена, па откажете.</span>}
               <button className="btn btn-small" onClick={() => act("ujp-cancel")} disabled={busy}>Откажи праќање</button></div>}
@@ -53,9 +55,19 @@ export function UjpPanel({ inv, onChange }: { inv: Invoice; onChange: () => void
             {s.problems.length === 0 && s.warnings.length > 0 && <p className="muted small">Агентот ќе ги земе од регистарот на УЈП: {s.warnings.join(" ")}</p>}
           </>}
       {err && <p className="alert">{err}</p>}
+      {!inv.ujpId && !a && s && !s.agent.active && s.problems.length === 0 && <AgentOff agent={s.agent} />}
       <p className="muted small"><a href={`/api/invoices/${inv.id}/ujp.json`}>JSON (преглед)</a>
         {s && s.log.length > 0 && <> · <details className="inline"><summary>Записи ({s.log.length})</summary>
           <ul className="small">{s.log.map((l) => <li key={l.id}>{tm(l.at)} {l.success ? `✓ ${l.euid}` : `✗ HTTP ${l.httpStatus ?? "?"} ${l.message?.slice(0, 300) ?? ""}`}</li>)}</ul></details></>}</p>
     </section>
   );
+}
+
+/** Агентот за фирмата не се јавил 3 мин.: линк „efaktura-agent:“ (прелистувачот прашува за дозвола; Install-Agent.ps1 го регистрира). */
+function AgentOff({ agent }: { agent: AgentState }) {
+  if (!agent.agents.length) return <p className="small muted">Нема агент за оваа фирма. Администраторот: Администрација → Агенти → нов клуч → „Преземи агент“.</p>;
+  const last = agent.agents.map((x) => x.lastUsedAt).filter(Boolean).sort().pop();
+  return <div className="small">Агентот не работи{last ? ` (последно: ${tm(last)})` : ""}. Вклучете го компјутерот со токенот, или:{" "}
+    <a className="btn btn-small" href="efaktura-agent:start">Вклучи агент</a>
+    <span className="muted"> (само на компјутерот каде е инсталиран агентот)</span></div>;
 }

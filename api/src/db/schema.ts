@@ -445,6 +445,11 @@ export const agentKeys = pgTable("agent_keys", {
   keyHash: char("key_hash", { length: 64 }).notNull().unique(),
   isActive: boolean("is_active").notNull().default(true),
   lastUsedAt: ts("last_used_at"),
+  /** Фирми за кои агентот праќа на УЈП (docs/15). null = бирото: сите фирми и регистарот на УЈП. */
+  clientIds: integer("client_ids").array(),
+  /** Од агентот при старт: верзија, компјутер, сертификат (носител, сериски, важи до). */
+  agentVersion: varchar("agent_version", { length: 20 }),
+  agentInfo: jsonb("agent_info").$type<{ computer?: string; user?: string; certSubject?: string; certSerial?: string; certNotAfter?: string; eujpId?: string }>(),
   createdAt: created(),
 });
 
