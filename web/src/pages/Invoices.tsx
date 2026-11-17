@@ -32,7 +32,7 @@ export function Invoices() {
 
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
-  const waiting = (rows ?? []).filter((r) => r.status === "issued" && !r.ujpId && r.docType !== "PF" && r.source !== "erpnext" && (r.currency ?? "MKD") === "MKD").length;   // devizni: cekaat pravilo na UJP (docs/16)
+  const waiting = (rows ?? []).filter((r) => r.status === "issued" && !r.ujpId && r.docType !== "PF" && (r.source ?? "app") === "app" && (r.currency ?? "MKD") === "MKD").length;   // devizni: cekaat pravilo na UJP (docs/16)
   async function sendAll() {
     setBusy(true); setInfo(null); setErr(null);
     try {
@@ -91,7 +91,7 @@ export function Invoices() {
                     <Link to={`../invoices/${r.id}`} relative="path" onClick={(e) => e.stopPropagation()} className="docno">
                       {r.number ?? "нацрт"}
                     </Link>
-                    {r.docType !== "INV" && <span className="doctype">{DOC[r.docType]}</span>}{r.source === "erpnext" && <span className="doctype" title="Пренесена од ERPNext: издадена надвор од е-Фактура, не се праќа кон УЈП">ERP</span>}
+                    {r.docType !== "INV" && <span className="doctype">{DOC[r.docType]}</span>}{r.source === "erpnext" && <span className="doctype" title="Пренесена од ERPNext: издадена надвор од е-Фактура, не се праќа кон УЈП">ERP</span>}{r.source === "excel" && <span className="doctype" title="Пренесена од Excel/PDF: издадена надвор од е-Фактура, не се праќа кон УЈП">XLS</span>}
                   </td>
                   <td>{date(r.issueDate)}</td>
                   <td className="buyer">{r.buyerName}</td>

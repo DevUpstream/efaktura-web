@@ -369,7 +369,7 @@ export const invoices = pgTable("invoices", {
   createdAt: created(),
   updatedAt: updated(),
   version: integer("version").notNull().default(1), // optimisticko zaklucuvanje
-  /** "app" ili "erpnext" (prenesena istoriska faktura, docs/11): izdadena nadvor od e-Faktura, NIKOGASH ne se prakja kon UJP. */
+  /** "app", "erpnext" (docs/11) ili "excel" (docs/20) - prenesena istoriska faktura: izdadena nadvor od e-Faktura, NIKOGASH ne se prakja kon UJP. */
   source: varchar("source", { length: 12 }).notNull().default("app"),
   /** Trosковno mesto (docs/14). Ne e del od fakturata kon kupuvacot; smee da se smeni i po izdavanje (so revizija). */
   costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
@@ -387,7 +387,7 @@ export const invoices = pgTable("invoices", {
   check("invoices_rate_ck", sql`${t.exchangeRate} > 0`),
   // stari zapisi (SharePoint/ERPNext) se izuzeti: nemaat iznosi vo valuta
   check("invoices_fx_ck", sql`${t.legacySpId} is not null or ${t.source} <> 'app' or (${t.currency} = 'MKD' and ${t.exchangeRate} = 1 and ${t.fxGrossTotal} is null) or (${t.currency} <> 'MKD' and ${t.fxGrossTotal} is not null)`),
-  check("invoices_source_ck", sql`${t.source} in ('app', 'erpnext')`),
+  check("invoices_source_ck", sql`${t.source} in ('app', 'erpnext', 'excel')`),
 ]);
 
 export const invoiceLines = pgTable("invoice_lines", {
@@ -659,7 +659,7 @@ export const purchaseInvoices = pgTable("purchase_invoices", {
   vatTotal: money("vat_total").notNull().default("0"),
   grossTotal: money("gross_total").notNull().default("0"),
   note: text("note"),
-  /** "manual", "ujp_json" (uvoz na e-faktura vo formatot na UJP, docs/09) ili "erpnext" (prenos, docs/11). */
+  /** "manual", "ujp_json" (uvoz na e-faktura vo formatot na UJP, docs/09) "erpnext" (prenos, docs/11) ili "excel" (prenos so zaliha, docs/20). */
   source: varchar("source", { length: 12 }).notNull().default("manual"),
   /** Iznosite (stavki i zaglavje) se od dokumentot na dobavuvacot i ne se presmetuvaat odnovo. */
   fixedAmounts: boolean("fixed_amounts").notNull().default(false),

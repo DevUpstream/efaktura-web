@@ -28,7 +28,8 @@ export function UjpPanel({ inv, onChange }: { inv: Invoice; onChange: () => void
     setBusy(true); setErr(null);
     try { await api.post(`/api/invoices/${inv.id}/${path}`, {}); await load(); onChange(); } catch (e) { setErr((e as ApiError).message); } finally { setBusy(false); }
   }
-  if ((inv as { source?: string }).source === "erpnext") return null;
+  const src = (inv as { source?: string }).source;
+  if (src && src !== "app") return null;
   const a = s?.active;
   return (
     <section className="after ujp-panel">
