@@ -127,11 +127,16 @@ export function InvoiceEditor() {
   async function pickItem(key: number, itemId: number) {
     const it = items.find((x) => x.id === itemId);
     if (!it) return setLine(key, { itemId: null });
-    setLine(key, { itemId, description: it.name, unit: it.unit, vatRateId: it.vatRateId, unitPrice: Number(it.unitPrice).toString(), priceSource: "Стандардна цена" });
+    // devizna faktura (zabeleska 19): standardnata cena e vo denari -> se deli so kursot; bez kurs – cenata se vnesuva racno
+    const rate = parseNum(head.rate);
+    const std = !fx ? Number(it.unitPrice).toString() : rate > 0 ? (Math.round(Number(it.unitPrice) / rate * 10000) / 10000).toString() : "";
+    setLine(key, { itemId, description: it.name, unit: it.unit, vatRateId: it.vatRateId, unitPrice: std,
+      priceSource: !fx ? "Стандардна цена" : rate > 0 ? `Стандардна цена ÷ курс ${rate}` : `Внесете курс за ${head.currency}` });
     if (head.partnerId) {
-      const q = new URLSearchParams({ partnerId: String(head.partnerId), itemId: String(itemId), date: head.issueDate, ...(inv ? { excludeInvoiceId: String(inv.id) } : {}) });
-      const s = await api.get<{ price: string; source: string }>(`/api/clients/${client.id}/price?${q}`).catch(() => null);
-      if (s) setLine(key, { unitPrice: Number(s.price).toString(), priceSource: s.source });
+      const q = new URLSearchParams({ partnerId: String(head.partnerId), itemId: String(itemId), date: head.issueDate, ...(inv ? { excludeInvoiceId: String(inv.id) } : {}),
+        ...(fx ? { currency: head.currency, ...(rate > 0 ? { rate: String(rate) } : {}) } : {}) });
+      const s = await api.get<{ price: string | null; source: string }>(`/api/clients/${client.id}/price?${q}`).catch(() => null);
+      if (s) setLine(key, { ...(s.price !== null ? { unitPrice: Number(s.price).toString() } : {}), priceSource: s.source });
     }
   }
 

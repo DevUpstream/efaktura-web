@@ -10,7 +10,7 @@ import { audit, type Actor } from "./audit.js";
 import { createPayment, openItems } from "./payments.js";
 import { looksLikeMkTxt, normAccount, parseMkTxt, type ParsedStatement } from "./bank-txt.js";
 import { parseStatement } from "./bank-import.js";
-import { looksLikeMt940, parseMt940 } from "./bank-mt940.js";
+import { looksLikeMt940, mkAccount, parseMt940 } from "./bank-mt940.js";
 import { looksLikeStbTxt, parseStbTxt } from "./bank-stb.js";
 import { matchLine, type MatchContext, type MatchResult } from "./matching.js";
 
@@ -20,6 +20,13 @@ export const clientOwnAccounts = (c: Client) =>
 
 /** TXT ili MT940 (avtomatski) ili CSV (po mapiranjeto na firmata). */
 export function parseAny(text: string, mapping: BankImportMapping | null): ParsedStatement {
+  const p = parseKnown(text, mapping);
+  // nasata smetka vo eden oblik (300-0000000123-45), i koga bankata ja dava kako IBAN: dupli izvodi, kontinuitet, druga firma
+  if (p.ownAccount) p.ownAccount = mkAccount(p.ownAccount);
+  return p;
+}
+
+function parseKnown(text: string, mapping: BankImportMapping | null): ParsedStatement {
   if (looksLikeMkTxt(text)) return parseMkTxt(text);
   if (looksLikeMt940(text)) return parseMt940(text);
   if (looksLikeStbTxt(text)) return parseStbTxt(text);

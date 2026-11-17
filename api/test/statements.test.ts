@@ -10,7 +10,7 @@ import { createSession, SESSION_COOKIE } from "../src/auth/sessions.js";
 import { calcLine } from "../src/domain/calc.js";
 import { issueInvoice } from "../src/domain/issue.js";
 import { postPurchase } from "../src/domain/purchase.js";
-import { parseMkTxt } from "../src/domain/bank-txt.js";
+import { normAccount, parseMkTxt } from "../src/domain/bank-txt.js";
 import { looksLikeMt940, parse86, parseMt940 } from "../src/domain/bank-mt940.js";
 import { looksLikeStbTxt, parseStbTxt } from "../src/domain/bank-stb.js";
 import { matchLine, uniqueSubset } from "../src/domain/matching.js";
@@ -213,6 +213,29 @@ describe("uvoz, prepoznavanje i knizenje", () => {
     await t.db.update(clients).set({ modules: ["invoices", "payments"], iban: null }).where(eq(clients.id, t.c2.id));
     await t.db.insert(clientAccess).values({ clientId: t.c2.id, userId: (await t.db.select().from(users).where(eq(users.email, "ana@x.mk")))[0]!.id });
     expect((await call("POST", `/api/clients/${t.c2.id}/bank-statements`, { text: txt(35, "06.11.2026", OWN, 1180, [{ name: "y", acc: "300-0000000222-22", amount: 5 }]) })).body.message).toMatch(/веќе има изводи/);
+  });
+
+  it("IBAN (MK07, zabeleska 4): smetka na firmata kako IBAN = stara smetka; izvod so IBAN vo zaglavjeto; kontinuitet", async () => {
+    expect(normAccount("MK07 2500 1030 2493 398")).toBe("250010302493398");
+    expect(normAccount("250-0103024933-98")).toBe("250010302493398");
+    expect(normAccount("mk07250010302493398")).toBe("250010302493398");
+    expect(normAccount("DE89370400440532013000")).toBe("DE89370400440532013000");   // stranski IBAN ostanuva
+    await t.db.update(clients).set({ iban: "MK07 2500 1030 2493 398" }).where(eq(clients.id, t.c1.id));
+    const a = await call("POST", `${C()}/bank-statements`, { text: txt(34, "05.11.2026", OWN, 0, [{ name: "x", acc: "300-0000000111-22", amount: 100 }]) });
+    expect(a.status).toBe(201);
+    // ist izvod, bankata vekje ja dava smetkata kako IBAN
+    const rows = txt(35, "06.11.2026", OWN, 100, [{ name: "y", acc: "300-0000000222-22", amount: 5 }]).split("\r\n");
+    rows[2] = "MK07250010302493398";
+    const b = await call("POST", `${C()}/bank-statements`, { text: rows.join("\r\n") });
+    expect(b.status).toBe(201);
+    expect(JSON.stringify(b.body)).not.toMatch(/Недостасува извод/);
+    const list = (await call("GET", `${C()}/bank-statements`)).body as { ownAccount: string; prevNo: string | null; statementNo: string }[];
+    expect(list.map((x) => x.ownAccount)).toEqual(["250-0103024933-98", "250-0103024933-98"]);
+    expect(list.find((x) => x.statementNo === "35")!.prevNo).toBe("34");
+    // dupli izvod se prepoznava i koga zaglavjeto e vo drug oblik
+    const dup = txt(34, "05.11.2026", OWN, 0, [{ name: "x", acc: "300-0000000111-22", amount: 100 }]).split("\r\n");
+    dup[2] = "MK07 2500 1030 2493 398";
+    expect((await call("POST", `${C()}/bank-statements`, { text: dup.join("\r\n") })).status).toBe(409);
   });
 
   it("redosled po datum: postar izvod si go zazema mestoto; kontinuitet; peek; praznina vo listata", async () => {

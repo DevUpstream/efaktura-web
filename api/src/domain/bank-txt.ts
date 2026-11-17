@@ -27,6 +27,8 @@ export interface ParsedStatement {
 }
 
 const ACC = /^\d{3}-\d{10}-\d{2}$/;
+/** Domasna smetka vo star oblik (300-0000000123-45) ili IBAN (MK07 300 0000000123 45). */
+const isMkAccount = (s: string) => ACC.test(s) || /^MK\d{2}\d{15}$/.test(s.replace(/\s/g, "").toUpperCase());
 const COLS = { name: [0, 70], account: [70, 88], amount: [88, 107], code: [107, 113], purpose: [113, 185], refDebit: [185, 209],
   refCredit: [209, 233], edb: [233, 257], extra: [257, 281] } as const;
 
@@ -40,7 +42,7 @@ const isoDate = (s: string) => { const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(s.
 /** Dali tekstot e izvod vo ovoj format (za avtomatsko prepoznavanje). */
 export function looksLikeMkTxt(text: string) {
   const l = text.replace(/^﻿/, "").split(/\r?\n/);
-  return l.length >= 5 && /^\d+\s*$/.test(l[0] ?? "") && !!isoDate(l[1] ?? "") && ACC.test((l[2] ?? "").trim()) && !!parseTxtAmount(l[3] ?? "") && !!parseTxtAmount(l[4] ?? "");
+  return l.length >= 5 && /^\d+\s*$/.test(l[0] ?? "") && !!isoDate(l[1] ?? "") && isMkAccount((l[2] ?? "").trim()) && !!parseTxtAmount(l[3] ?? "") && !!parseTxtAmount(l[4] ?? "");
 }
 
 export function parseMkTxt(text: string): ParsedStatement {
@@ -57,7 +59,7 @@ export function parseMkTxt(text: string): ParsedStatement {
     const col = (c: readonly [number, number]) => raw.slice(c[0], c[1]).trim();
     const amount = parseTxtAmount(col(COLS.amount));
     const account = col(COLS.account);
-    if (!amount || amount.isZero() || (account && !ACC.test(account))) {
+    if (!amount || amount.isZero() || (account && !isMkAccount(account))) {
       throw new DomainError("validation", `Ставка ${lineNo}: колоните не се на очекуваното место (износ „${col(COLS.amount)}“, сметка „${account}“). Форматот на оваа банка не е проверен.`, 422);
     }
     sum = sum.plus(amount);
@@ -76,5 +78,11 @@ export function parseMkTxt(text: string): ParsedStatement {
     fileHash: createHash("sha256").update(clean.replace(/\r\n/g, "\n").trimEnd()).digest("hex") };
 }
 
-/** Smetka vo edinstven oblik za sporedba (bez crticki i prazni mesta). */
-export const normAccount = (s: string | null | undefined) => (s ?? "").replace(/[\s-]/g, "");
+/**
+ * Smetka vo edinstven oblik za sporedba: bez crticki i prazni mesta. IBAN MKkk + 15 znaci = domasnata smetka (15 znaci),
+ * pa MK07 300 0000000123 45 = 300-0000000123-45 (zabeleska 4, 17.11.2026).
+ */
+export const normAccount = (s: string | null | undefined) => {
+  const a = (s ?? "").replace(/[\s-]/g, "").toUpperCase();
+  return /^MK\d{2}[0-9A-Z]{15}$/.test(a) ? a.slice(4) : a;
+};

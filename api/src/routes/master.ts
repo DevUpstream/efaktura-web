@@ -1,6 +1,7 @@
 /** Shifrarnici po klient: kupuvaci, artikli; globalni: DDV stapki, pricini. Predlog-cena (docs/03). */
 import type { FastifyInstance } from "fastify";
 import { and, desc, eq, gt, gte, inArray, lte, ne, sql } from "drizzle-orm";
+import { Decimal } from "decimal.js";
 import { z } from "zod";
 import { clients, invoiceLines, invoices, items, partnerPrices, partners, ujpReasons, vatRates } from "../db/schema.js";
 import type { Db } from "../db/types.js";
@@ -176,30 +177,39 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.get("/api/clients/:clientId/price", async (req) => {
     const { clientId } = await ctx(req);
     const q = z.object({ partnerId: Id, itemId: Id, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      excludeInvoiceId: Id.optional() }).parse(req.query);
+      excludeInvoiceId: Id.optional(), currency: z.string().regex(/^[A-Z]{3}$/).optional(), rate: z.coerce.number().positive().optional() }).parse(req.query);
     return suggestPrice(db, clientId, q);
   });
 }
 
+const fmtMoney = (v: string) => new Intl.NumberFormat("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(v));
 const fmt = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 
 export async function suggestPrice(db: Db, clientId: number,
-  q: { partnerId: number; itemId: number; date: string; excludeInvoiceId?: number }) {
+  q: { partnerId: number; itemId: number; date: string; excludeInvoiceId?: number; currency?: string; rate?: number }): Promise<{ price: string | null; source: string }> {
   const [item] = await db.select().from(items).where(and(eq(items.id, q.itemId), eq(items.clientId, clientId)));
   if (!item) throw new DomainError("not_found", "Артиклот не постои.", 404);
+  // Devizna faktura (zabeleska 19, docs/16): cenata e vo valutata. Denarskite ceni se delat so kursot; bez kurs – nema predlog.
+  const cur = q.currency ?? "MKD", fx = cur !== "MKD";
+  const fromMkd = (mkd: string, label: string) => {
+    if (!fx) return { price: mkd, source: label };
+    if (!q.rate) return { price: null, source: `${label}: ${fmtMoney(mkd)} ден. – внесете курс за ${cur}` };
+    return { price: new Decimal(mkd).div(q.rate).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toFixed(4), source: `${label} ${fmtMoney(mkd)} ден. ÷ курс ${q.rate}` };
+  };
 
   const [pp] = await db.select().from(partnerPrices).where(and(eq(partnerPrices.clientId, clientId),
     eq(partnerPrices.partnerId, q.partnerId), eq(partnerPrices.itemId, q.itemId),
     lte(partnerPrices.validFrom, q.date), gte(partnerPrices.validTo, q.date)));
-  if (pp) return { price: pp.price, source: `Договорена цена (од ${fmt(pp.validFrom)})` };
+  if (pp) return fromMkd(pp.price, `Договорена цена (од ${fmt(pp.validFrom)})`);
 
-  const [last] = await db.select({ price: invoiceLines.unitPrice, date: invoices.issueDate }).from(invoiceLines)
+  // posledna cena vo istata valuta (kaj devizna: cenata od dokumentot, ne denarskata protivrednost)
+  const [last] = await db.select({ price: fx ? invoiceLines.fxUnitPrice : invoiceLines.unitPrice, date: invoices.issueDate }).from(invoiceLines)
     .innerJoin(invoices, eq(invoices.id, invoiceLines.invoiceId))
-    .where(and(eq(invoices.clientId, clientId), eq(invoices.partnerId, q.partnerId), eq(invoiceLines.itemId, q.itemId),
+    .where(and(eq(invoices.clientId, clientId), eq(invoices.partnerId, q.partnerId), eq(invoiceLines.itemId, q.itemId), eq(invoices.currency, cur),
       gt(invoiceLines.qty, "0"), inArray(invoices.status, ["issued", "json_exported", "sent_to_ujp", "corrected"]), ne(invoices.docType, "PF"),
       q.excludeInvoiceId ? ne(invoices.id, q.excludeInvoiceId) : sql`true`))
     .orderBy(desc(invoices.issueDate), desc(invoices.id)).limit(1);
-  if (last) return { price: last.price, source: `Последна цена за купувачот (${fmt(last.date)})` };
+  if (last?.price) return { price: last.price, source: `Последна цена за купувачот${fx ? ` во ${cur}` : ""} (${fmt(last.date)})` };
 
-  return { price: item.unitPrice, source: "Стандардна цена" };
+  return fromMkd(item.unitPrice, "Стандардна цена");
 }

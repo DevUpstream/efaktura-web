@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { testDb } from "./helpers.js";
 import { buildApp } from "../src/app.js";
-import { exchangeRates, invoiceLines, invoices } from "../src/db/schema.js";
+import { exchangeRates, invoiceLines, invoices, items } from "../src/db/schema.js";
 import { createSession, SESSION_COOKIE } from "../src/auth/sessions.js";
 import { calcFxTotals, getNbrmRate, nbrmDate, parseNbrm, rateDateProblem } from "../src/domain/fx.js";
 import { calcLine } from "../src/domain/calc.js";
@@ -162,6 +162,22 @@ describe("девизна фактура преку API", () => {
     expect(mk).toMatchObject({ currency: "MKD", exchangeRate: "1.000000", fxGrossTotal: null, payableAmount: "118.00" });
     const [ml] = await t.db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, m.body.id));
     expect(ml!.fxUnitPrice).toBeNull();
+  });
+
+  it("предлог-цена (забелешка 19): кај девизна – во валутата, не во денари", async () => {
+    const [it0] = await t.db.insert(items).values({ clientId: t.c1.id, code: "K1", name: "Консултации", unit: "час", unitPrice: "6170", vatRateId: t.vat18.id }).returning();
+    const P = (q: string) => call("GET", `/api/clients/${t.c1.id}/price?partnerId=${t.p1.id}&itemId=${it0!.id}&date=2026-11-10&${q}`);
+    // без историја: стандардна цена ÷ курс; без курс – нема предлог
+    expect((await P("currency=EUR&rate=61.7")).body).toMatchObject({ price: "100.0000", source: expect.stringContaining("÷ курс 61.7") });
+    expect((await P("currency=EUR")).body).toMatchObject({ price: null, source: expect.stringContaining("внесете курс за EUR") });
+    // издадена EUR фактура со артиклот -> последна цена во EUR
+    const c = await draft({ lines: [{ ...line(500.25, 1), itemId: it0!.id }] });
+    await call("POST", `/api/invoices/${c.body.id}/issue`);
+    expect((await P("currency=EUR&rate=61.7")).body).toMatchObject({ price: "500.2500", source: expect.stringContaining("во EUR") });
+    // денарска фактура не ја зема денарската противвредност од девизната
+    expect((await P("")).body).toMatchObject({ price: "6170.0000", source: "Стандардна цена" });
+    // друга валута: нема историја во USD
+    expect((await P("currency=USD&rate=52.81")).body.source).toContain("Стандардна цена");
   });
 
   it("копија: иста валута, курс од НБРМ за новиот датум", async () => {
