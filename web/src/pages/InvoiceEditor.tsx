@@ -3,7 +3,8 @@ import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom
 import { calcFxTotals, calcLine, calcTotals } from "@calc";
 import { api, ApiError, type CostCenter, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { GRADE, GradeChip, useScore } from "../components/Score";
-import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf } from "../format";
+import { SerialsBox, serialList } from "../components/SerialsBox";
+import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf, partnerOption } from "../format";
 import { UjpState } from "../components/UjpState";
 import { UjpPanel } from "../components/UjpPanel";
 import { RecurringForm } from "./Recurring";
@@ -18,9 +19,10 @@ interface Advance { id: number; number: string; issueDate: string; grossTotal: s
 const DERIVED: DocType[] = ["ST", "OD", "KZ", "KR"];
 /** "250.5000" -> "250.5"; kolicinata bez znak (znakot go dava vidot na dokumentot). */
 const toEdit = (l: Line): EditLine => ({ ...l, key: ++seq, itemId: l.itemId ?? null, qty: String(Math.abs(Number(l.qty))),
-  unitPrice: String(Number(l.fxUnitPrice ?? l.unitPrice)), discountPct: String(Number(l.discountPct)) });
+  unitPrice: String(Number(l.fxUnitPrice ?? l.unitPrice)), discountPct: String(Number(l.discountPct)), serialsText: (l.serials ?? []).join("\n") });
 const signOf = (d: DocType): 1 | -1 => (d === "OD" || d === "ST" ? -1 : 1);
-type EditLine = Omit<Line, "itemId"> & { key: number; itemId: number | null };
+type EditLine = Omit<Line, "itemId"> & { key: number; itemId: number | null; serialsText?: string };
+
 let seq = 0;
 const blankLine = (vatRateId: number): EditLine => ({ key: ++seq, itemId: null, description: "", unit: "ком", qty: "1",
   unitPrice: "0", discountPct: "0", vatRateId, priceSource: null });
@@ -163,7 +165,8 @@ export function InvoiceEditor() {
       advanceAmount: canAdvance && head.advanceId ? Number(head.advanceAmount || 0) : null,
       lines: realLines().map((l) => ({ itemId: l.itemId, description: l.description.trim(), unit: l.unit, qty: parseNum(l.qty),
         unitPrice: parseNum(l.unitPrice), discountPct: parseNum(l.discountPct || "0"), vatRateId: l.vatRateId, priceSource: l.priceSource,
-        stockDocId: l.stockDocId ?? null, costCenterId: ccLines ? l.costCenterId ?? null : null })),
+        stockDocId: l.stockDocId ?? null, costCenterId: ccLines ? l.costCenterId ?? null : null,
+        serials: serialList(l.serialsText).length ? serialList(l.serialsText) : null })),
     };
   }
 
@@ -282,7 +285,7 @@ export function InvoiceEditor() {
             {editable && !isDerived ? (
               <select value={head.partnerId} onChange={(e) => set("partnerId", e.target.value ? Number(e.target.value) : "")} required>
                 <option value="">— изберете —</option>
-                {partners.filter((p) => (p.isActive && (allPartners || p.isCustomer)) || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{p.name}{p.edb ? ` (${p.edb})` : ""}</option>)}
+                {partners.filter((p) => (p.isActive && (allPartners || p.isCustomer)) || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}
               </select>
             ) : <output>{inv?.buyerName}</output>}
             {editable && !isDerived && partners.some((p) => p.isActive && !p.isCustomer) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и добавувачите</label>}
@@ -393,7 +396,10 @@ export function InvoiceEditor() {
                         {items.filter((it) => it.isActive || it.id === l.itemId).map((it) => <option key={it.id} value={it.id}>{it.code} · {it.name}</option>)}
                       </select>
                       <input value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} placeholder="Опис на ставката" aria-label={`Опис, ставка ${i + 1}`} />
-                    </> : l.description}
+                      {(items.find((x) => x.id === l.itemId)?.trackSerials || !!l.serialsText) && !l.stockDocId &&
+                        <SerialsBox clientId={client.id} itemId={l.itemId} warehouseId={head.warehouseId || null} need={Math.abs(parseNum(l.qty))} value={l.serialsText ?? ""}
+                          pick={client.modules.includes("warehouse")} label={`Сериски броеви, ставка ${i + 1}`} onChange={(t) => setLine(l.key, { serialsText: t })} />}
+                    </> : <>{l.description}{l.serials?.length ? <div className="muted small">Сер. бр.: {l.serials.join(", ")}</div> : null}</>}
                     {ccMode !== "off" && ccLines && <select className="small" value={l.costCenterId ?? ""} aria-label={`Трошковно место, ставка ${i + 1}`}
                       onChange={(e) => { setLines((ls) => ls.map((x) => (x.key === l.key ? { ...x, costCenterId: e.target.value ? Number(e.target.value) : null } : x)));
                         if (editable) setDirty(true); else setCcDirty(true); }}>
@@ -521,3 +527,4 @@ export function InvoiceEditor() {
     </>
   );
 }
+

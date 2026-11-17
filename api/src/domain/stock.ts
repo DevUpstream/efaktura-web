@@ -5,10 +5,12 @@
  *  - izlez: po tekovnata prosecna cena; ako se isprazni zalihata, izleguva celata preostanata vrednost;
  *  - zaliha vo minus: spored poставkata na klientot (block = greska, warn = dozvoleno + predupreduvanje);
  *  - lot: vlez so broj i rok; izlez avtomatski po najbliskiot rok (FEFO), osven ako e daden lot.
+ *  - seriski broj (zabeleska 9, artikl so track_serials): cela kolicina, eden broj po parce; vlez = brojot ne smee da e na zaliha,
+ *    izlez = brojot mora da e vo istiot magacin. Bez zaliha vo minus. Storno gi vrakja istite broevi (serial_moves.move_id).
  */
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
-import { clients, items, lotBalances, lots, STOCK_DOC_CODE, STOCK_ITEM_TYPES, stockBalances, stockCounters, stockDocs, stockMoves,
+import { clients, items, lotBalances, lots, serialMoves, serialNumbers, STOCK_DOC_CODE, STOCK_ITEM_TYPES, stockBalances, stockCounters, stockDocs, stockMoves,
   warehouses } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "./errors.js";
@@ -24,6 +26,7 @@ export interface MoveIn {
   unitCost?: Decimal.Value;          // zadolzitelno kaj vlez; kaj izlez samo za tocno storno
   value?: Decimal.Value;             // tocna vrednost na vlezot (bez razlika od zaokruzuvanje), samo bez lot-delenje
   lotId?: number | null; lotNo?: string | null; expiryDate?: string | null;
+  serials?: string[] | null;         // seriski broevi (artikl so track_serials): tocno |qty| broevi
 }
 export interface StockDocIn {
   clientId: number; kind: Kind; warehouseId: number; toWarehouseId?: number | null; docDate: string;
@@ -76,7 +79,31 @@ async function addLot(tx: Tx, lotId: number, warehouseId: number, qty: Decimal) 
 
 type StockClient = typeof clients.$inferSelect;
 type StockDoc = typeof stockDocs.$inferSelect;
-type StockMove = typeof stockMoves.$inferSelect;
+type StockMove = typeof stockMoves.$inferSelect & { serials?: string[] };
+
+/** Seriski broevi od tekst ili lista: po red, zapirka ili tocka-zapirka; bez prazni i bez duplikati. */
+export function cleanSerials(v: string | string[] | null | undefined): string[] {
+  const arr = Array.isArray(v) ? v : (v ?? "").split(/[\n,;]+/);
+  return [...new Set(arr.map((x) => x.trim()).filter(Boolean))];
+}
+
+/** Proverka i zapis na seriskite broevi za edno dvizenje (vo istata transakcija). */
+async function applySerials(tx: Tx, clientId: number, it: typeof items.$inferSelect, doc: StockDoc, moveId: number, warehouseId: number, qty: Decimal,
+  serials: string[], errors: string[]) {
+  const sign = qty.gt(0) ? 1 : -1;
+  for (const no of serials) {
+    if (no.length > 100) { errors.push(`„${it.name}“: серискиот број „${no.slice(0, 20)}…“ е подолг од 100 знаци.`); continue; }
+    if (sign > 0) await tx.insert(serialNumbers).values({ clientId, itemId: it.id, serialNo: no }).onConflictDoNothing();
+    const [sn] = await tx.select().from(serialNumbers).where(and(eq(serialNumbers.clientId, clientId), eq(serialNumbers.itemId, it.id), eq(serialNumbers.serialNo, no))).for("update");
+    if (!sn) { errors.push(`„${it.name}“: серискиот број ${no} не постои (не е примен).`); continue; }
+    if (sign > 0 && sn.warehouseId !== null) { errors.push(`„${it.name}“: серискиот број ${no} е веќе на залиха.`); continue; }
+    if (sign < 0 && sn.warehouseId !== warehouseId) {
+      errors.push(`„${it.name}“: серискиот број ${no} ${sn.warehouseId === null ? "не е на залиха (продаден или отпишан)" : "е во друг магацин"}.`); continue;
+    }
+    await tx.update(serialNumbers).set({ warehouseId: sign > 0 ? warehouseId : null }).where(eq(serialNumbers.id, sn.id));
+    await tx.insert(serialMoves).values({ serialId: sn.id, docId: doc.id, moveId, warehouseId, qty: sign });
+  }
+}
 
 async function createDoc(tx: Tx, client: StockClient, d: Omit<StockDocIn, "moves">): Promise<StockDoc> {
   const year = Number(d.docDate.slice(0, 4));
@@ -106,6 +133,14 @@ async function applyMoves(tx: Tx, client: StockClient, doc: StockDoc, moves: Mov
     const it = byId.get(m.itemId)!;
     const qty = r4(m.qty);
     if (qty.isZero()) continue;
+    let serials: string[] = [];
+    if (it.trackSerials) {
+      serials = cleanSerials(m.serials);
+      if (!qty.isInteger()) { errors.push(`„${it.name}“ води сериски број: количината мора да е цел број.`); continue; }
+      if (serials.length !== qty.abs().toNumber()) {
+        errors.push(`„${it.name}“ води сериски број: внесете ${qty.abs().toNumber()} сериски број(еви) (внесени: ${serials.length}).`); continue;
+      }
+    }
     const b = await lockBalance(tx, client.id, m.warehouseId, m.itemId);
     let bq = new D(b.qty), bv = new D(b.value), lastCost = new D(b.lastCost);
 
@@ -137,7 +172,7 @@ async function applyMoves(tx: Tx, client: StockClient, doc: StockDoc, moves: Mov
       const nq = bq.plus(q);
       if (q.lt(0) && nq.lt(0)) {
         const msg = `„${it.name}“: нема доволно залиха (има ${D.max(bq, 0).toFixed(2)}, потребно ${q.abs().toFixed(2)}).`;
-        if (client.negativeStock === "block") { errors.push(msg); continue; }
+        if (client.negativeStock === "block" || it.trackSerials) { errors.push(msg); continue; }
         warnings.push(msg);
       }
       bq = nq; bv = bq.isZero() ? new D(0) : r4(bv.plus(value));
@@ -146,7 +181,8 @@ async function applyMoves(tx: Tx, client: StockClient, doc: StockDoc, moves: Mov
         docId: doc.id, clientId: client.id, warehouseId: m.warehouseId, itemId: it.id, lotId,
         qty: q.toFixed(4), unitCost: cost.toFixed(4), value: value.toFixed(4), balanceQty: bq.toFixed(4), balanceValue: bv.toFixed(4),
       }).returning();
-      out.push(mv!);
+      if (it.trackSerials) await applySerials(tx, client.id, it, doc, mv!.id, m.warehouseId, q, serials, errors);
+      out.push(it.trackSerials ? { ...mv!, serials } : mv!);
       if (lotId) await addLot(tx, lotId, m.warehouseId, q);
     }
     if (bq.gt(0)) lastCost = r4(bv.div(bq));
@@ -170,7 +206,7 @@ export async function postStockDoc(tx: Tx, d: StockDocIn): Promise<{ doc: StockD
   if (d.kind === "transfer" && !d.reversesDocId && !errors.length) {
     if (!d.toWarehouseId || d.toWarehouseId === d.warehouseId) errors.push("Изберете друг магацин за пренос.");
     else await applyMoves(tx, client!, doc, outs.map((o) => ({ warehouseId: d.toWarehouseId!, itemId: o.itemId,
-      qty: new D(o.qty).neg(), unitCost: o.unitCost, lotId: o.lotId })), errors, warnings);
+      qty: new D(o.qty).neg(), unitCost: o.unitCost, lotId: o.lotId, serials: o.serials })), errors, warnings);
   }
   if (errors.length) throw new DomainError("stock", errors.join(" "), 422);
   return { doc, warnings };
@@ -184,12 +220,16 @@ export async function reverseStockDoc(tx: Tx, docId: number, opts: { docDate: st
   const [done] = await tx.select({ id: stockDocs.id }).from(stockDocs).where(eq(stockDocs.reversesDocId, orig.id));
   if (done) throw new DomainError("validation", `Документот ${orig.number} е веќе сторниран.`, 409);
   const moves = await tx.select().from(stockMoves).where(eq(stockMoves.docId, orig.id)).orderBy(asc(stockMoves.id));
+  // seriskite broevi na sekoe dvizenje (se vrakjaat istite)
+  const sm = moves.length ? await tx.select({ moveId: serialMoves.moveId, no: serialNumbers.serialNo }).from(serialMoves)
+    .innerJoin(serialNumbers, eq(serialNumbers.id, serialMoves.serialId)).where(inArray(serialMoves.moveId, moves.map((m) => m.id))) : [];
+  const serialsOf = (id: number) => { const x = sm.filter((r) => r.moveId === id).map((r) => r.no); return x.length ? x : undefined; };
   return postStockDoc(tx, {
     clientId: orig.clientId, kind: orig.kind, warehouseId: orig.warehouseId, toWarehouseId: orig.toWarehouseId, docDate: opts.docDate,
     purchaseInvoiceId: orig.purchaseInvoiceId, invoiceId: orig.invoiceId, workOrderId: orig.workOrderId, reversesDocId: orig.id, partnerId: orig.partnerId,
     note: opts.note ?? `Сторно на ${orig.number}`, createdBy: opts.createdBy,
     // obraten redosled: prvo se vrakja izlezot (kaj prenos), pa vlezot
-    moves: moves.reverse().map((m) => ({ warehouseId: m.warehouseId, itemId: m.itemId, qty: new D(m.qty).neg(), unitCost: m.unitCost, value: new D(m.value).neg(), lotId: m.lotId })),
+    moves: moves.reverse().map((m) => ({ warehouseId: m.warehouseId, itemId: m.itemId, qty: new D(m.qty).neg(), unitCost: m.unitCost, value: new D(m.value).neg(), lotId: m.lotId, serials: serialsOf(m.id) })),
   });
 }
 

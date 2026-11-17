@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Contact, type Note, type NoteKind, type PartnerCardData } from "../api";
-import { addDays, date, dateTime, DOC, money0, NOTE_KIND, today, statusOf } from "../format";
+import { addDays, date, dateTime, DOC, money0, NOTE_KIND, today, statusOf, partnerShort } from "../format";
 import { CheckPartner, PartnerForm } from "./Partners";
 import { CompanyWallLink, GRADE, type PartnerScore } from "../components/Score";
 
@@ -27,7 +27,7 @@ export function PartnerCard() {
     <>
       <Link className="back" to={`/c/${client.id}/partners`}>← Партнери</Link>
       <header className="page-head">
-        <div><h1>{p.name}</h1>
+        <div><h1>{partnerShort(p)}</h1>{p.shortName && <p className="muted">{p.name}</p>}
           <p className="muted small">{[p.edb && `ЕДБ ${p.edb}`, p.vatNumber && `ДДВ ${p.vatNumber}`, [p.address, p.city].filter(Boolean).join(", ")].filter(Boolean).join("   ")}
             {p.ujpRegistryAt && <span className="chip ok" style={{ marginLeft: 10 }}>УЈП ✓</span>}</p></div>
         <div className="row-actions">

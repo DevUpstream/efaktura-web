@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "../session";
 import { Link, NavLink, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
-import { date, money, today } from "../format";
+import { date, money, today, partnerOption } from "../format";
 
 type Dir = "in" | "out";
 interface OpenItem { id: number; number: string; docType: string; issueDate: string; dueDate: string | null; partnerId: number; partnerName: string;
@@ -110,7 +111,7 @@ function PaymentForm({ client, direction, partnerId, onDone }: { client: ClientR
       <h2>{direction === "in" ? "Уплата од купувач" : "Плаќање на добавувач"}</h2>
       <div className="form-grid pay-grid">
         <label className="span2">{direction === "in" ? "Купувач" : "Добавувач"}<select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">— изберете —</option>{partners.filter((p) => p.isActive || p.id === pid).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <option value="">— изберете —</option>{partners.filter((p) => p.isActive || p.id === pid).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
         <label>Датум<input type="date" value={f.payDate} onChange={(e) => setF({ ...f, payDate: e.target.value })} /></label>
         <label>Износ (ден.)<input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder={total ? money(total) : ""} /></label>
         <label>Начин<select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>{Object.entries(METHOD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
@@ -180,9 +181,9 @@ interface Mapping { delimiter: string; skipRows: number; dateCol: number; dateFo
 const DEFAULT_MAP: Mapping = { delimiter: ";", skipRows: 1, dateCol: 0, dateFormat: "dd.MM.yyyy", amountMode: "split", creditCol: 1, debitCol: 2, decimal: ",", referenceCols: [] };
 interface StatementRow { id: number; format: string; ownAccount: string | null; statementNo: string | null; statementDate: string | null; openingBalance: string | null;
   closingBalance: string | null; fileName: string | null; createdAt: string; lines: number; open: number; inflow: string; outflow: string;
-  prevClosing: string | null; prevNo: string | null }
+  prevClosing: string | null; prevNo: string | null; voidedAt?: string | null; voidReason?: string | null }
 /** Praznina pred izvodot: novata sostojba na prethodniot (po datum) ne e ednakva na prethodnata sostojba na ovoj. */
-const gapBefore = (r: StatementRow) => r.prevClosing !== null && r.openingBalance !== null && Number(r.prevClosing).toFixed(2) !== Number(r.openingBalance).toFixed(2);
+const gapBefore = (r: StatementRow) => !r.voidedAt && r.prevClosing !== null && r.openingBalance !== null && Number(r.prevClosing).toFixed(2) !== Number(r.openingBalance).toFixed(2);
 type Peek = { ok: true; date: string | null; statementNo: string | null } | { ok: false };
 const noNum = (x: string | null) => { const d = (x ?? "").replace(/\D/g, ""); return d ? Number(d) : Number.MAX_SAFE_INTEGER; };
 
@@ -245,13 +246,13 @@ export function Statements() {
         <div className="table-wrap"><table className="grid">
           <thead><tr><th>Извод</th><th>Датум</th><th>Сметка</th><th className="num">Прилив</th><th className="num">Одлив</th><th className="num">Нова состојба</th><th>Ставки</th></tr></thead>
           <tbody>{rows.map((r) => (
-            <tr key={r.id}>
+            <tr key={r.id} className={r.voidedAt ? "row-inactive" : ""}>
               <td><Link className="docno" to={`/c/${client.id}/payments/statements/${r.id}`}>{r.statementNo ? `бр. ${r.statementNo}` : r.fileName ?? `#${r.id}`}</Link>
                 {r.format !== "mk-txt" && r.format !== "stb-txt" && <span className="doctype">{r.format === "mt940" ? "MT940" : "CSV"}</span>}
                 {gapBefore(r) && <div><span className="chip err" title={`Нова состојба на бр. ${r.prevNo ?? "?"}: ${money(r.prevClosing)}; претходна состојба тука: ${money(r.openingBalance)}`}>недостасува извод пред овој</span></div>}</td>
               <td>{date(r.statementDate)}</td><td className="small">{r.ownAccount ?? "–"}</td>
               <td className="num">{money(r.inflow)}</td><td className="num">{money(r.outflow)}</td><td className="num">{r.closingBalance ? money(r.closingBalance) : "–"}</td>
-              <td>{r.open > 0 ? <span className="chip wait">{r.open} за обработка</span> : <span className="chip ok">готово</span>} <span className="muted small">од {r.lines}</span></td>
+              <td>{r.voidedAt ? <span className="chip err" title={r.voidReason ?? ""}>поништен</span> : r.open > 0 ? <span className="chip wait">{r.open} за обработка</span> : <span className="chip ok">готово</span>} <span className="muted small">од {r.lines}</span></td>
             </tr>))}</tbody>
         </table></div>
       )}
@@ -272,10 +273,11 @@ interface Suggestion { partnerId: number | null; partnerBy: string | null; alloc
 interface Line { id: number; lineNo: number; direction: Dir; amount: string; counterpartyName: string | null; counterpartyAccount: string | null; counterpartyEdb: string | null;
   paymentCode: string | null; purpose: string | null; refDebit: string | null; refCredit: string | null; ignored: boolean; ignoreReason: string | null;
   category: string | null; categorySource: string | null;
-  status: "open" | "booked" | "ignored"; suggestion: Suggestion | null; openForPartner: { id: number; number: string; remaining: string; dueDate: string | null }[];
+  status: "open" | "booked" | "ignored" | "voided"; suggestion: Suggestion | null; openForPartner: { id: number; number: string; remaining: string; dueDate: string | null }[];
   booking: { paymentId: number; partnerName: string; allocated: string; documents: string | null } | null }
 interface Detail { id: number; statementNo: string | null; statementDate: string | null; ownAccount: string | null; openingBalance: string | null; closingBalance: string | null;
-  fileName: string | null; lines: Line[]; counts: { open: number; booked: number; ignored: number; sure: number } }
+  fileName: string | null; lines: Line[]; counts: { open: number; booked: number; ignored: number; sure: number };
+  voidedAt: string | null; voidReason: string | null }
 const BY: Record<string, string> = { edb: "ЕДБ", account: "жиро-сметка", invoice: "број на фактура", "edb-text": "ЕДБ во целта", name: "назив" };
 const ALLOC: Record<string, string> = { number: "број на фактура", "short-number": "број/година", "supplier-number": "број кај добавувачот", exact: "точен износ",
   combination: "точен збир на фактури", fifo: "од најстарата" };
@@ -289,11 +291,15 @@ export function StatementView() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const cats = useCats();
+  const { me } = useSession();
+  const [voiding, setVoiding] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
   const load = () => api.get<Detail>(`/api/clients/${client.id}/bank-statements/${id}`).then(setD);
   useEffect(() => { void load(); api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners); }, [client.id, id]);
   async function act(f: () => Promise<string>) { setBusy(true); setMsg(null); try { setMsg({ kind: "ok", text: await f() }); } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } await load(); setBusy(false); }
   if (!d) return <p className="muted">Се вчитува…</p>;
-  const lines = d.lines.filter((l) => filter === "all" || l.status === "open");
+  const lines = d.lines.filter((l) => filter === "all" || l.status === "open" || (d.voidedAt && l.status === "voided"));
+  const isAdmin = me?.user?.role === "admin";
   return (
     <>
       <Link className="back" to={`/c/${client.id}/payments/statements`}>← Изводи</Link>
@@ -305,9 +311,22 @@ export function StatementView() {
           {d.counts.sure > 0 && <button className="btn btn-primary" disabled={busy} onClick={() => act(async () => {
             const r = await api.post<{ booked: number; errors: string[] }>(`/api/clients/${client.id}/bank-statements/${d.id}/book-sure`);
             return `Прокнижени ${r.booked}.${r.errors.length ? ` ${r.errors.join(" ")}` : ""}`; })}>Прокнижи ги сигурните ({d.counts.sure})</button>}
+          {isAdmin && !d.voidedAt && <button className="btn" disabled={busy} onClick={() => setVoiding(true)}>Поништи извод</button>}
         </div></header>
+      {d.voidedAt && <p className="alert">Изводот е поништен ({date(d.voidedAt.slice(0, 10))}): {d.voidReason}. Уплатите се сторнирани; изводот може повторно да се увезе.</p>}
+      {voiding && <section className="panel">
+        <h2>Поништи извод {d.statementNo ? `бр. ${d.statementNo}` : ""}</h2>
+        <p>Ништо не се брише. Сите уплати од изводот ({d.counts.booked}) се сторнираат и фактурите повторно се отворени.
+          Изводот останува видлив како поништен. Потоа истиот извод може повторно да се увезе.</p>
+        <label>Причина<input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="на пр. погрешно прокнижени ставки, повторен увоз" autoFocus /></label>
+        <div className="row-actions"><button className="btn btn-quiet" disabled={busy || voidReason.trim().length < 3} onClick={() => act(async () => {
+          const r = await api.post<{ paymentsVoided: number }>(`/api/clients/${client.id}/bank-statements/${d.id}/void`, { reason: voidReason });
+          setVoiding(false); setVoidReason("");
+          return `Изводот е поништен. Сторнирани уплати: ${r.paymentsVoided}.`; })}>Поништи</button>
+          <button className="link" onClick={() => setVoiding(false)}>Откажи</button></div>
+      </section>}
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
-      {lines.length === 0 && <div className="empty"><p>Сите ставки се обработени. Прокнижени {d.counts.booked}, без книжење {d.counts.ignored}.</p></div>}
+      {!d.voidedAt && lines.length === 0 && <div className="empty"><p>Сите ставки се обработени. Прокнижени {d.counts.booked}, без книжење {d.counts.ignored}.</p></div>}
       <div className="stmt-lines">{lines.map((l) => <LineCard key={l.id} l={l} client={client} partners={partners} busy={busy} act={act} cats={cats} />)}</div>
     </>
   );
@@ -342,6 +361,7 @@ function LineCard({ l, client, partners, busy, act, cats }: { l: Line; client: C
         <div className="small">{l.purpose}{(l.refCredit || l.refDebit) && <span className="muted"> · повик.: {[l.refDebit, l.refCredit].filter(Boolean).join(" / ")}</span>}</div>
       </div>
       <div className="sl-act">
+        {l.status === "voided" && <span className="chip err">поништено</span>}
         {l.status === "booked" && l.booking && <><span className="chip ok">прокнижено</span> {l.booking.partnerName}<div className="small">{l.booking.documents ?? "нераспоредено (преплата)"}</div></>}
         {l.status === "ignored" && <><span className={`chip ${cats[l.category ?? "skip"]?.expense ? "wait" : ""}`}>{cats[l.category ?? "skip"]?.name ?? "Не се книжи"}</span>
           {l.categorySource === "auto" && <span className="muted small"> автоматски</span>}
@@ -352,7 +372,7 @@ function LineCard({ l, client, partners, busy, act, cats }: { l: Line; client: C
             {s?.partnerBy && !changed && <span className="muted small"> партнер по {BY[s.partnerBy]}{s.allocBy ? `, фактура по ${ALLOC[s.allocBy]}` : ""}</span>}
             {s?.hint && <span className="muted small"> {s.hint}</span>}</div>
           <select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")} aria-label={`Партнер за ставка ${l.lineNo}`}>
-            <option value="">— изберете партнер —</option>{partners.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            <option value="">— изберете партнер —</option>{partners.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select>
           {pid !== "" && (manual
             ? <table className="grid compact"><tbody>{open.map((o) => <tr key={o.id}><td>{o.number}</td><td className="num">{money(o.remaining)}</td>
                 <td className="num"><input className="amt-in" inputMode="decimal" value={alloc[o.id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [o.id]: e.target.value })} aria-label={`Износ за ${o.number}`} /></td></tr>)}</tbody></table>

@@ -16,7 +16,7 @@ import { Recurring } from "./pages/Recurring";
 import { PurchaseEditor, Purchases } from "./pages/Purchases";
 import { BankExpenses, OpenItems, PaymentsList, Statements, StatementView } from "./pages/Payments";
 import { BomEditor, Boms, WorkOrderEditor, WorkOrders } from "./pages/Production";
-import { Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
+import { SerialSearch, Stock, StockCard, StockDocNew, StockDocs, StockDocView } from "./pages/Stock";
 import { Today } from "./pages/Today";
 import { VatBooks } from "./pages/VatBooks";
 import { Ledgers } from "./pages/Ledger";
@@ -51,6 +51,7 @@ function Gate() {
         <Route path="stock/card/:itemId" element={<StockCard />} />
         <Route path="stock/docs" element={<StockDocs />} />
         <Route path="stock/dispatches" element={<Dispatches />} />
+        <Route path="stock/serials" element={<SerialSearch />} />
         <Route path="stock/docs/new" element={<StockDocNew />} />
         <Route path="stock/docs/:docId" element={<StockDocView />} />
         <Route path="payments" element={<OpenItems direction="in" />} />

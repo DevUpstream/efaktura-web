@@ -1,16 +1,16 @@
 /** Plakjanja i naplata (docs/08). Modulot "payments" se proveruva na sekoe baranje. */
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import { bankStatementLines, bankStatements, clients, EXPENSE_CATEGORIES, type ExpenseCategory, invoices, partnerAccounts, partners, paymentAllocations, payments, purchaseInvoices, type BankImportMapping } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { aging, allocateExisting, createPayment, openItems, unallocated, voidPayment } from "../domain/payments.js";
-import { bookLine, bookSure, clientOwnAccounts, importStatement, peekStatement, setCategory, STATEMENT_ORDER, statementDetail } from "../domain/statements.js";
+import { bookLine, bookSure, clientOwnAccounts, importStatement, peekStatement, setCategory, STATEMENT_ORDER, statementDetail, voidStatement } from "../domain/statements.js";
 import { normAccount } from "../domain/bank-txt.js";
 import { partnerScores } from "../domain/score.js";
 import { audit } from "../domain/audit.js";
-import { assertModule, requireUser } from "../auth/context.js";
+import { assertModule, requireAdmin, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
 const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Датум ГГГГ-ММ-ДД");
@@ -121,15 +121,16 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const { clientId } = await ctx(req);
     return db.select({ id: bankStatements.id, format: bankStatements.format, ownAccount: bankStatements.ownAccount, statementNo: bankStatements.statementNo,
       statementDate: bankStatements.statementDate, openingBalance: bankStatements.openingBalance, closingBalance: bankStatements.closingBalance,
-      fileName: bankStatements.fileName, createdAt: bankStatements.createdAt,
+      fileName: bankStatements.fileName, createdAt: bankStatements.createdAt, voidedAt: bankStatements.voidedAt, voidReason: bankStatements.voidReason,
       lines: sql<number>`(select count(*)::int from bank_statement_lines l where l.statement_id = bank_statements.id)`,
       open: sql<number>`(select count(*)::int from bank_statement_lines l left join payments y on y.id = l.payment_id
-        where l.statement_id = bank_statements.id and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
+        where l.statement_id = bank_statements.id and l.voided_at is null and not l.ignored and (l.payment_id is null or y.voided_at is not null))`,
       inflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'in')`,
       outflow: sql<string>`(select coalesce(sum(l.amount), 0) from bank_statement_lines l where l.statement_id = bank_statements.id and l.direction = 'out')`,
       // kontinuitet: novata sostojba na prethodniot izvod (po datum) za istata smetka
-      prevClosing: sql<string | null>`lag(${bankStatements.closingBalance}) over (partition by ${bankStatements.ownAccount} order by ${STATEMENT_ORDER})`,
-      prevNo: sql<string | null>`lag(${bankStatements.statementNo}) over (partition by ${bankStatements.ownAccount} order by ${STATEMENT_ORDER})` })
+      // ponisteniot izvod e vo posebna grupa (ne vleguva vo kontinuitetot)
+      prevClosing: sql<string | null>`lag(${bankStatements.closingBalance}) over (partition by ${bankStatements.ownAccount}, (${bankStatements.voidedAt} is null) order by ${STATEMENT_ORDER})`,
+      prevNo: sql<string | null>`lag(${bankStatements.statementNo}) over (partition by ${bankStatements.ownAccount}, (${bankStatements.voidedAt} is null) order by ${STATEMENT_ORDER})` })
       .from(bankStatements).where(eq(bankStatements.clientId, clientId)).orderBy(sql`${bankStatements.statementDate} desc nulls last, nullif(regexp_replace(coalesce(${bankStatements.statementNo}, ''), '\\D', '', 'g'), '')::numeric desc nulls last`, desc(bankStatements.id)).limit(500);
   });
   app.post("/api/clients/:clientId/bank-statements", async (req, reply) => {
@@ -146,6 +147,13 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.get("/api/clients/:clientId/bank-statements/:id", async (req) => {
     const { clientId, id } = await ctx(req);
     return statementDetail(db, clientId, id!);
+  });
+  /** Ponisti izvod (zabeleska 28): samo administrator. */
+  app.post("/api/clients/:clientId/bank-statements/:id/void", async (req) => {
+    const { clientId, id, actor } = await ctx(req);
+    requireAdmin(req);
+    const b = z.object({ reason: z.string().trim().min(3).max(500) }).parse(req.body);
+    return voidStatement(db, clientId, id!, b.reason, actor);
   });
   app.post("/api/clients/:clientId/bank-statements/:id/book-sure", async (req) => {
     const { clientId, id, actor } = await ctx(req);
@@ -170,7 +178,7 @@ export async function paymentRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.get("/api/clients/:clientId/bank-expenses", async (req, reply) => {
     const { clientId } = await ctx(req);
     const q = z.object({ from: Day.optional(), to: Day.optional(), format: z.enum(["json", "csv"]).default("json") }).parse(req.query);
-    const conds = [eq(bankStatementLines.clientId, clientId), eq(bankStatementLines.ignored, true)];
+    const conds = [eq(bankStatementLines.clientId, clientId), eq(bankStatementLines.ignored, true), isNull(bankStatementLines.voidedAt)];
     if (q.from) conds.push(gte(bankStatementLines.valueDate, q.from));
     if (q.to) conds.push(lte(bankStatementLines.valueDate, q.to));
     const lines = await db.select({ id: bankStatementLines.id, valueDate: bankStatementLines.valueDate, category: bankStatementLines.category,

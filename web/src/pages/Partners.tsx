@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { GradeChip, type PartnerScore } from "../components/Score";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
-import { date } from "../format";
+import { date, partnerMatches, partnerShort } from "../format";
 import { CompanyCard, DiffTable, UjpPullStatus, useUjpPull } from "../components/UjpPull";
 
 const LOCKED = ["name", "edb", "embs", "vatNumber", "address", "city", "postalCode"];
@@ -26,7 +26,7 @@ export function Partners() {
     api.get<PartnerScore[]>(`/api/clients/${client.id}/partner-scores`).then((x) => setScores(new Map(x.map((s) => [s.partnerId, s]))), () => setScores(null));
   }, [client.id]);
   const inTab = (p: Partner) => tab === "all" || (tab === "customer" ? p.isCustomer : p.isSupplier);
-  const shown = (rows ?? []).filter((p) => inTab(p) && (!needle || p.name.toLowerCase().includes(needle) || (p.edb ?? "").includes(needle)));
+  const shown = (rows ?? []).filter((p) => inTab(p) && partnerMatches(p, needle));
   const count = (t: "customer" | "supplier") => (rows ?? []).filter((p) => (t === "customer" ? p.isCustomer : p.isSupplier)).length;
   const role = tab === "supplier" ? "supplier" : "customer";
   const noun = tab === "supplier" ? "добавувач" : tab === "all" ? "партнер" : "купувач";
@@ -43,7 +43,7 @@ export function Partners() {
       {edit && edit !== "ujp" && <PartnerForm client={client} p={edit === "new" ? null : edit} role={role} onDone={() => { setEdit(null); void load(); }}
         onCheck={edit !== "new" && edit.edb ? () => { setCheck(edit); setEdit(null); } : undefined} />}
       {check && <CheckPartner client={client} p={check} onDone={() => { setCheck(null); void load(); }} />}
-      <div className="toolbar"><input type="search" placeholder="Назив или ЕДБ" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
+      <div className="toolbar"><input type="search" placeholder="Назив, краток назив или ЕДБ" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
         <span className="hint">Кирилица и латиница се различни: „Тонер“ не го наоѓа „Toner“. Пробајте и со другото писмо.</span></div>
       {rows && shown.length === 0 && <div className="empty"><p>{needle ? `Нема ${noun} со тоа име или ЕДБ.` : tab === "supplier" ? "Нема добавувачи. Се додаваат сами со влезна фактура или увоз на е-фактура, или рачно." : rows.length ? `Нема ${noun}и.` : "Сè уште нема партнери. Додадете го првиот."}</p></div>}
       {shown.length > 0 && (
@@ -51,8 +51,8 @@ export function Partners() {
           <thead><tr><th>Назив</th><th>ЕДБ</th><th>ДДВ број</th><th>Град</th>{tab === "all" && <th>Улога</th>}<th>Регистар</th>{scores && <th title="Платежна дисциплина">Плаќа</th>}</tr></thead>
           <tbody>{shown.map((p) => (
             <tr key={p.id} onClick={() => (client.modules.includes("crm") ? nav(`/c/${client.id}/partners/${p.id}`) : setEdit(p))} className={p.isActive ? "" : "row-inactive"}>
-              <td>{client.modules.includes("crm") ? <Link className="docno" to={`/c/${client.id}/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{p.name}</Link>
-                : <button className="link" onClick={() => setEdit(p)}>{p.name}</button>}{!p.isActive && <span className="doctype">неактивен</span>}</td>
+              <td>{client.modules.includes("crm") ? <Link className="docno" to={`/c/${client.id}/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{partnerShort(p)}</Link>
+                : <button className="link" onClick={() => setEdit(p)}>{partnerShort(p)}</button>}{p.shortName && <><br /><span className="muted small">{p.name}</span></>}{!p.isActive && <span className="doctype">неактивен</span>}</td>
               <td>{p.edb ?? "–"}</td><td>{p.vatNumber ?? "–"}</td><td>{p.city ?? "–"}</td>
               {tab === "all" && <td className="small">{[p.isCustomer && "купувач", p.isSupplier && "добавувач"].filter(Boolean).join(", ") || "–"}</td>}
               <td>{p.ujpRegistryAt ? <span className="chip ok" title={`Проверено ${date(p.ujpRegistryAt.slice(0, 10))}`}>УЈП ✓</span> : <span className="muted">–</span>}</td>
@@ -138,9 +138,12 @@ export function PartnerForm({ client, p, role = "customer", onDone, onCheck }: {
   return (
     <form className="panel form-grid" onSubmit={submit}>
       <h2 className="span-all">{p ? p.name : role === "supplier" ? "Нов добавувач" : "Нов купувач"}</h2>
-      {locked && <p className="notice span-all">Податоците се проверени во регистарот на УЈП и се заклучени. Може да се менуваат само е-пошта, телефон и активност.</p>}
+      {locked && <p className="notice span-all">Податоците се проверени во регистарот на УЈП и се заклучени. Може да се менуваат краткиот назив, е-пошта, телефон, жиро-сметка, улоги и активност.</p>}
       {err && <p className="alert span-all">{err}</p>}
       <div className="span2">{field("name", "Назив", { required: true, minLength: 2 })}</div>
+      <div className="span2"><label>Краток назив (за листи и пребарување)<input name="shortName" defaultValue={p?.shortName ?? ""} maxLength={100}
+        placeholder="на пр. Тонер Центар" /></label>
+        <small className="muted">На фактурата и кон УЈП секогаш оди називот од регистарот.</small></div>
       {field("edb", "ЕДБ", { inputMode: "numeric", pattern: "\\d{13}", title: "13 цифри" })}
       {field("vatNumber", "ДДВ број")}
       <div className="span2">{field("address", "Адреса")}</div>

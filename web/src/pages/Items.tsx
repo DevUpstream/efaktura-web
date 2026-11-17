@@ -56,10 +56,13 @@ function ItemForm({ client, it, rates, onDone }: { client: ClientRef; it: Item |
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, []);
   const [type, setType] = useState<string>(it?.type ?? "service");
+  const [track, setTrack] = useState<"none" | "lots" | "serials">(it?.trackSerials ? "serials" : it?.trackLots ? "lots" : "none");
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
-    const body = { ...f, trackLots: STOCK_TYPES.includes(f.type!) && f.trackLots === "on", unitPrice: Number(String(f.unitPrice).replace(",", ".")), vatRateId: Number(f.vatRateId), isActive: f.isActive === "on" };
+    const stock = STOCK_TYPES.includes(f.type!);
+    const body = { ...f, trackLots: stock && track === "lots", trackSerials: stock && track === "serials",
+      warrantyMonths: f.warrantyMonths ? Number(f.warrantyMonths) : null, unitPrice: Number(String(f.unitPrice).replace(",", ".")), vatRateId: Number(f.vatRateId), isActive: f.isActive === "on" };
     try {
       if (it) await api.patch(`/api/clients/${client.id}/items/${it.id}`, body);
       else await api.post(`/api/clients/${client.id}/items`, body);
@@ -85,7 +88,16 @@ function ItemForm({ client, it, rates, onDone }: { client: ClientRef; it: Item |
       <label>ДДВ стапка<select name="vatRateId" defaultValue={it?.vatRateId ?? rates.find((r) => r.code === "S18")?.id}>
         {rates.filter((r) => r.isActive).map((r) => <option key={r.id} value={r.id}>{Number(r.ratePct)}% · {r.name}</option>)}
       </select></label>
-      {STOCK_TYPES.includes(type) && <label className="check" title="При прием се внесува број на лот и рок; излезот оди по најблискиот рок"><input type="checkbox" name="trackLots" defaultChecked={it?.trackLots ?? false} /> Води лот / рок на траење</label>}
+      {STOCK_TYPES.includes(type) && <label>Следење по парче / серија
+        <select value={track} onChange={(e) => setTrack(e.target.value as typeof track)}>
+          <option value="none">Без следење</option>
+          <option value="lots">Води лот / рок на траење</option>
+          <option value="serials">Води сериски број (по парче)</option>
+        </select>
+        <small className="muted">{track === "lots" ? "При прием: број на лот и рок; излезот оди по најблискиот рок."
+          : track === "serials" ? "При прием и продажба: еден сериски број по парче. Вклучување само кога нема залиха." : ""}</small></label>}
+      <label>Гаранција (месеци)<input name="warrantyMonths" type="number" min={1} max={600} defaultValue={it?.warrantyMonths ?? ""} placeholder="без гаранција" />
+        <small className="muted">На фактура и испратница: „Гаранција до …“ од датумот на продажба.</small></label>
       <label className="check"><input type="checkbox" name="isActive" defaultChecked={it?.isActive ?? true} /> Активен</label>
       {STOCK_TYPES.includes(type) && <p className="muted small span-all">Води залиха (кога е вклучен модулот Магацин): влегува со приемница или влезна фактура, излегува со фактура.</p>}
       <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button><button type="button" className="link" onClick={onDone}>Откажи</button></div>

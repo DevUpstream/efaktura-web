@@ -23,6 +23,12 @@ export const dateTime = (iso: string) => {
   const d = new Date(iso);
   return `${date(d.toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" }))} ${d.toLocaleTimeString("en-GB", { timeZone: "Europe/Skopje", hour: "2-digit", minute: "2-digit" })}`;
 };
+/** Partner (zabeleska 24): kratok naziv za listi i izbor; pravnoto ime (od registarot) ostanuva na fakturata i kon UJP. */
+export const partnerShort = (p: { name: string; shortName?: string | null }) => p.shortName?.trim() || p.name;
+export const partnerOption = (p: { name: string; shortName?: string | null; edb?: string | null }) =>
+  `${p.shortName?.trim() ? `${p.shortName.trim()} — ${p.name}` : p.name}${p.edb ? ` (${p.edb})` : ""}`;
+export const partnerMatches = (p: { name: string; shortName?: string | null; edb?: string | null }, needle: string) =>
+  !needle || p.name.toLowerCase().includes(needle) || (p.shortName ?? "").toLowerCase().includes(needle) || (p.edb ?? "").includes(needle);
 export const ITEM_TYPE: Record<string, string> = { service: "Услуга", goods: "Стока", material: "Материјал / дел", product: "Готов производ" };
 export const STOCK_TYPES = ["goods", "material", "product"];
 export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос", consumption: "Издатница за производство", output: "Готов производ" };

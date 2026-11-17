@@ -7,6 +7,7 @@ import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { calcLine, calcTotals, round } from "../domain/calc.js";
+import { cleanSerials } from "../domain/stock.js";
 import { calcFxTotals, CURRENCIES, getNbrmRate, httpFetch, toMkd, type FxFetch } from "../domain/fx.js";
 import { issueInvoice } from "../domain/issue.js";
 import { renderInvoicePdf } from "../domain/pdf.js";
@@ -28,6 +29,8 @@ const LineIn = z.object({
   priceSource: z.string().trim().max(80).optional().nullable(),
   stockDocId: Id.optional().nullable(),   // stavka od ispratnica bez faktura (docs/12)
   costCenterId: Id.optional().nullable(), // TM na stavkata ("по ставки", docs/14)
+  // seriski broevi na prodadenite parcinja (zabeleska 9): eden po red ili so zapirka
+  serials: z.union([z.array(z.string().max(100)).max(10000), z.string().max(200000)]).optional().nullable().transform((v) => { const x = cleanSerials(v); return x.length ? x : null; }),
 });
 const DraftIn = z.object({
   partnerId: Id,
@@ -56,7 +59,9 @@ const DraftIn = z.object({
 export const signOf = (d: string): 1 | -1 => (d === "OD" || d === "ST" ? -1 : 1);
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" });
 type DraftParsed = z.infer<typeof DraftIn>;
-export type Draft = Omit<DraftParsed, "currency"> & { currency?: DraftParsed["currency"] };
+type DraftLine = DraftParsed["lines"][number];
+export type Draft = Omit<DraftParsed, "currency" | "lines"> & { currency?: DraftParsed["currency"];
+  lines: (Omit<DraftLine, "serials"> & { serials?: string[] | null })[] };
 
 /** Gi presmetuva stavkite na serverot (klientot samo prikazuva) i gi zapisuva. */
 export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b: Draft, relatedId: number | null) {
@@ -83,7 +88,7 @@ export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b:
     // storno = tocna kopija na originalot so minus; stavkite ne se uredat
     const orig = await tx.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, relatedId!)).orderBy(asc(invoiceLines.lineNo));
     b = { ...b, lines: orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit, qty: Math.abs(Number(l.qty)),
-      unitPrice: Number(l.fxUnitPrice ?? l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId, priceSource: l.priceSource })) };
+      unitPrice: Number(l.fxUnitPrice ?? l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId, priceSource: l.priceSource, serials: l.serials })) };
   }
   if (b.warehouseId) {
     const [w] = await tx.select({ id: warehouses.id }).from(warehouses).where(and(eq(warehouses.id, b.warehouseId), eq(warehouses.clientId, clientId), eq(warehouses.isActive, true)));
@@ -91,9 +96,11 @@ export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b:
   }
   const rates = new Map((await tx.select().from(vatRates)).map((r) => [r.id, r]));
   const itemIds = b.lines.map((l) => l.itemId).filter((x): x is number => !!x);
+  const warranty = new Map<number, number | null>();   // garancija od artiklot (snimka na stavkata, zabeleska 9)
   if (itemIds.length) {
-    const own = await tx.select({ id: items.id }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, itemIds)));
+    const own = await tx.select({ id: items.id, warrantyMonths: items.warrantyMonths }).from(items).where(and(eq(items.clientId, clientId), inArray(items.id, itemIds)));
     if (own.length !== new Set(itemIds).size) throw new DomainError("validation", "Непознат артикл.", 422);
+    for (const o of own) warranty.set(o.id, o.warrantyMonths);
   }
   // ispratnici (docs/12): samo vo faktura/korekcija, na istiot kupuvac, ne vo druga vazecka faktura
   const docIds = [...new Set(b.lines.map((l) => l.stockDocId).filter((x): x is number => !!x))];
@@ -115,6 +122,7 @@ export async function writeDraft(tx: Db, invoiceId: number, clientId: number, b:
       invoiceId, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
       qty: String(sign * l.qty), unitPrice: mkd.unitPrice, discountPct: String(l.discountPct),
       vatRateId: rate.id, vatRatePct: rate.ratePct, netAmount: mkd.netAmount, vatAmount: mkd.vatAmount, priceSource: l.priceSource ?? null,
+      warrantyMonths: l.itemId ? warranty.get(l.itemId) ?? null : null, serials: l.serials ?? null,
       fxUnitPrice: fx ? String(l.unitPrice) : null, fxNetAmount: fx ? r.netAmount : null, fxVatAmount: fx ? r.vatAmount : null,
       stockDocId: l.stockDocId ?? null, costCenterId: l.costCenterId ?? null,
     });
@@ -258,7 +266,7 @@ export async function invoiceRoutes(app: FastifyInstance, { db, fxFetch = httpFe
     const orig = await db.select().from(invoiceLines).where(eq(invoiceLines.invoiceId, o.id)).orderBy(asc(invoiceLines.lineNo));
     const copy = docType === "KZ" ? [] : orig.map((l) => ({ itemId: l.itemId, description: l.description, unit: l.unit,
       qty: Math.abs(Number(l.qty)), unitPrice: Number(l.fxUnitPrice ?? l.unitPrice), discountPct: Number(l.discountPct), vatRateId: l.vatRateId,
-      priceSource: `Од ${o.number}`, costCenterId: l.costCenterId, ...(docType === "KR" ? { stockDocId: l.stockDocId } : {}) }));
+      priceSource: `Од ${o.number}`, costCenterId: l.costCenterId, ...(docType === "KR" ? { stockDocId: l.stockDocId, serials: l.serials } : {}) }));
     const b: Draft = { partnerId: o.partnerId, docType, issueDate: today(), supplyDate: o.supplyDate, dueDate: null,
       paymentMethod: o.paymentMethod, note: null, clauses: o.clauses, lines: copy, costCenterId: o.costCenterId,
       ...(docType === "KR" && o.advanceInvoiceId ? { advanceInvoiceId: o.advanceInvoiceId, advanceAmount: Number(o.advanceAmount) } : {}) };

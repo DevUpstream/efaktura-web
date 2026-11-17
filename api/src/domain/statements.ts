@@ -2,12 +2,12 @@
  * Izvodi od banka (docs/08): uvoz -> stavki -> prepoznavanje -> knizenje (avtomatski za sigurnite) -> ucenje na smetkite.
  */
 import { createHash } from "node:crypto";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { bankStatementLines, bankStatements, clients, EXPENSE_CATEGORIES, type BankImportMapping, type ExpenseCategory, partnerAccounts, partners, payments } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "./errors.js";
 import { audit, type Actor } from "./audit.js";
-import { createPayment, openItems } from "./payments.js";
+import { createPayment, openItems, voidPayment } from "./payments.js";
 import { looksLikeMkTxt, normAccount, parseMkTxt, type ParsedStatement } from "./bank-txt.js";
 import { parseStatement } from "./bank-import.js";
 import { looksLikeMt940, mkAccount, parseMt940 } from "./bank-mt940.js";
@@ -67,6 +67,7 @@ export async function bookLine(db: Db, clientId: number, lineId: number, b: { pa
     const tx = tx0 as unknown as Db;
     const [l] = await tx.select().from(bankStatementLines).where(and(eq(bankStatementLines.id, lineId), eq(bankStatementLines.clientId, clientId))).for("update");
     if (!l) throw new DomainError("not_found", "Ставката не постои.", 404);
+    if (l.voidedAt) throw new DomainError("validation", "Изводот е поништен.", 422);
     if (l.ignored) throw new DomainError("validation", "Ставката е означена како „не се книжи“.", 422);
     if (l.paymentId) {
       const [p] = await tx.select({ v: payments.voidedAt }).from(payments).where(eq(payments.id, l.paymentId));
@@ -91,11 +92,11 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
     const own = clientOwnAccounts(client!);
     if (own.size && !own.has(acc)) throw new DomainError("validation", `Изводот е за сметка ${parsed.ownAccount}, која не е меѓу сметките на ${client!.name}. Изберете ја вистинската фирма.`, 422);
     const [other] = await db.select({ name: clients.name }).from(bankStatements).innerJoin(clients, eq(clients.id, bankStatements.clientId))
-      .where(and(eq(bankStatements.ownAccount, parsed.ownAccount), ne(bankStatements.clientId, clientId))).limit(1);
+      .where(and(eq(bankStatements.ownAccount, parsed.ownAccount), ne(bankStatements.clientId, clientId), isNull(bankStatements.voidedAt))).limit(1);
     if (other) throw new DomainError("validation", `Сметката ${parsed.ownAccount} веќе има изводи кај фирмата ${other.name}.`, 422);
     if (!own.size) warnings.push(`Фирмата нема внесени жиро-сметки (Поставки и PDF). Изводот е за ${parsed.ownAccount}: внесете ја, за да се спречи увоз во погрешна фирма.`);
   }
-  const [dup] = await db.select({ id: bankStatements.id, no: bankStatements.statementNo }).from(bankStatements).where(and(eq(bankStatements.clientId, clientId),
+  const [dup] = await db.select({ id: bankStatements.id, no: bankStatements.statementNo }).from(bankStatements).where(and(eq(bankStatements.clientId, clientId), isNull(bankStatements.voidedAt),
     parsed.ownAccount && parsed.statementNo && parsed.date
       ? sql`(${bankStatements.fileHash} = ${parsed.fileHash} or (${bankStatements.ownAccount} = ${parsed.ownAccount} and ${bankStatements.statementNo} = ${parsed.statementNo} and ${bankStatements.statementDate} = ${parsed.date}))`
       : eq(bankStatements.fileHash, parsed.fileHash)));
@@ -106,7 +107,7 @@ export async function importStatement(db: Db, clientId: number, text: string, fi
       statementDate: parsed.date, openingBalance: parsed.opening, closingBalance: parsed.closing, fileName, fileHash: parsed.fileHash, importedBy: actor.userId }).returning();
     // CSV mozhe da se preklopuva so prethoden izvod: istite redovi se preskoknuvaat
     const existing = new Set((await tx.select({ k: bankStatementLines.lineKey }).from(bankStatementLines)
-      .where(and(eq(bankStatementLines.clientId, clientId), inArray(bankStatementLines.lineKey, parsed.lines.map((l) => l.key).concat("-"))))).map((x) => x.k));
+      .where(and(eq(bankStatementLines.clientId, clientId), isNull(bankStatementLines.voidedAt), inArray(bankStatementLines.lineKey, parsed.lines.map((l) => l.key).concat("-"))))).map((x) => x.k));
     let skipped = 0;
     for (const l of parsed.lines) {
       if (existing.has(l.key)) { skipped++; continue; }
@@ -150,7 +151,7 @@ export async function continuityWarnings(db: Db, clientId: number, statementId: 
   const [me] = await db.select().from(bankStatements).where(eq(bankStatements.id, statementId));
   if (!me?.ownAccount || !me.statementDate) return [];
   const rows = (await db.execute(sql`select id, statement_no, statement_date, opening_balance, closing_balance from bank_statements
-    where client_id = ${clientId} and own_account = ${me.ownAccount} and statement_date is not null order by ${STATEMENT_ORDER}`)) as unknown;
+    where client_id = ${clientId} and own_account = ${me.ownAccount} and statement_date is not null and voided_at is null order by ${STATEMENT_ORDER}`)) as unknown;
   const list = (Array.isArray(rows) ? rows : (rows as { rows: unknown[] }).rows) as { id: number; statement_no: string | null; statement_date: string; opening_balance: string | null; closing_balance: string | null }[];
   const i = list.findIndex((r) => Number(r.id) === me.id);
   const prev = list[i - 1], next = list[i + 1];
@@ -176,7 +177,7 @@ export async function peekStatement(db: Db, clientId: number, text: string) {
   } catch (e) { return { ok: false as const, error: (e as Error).message }; }
 }
 
-export type LineStatus = "booked" | "ignored" | "open";
+export type LineStatus = "booked" | "ignored" | "open" | "voided";
 /** Stavki na izvodot so status i (za otvorenite) predlog. */
 export async function statementDetail(db: Db, clientId: number, statementId: number) {
   const [s] = await db.select().from(bankStatements).where(and(eq(bankStatements.id, statementId), eq(bankStatements.clientId, clientId)));
@@ -190,7 +191,7 @@ export async function statementDetail(db: Db, clientId: number, statementId: num
     .where(eq(bankStatementLines.statementId, s.id)).orderBy(asc(bankStatementLines.lineNo));
   const ctx = await matchContext(db, client!);
   const lines = rows.map((r) => {
-    const status: LineStatus = r.l.ignored ? "ignored" : r.l.paymentId && !r.voided ? "booked" : "open";
+    const status: LineStatus = r.l.voidedAt ? "voided" : r.l.ignored ? "ignored" : r.l.paymentId && !r.voided ? "booked" : "open";
     const suggestion: MatchResult | null = status === "open" ? matchLine(lineInput(r.l), ctx) : null;
     const openForPartner = suggestion?.partnerId ? (r.l.direction === "in" ? ctx.openIn : ctx.openOut).filter((o) => o.partnerId === suggestion.partnerId)
       .map((o) => ({ id: o.id, number: o.number, remaining: o.remaining, dueDate: o.dueDate })) : [];
@@ -206,6 +207,8 @@ export async function statementDetail(db: Db, clientId: number, statementId: num
 /** Knizenje na site sigurni otvoreni stavki. */
 export async function bookSure(db: Db, clientId: number, statementId: number, actor: Actor & { userId: number }) {
   let booked = 0; const errors: string[] = [];
+  const [st] = await db.select({ v: bankStatements.voidedAt }).from(bankStatements).where(and(eq(bankStatements.id, statementId), eq(bankStatements.clientId, clientId)));
+  if (st?.v) throw new DomainError("validation", "Изводот е поништен.", 422);
   for (;;) {
     const d = await statementDetail(db, clientId, statementId);
     for (const l of d.lines.filter((x) => x.status === "open" && x.suggestion?.category && x.suggestion.categorySure)) {
@@ -225,10 +228,34 @@ export async function bookSure(db: Db, clientId: number, statementId: number, ac
 export async function setCategory(db: Db, clientId: number, lineId: number, category: ExpenseCategory | null, source: "auto" | "manual") {
   const [l] = await db.select().from(bankStatementLines).where(and(eq(bankStatementLines.id, lineId), eq(bankStatementLines.clientId, clientId)));
   if (!l) throw new DomainError("not_found", "Ставката не постои.", 404);
+  if (l.voidedAt) throw new DomainError("validation", "Изводот е поништен.", 422);
   if (category && l.paymentId) {
     const [p] = await db.select({ v: payments.voidedAt }).from(payments).where(eq(payments.id, l.paymentId));
     if (p && !p.v) throw new DomainError("validation", "Ставката е прокнижена како уплата: прво сторнирајте ја уплатата.", 422);
   }
   await db.update(bankStatementLines).set({ ignored: !!category, category, categorySource: category ? source : null, ignoreReason: category ? EXPENSE_CATEGORIES[category].name : null })
     .where(eq(bankStatementLines.id, l.id));
+}
+
+/**
+ * Ponisti izvod (zabeleska 28, samo administrator): ne se brise nisto. Site uplati od izvodot se storniraat (fakturite povtorno
+ * se otvoreni), stavkite i izvodot se oznacuvaat kako ponisteni, i istiot izvod moze povtorno da se uveze. Naucenite smetki ostanuvaat.
+ */
+export async function voidStatement(db: Db, clientId: number, statementId: number, reason: string, actor: Actor & { userId: number }) {
+  if (reason.trim().length < 3) throw new DomainError("validation", "Внесете причина за поништување.", 422);
+  return db.transaction(async (tx0) => {
+    const tx = tx0 as unknown as Db;
+    const [s] = await tx.select().from(bankStatements).where(and(eq(bankStatements.id, statementId), eq(bankStatements.clientId, clientId))).for("update");
+    if (!s) throw new DomainError("not_found", "Изводот не постои.", 404);
+    if (s.voidedAt) throw new DomainError("validation", "Изводот е веќе поништен.", 409);
+    const label = `Поништен извод${s.statementNo ? ` бр. ${s.statementNo}` : ""}: ${reason.trim()}`;
+    const booked = await tx.select({ pid: payments.id }).from(bankStatementLines).innerJoin(payments, eq(payments.id, bankStatementLines.paymentId))
+      .where(and(eq(bankStatementLines.statementId, s.id), isNull(payments.voidedAt)));
+    for (const b of booked) await voidPayment(tx, b.pid, clientId, label, actor);
+    const now = new Date();
+    await tx.update(bankStatementLines).set({ voidedAt: now }).where(eq(bankStatementLines.statementId, s.id));
+    await tx.update(bankStatements).set({ voidedAt: now, voidedBy: actor.userId, voidReason: reason.trim() }).where(eq(bankStatements.id, s.id));
+    await audit(tx, actor, { clientId, entity: "bank_statement", entityId: s.id, action: "void", changes: { reason: reason.trim(), paymentsVoided: booked.length } });
+    return { id: s.id, paymentsVoided: booked.length };
+  });
 }

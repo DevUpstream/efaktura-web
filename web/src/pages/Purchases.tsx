@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type CostCenter, type Item, type Partner, type VatRate, type Warehouse } from "../api";
-import { date, money, STOCK_KIND, STOCK_TYPES, today } from "../format";
+import { SerialsBox, serialList } from "../components/SerialsBox";
+import { date, money, STOCK_KIND, STOCK_TYPES, today, partnerOption } from "../format";
 import { useYears, YearSelect } from "../components/YearSelect";
 
 interface PurchaseRow { id: number; number: string | null; status: "draft" | "posted" | "voided"; supplierNumber: string; supplierName: string;
   issueDate: string; receivedDate: string; dueDate: string | null; netTotal: string; vatTotal: string; grossTotal: string; source?: string; fileCount?: number }
 interface PFile { id: number; fileName: string; contentType: string; size: number; createdAt: string }
 interface PLine { itemId: number | null; description: string; unit: string; qty: string; unitPrice: string; discountPct: string; vatRateId: number;
-  allocate: boolean; lotNo: string; expiryDate: string; unitCost?: string | null; id?: number; costCenterId?: number | null }
+  allocate: boolean; lotNo: string; expiryDate: string; unitCost?: string | null; id?: number; costCenterId?: number | null;
+  serials?: string[] | null; serialsText?: string }   // zabeleska 9
 interface Purchase extends PurchaseRow { partnerId: number; warehouseId: number | null; costCenterId?: number | null; note: string | null; version: number; voidReason: string | null;
   fixedAmounts: boolean; payableAmount: string | null; turnoverDate: string | null; files: PFile[];
   lines: (PLine & { qty: string; netAmount: string; vatAmount: string })[]; stockDocs: { id: number; number: string; kind: string; reversesDocId: number | null }[] }
@@ -163,7 +165,7 @@ export function PurchaseEditor() {
       warehouseId: x.warehouseId ?? "", note: x.note ?? "", costCenterId: x.costCenterId ?? "" });
     setCcLines(x.lines.some((l) => l.costCenterId)); setCcDirty(false);
     setLines(x.lines.map((l) => ({ ...l, qty: String(Number(l.qty)), unitPrice: String(Number(l.unitPrice)), discountPct: String(Number(l.discountPct)),
-      lotNo: l.lotNo ?? "", expiryDate: l.expiryDate ?? "" })));
+      lotNo: l.lotNo ?? "", expiryDate: l.expiryDate ?? "", serialsText: (l.serials ?? []).join("\n") })));
   }
   useEffect(() => {
     void Promise.all([api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners), api.get<Item[]>(`/api/clients/${client.id}/items`).then(setItems),
@@ -195,7 +197,8 @@ export function PurchaseEditor() {
     const body = { ...head, partnerId: Number(head.partnerId), warehouseId: head.warehouseId || null, dueDate: head.dueDate || null, version: p?.version,
       costCenterId: head.costCenterId || null,
       lines: lines.filter((l) => l.description.trim()).map((l) => ({ ...l, costCenterId: ccLines ? l.costCenterId ?? null : null, qty: Number(String(l.qty).replace(",", ".")), unitPrice: Number(String(l.unitPrice).replace(",", ".")),
-        discountPct: Number(l.discountPct) || 0, lotNo: l.lotNo || null, expiryDate: l.expiryDate || null })) };
+        discountPct: Number(l.discountPct) || 0, lotNo: l.lotNo || null, expiryDate: l.expiryDate || null,
+        serials: serialList(l.serialsText).length ? serialList(l.serialsText) : null, serialsText: undefined })) };
     setBusy(true); setMsg(null);
     try {
       if (p) { await api.put(`/api/clients/${client.id}/purchases/${p.id}`, body); await load(String(p.id)); setMsg({ kind: "ok", text: "Нацртот е зачуван." }); return p.id; }
@@ -242,7 +245,7 @@ export function PurchaseEditor() {
           <label className="span2">Добавувач
             {free ? <select value={head.partnerId} onChange={(e) => setHead({ ...head, partnerId: e.target.value ? Number(e.target.value) : "" })} required>
               <option value="">— изберете —</option>
-              {partners.filter((x) => (x.isActive && (allPartners || x.isSupplier)) || x.id === head.partnerId).map((x) => <option key={x.id} value={x.id}>{x.name}{x.edb ? ` (${x.edb})` : ""}</option>)}
+              {partners.filter((x) => (x.isActive && (allPartners || x.isSupplier)) || x.id === head.partnerId).map((x) => <option key={x.id} value={x.id}>{partnerOption(x)}</option>)}
             </select> : <output>{supplier?.name}</output>}
             {free && partners.some((x) => x.isActive && !x.isSupplier) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и купувачите</label>}
             {free && <small className="muted">Нов добавувач се додава во <Link to={`/c/${client.id}/partners`}>Партнери</Link>, од регистарот на УЈП.</small>}
@@ -283,6 +286,10 @@ export function PurchaseEditor() {
                     ? <div className="lot-row"><input value={l.lotNo} onChange={(e) => set(i, "lotNo", e.target.value)} placeholder="Лот" aria-label="Лот" />
                         <input type="date" value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок на траење" /></div>
                     : <span className="src">лот {l.lotNo}{l.expiryDate ? `, рок ${date(l.expiryDate)}` : ""}</span>)}
+                  {isStock(l) && it?.trackSerials && (editable
+                    ? <SerialsBox clientId={client.id} itemId={l.itemId} need={Number(String(l.qty).replace(",", ".")) || 0} value={l.serialsText ?? ""} pick={false}
+                        label={`Сериски броеви, ставка ${i + 1}`} onChange={(t) => set(i, "serialsText", t)} />
+                    : l.serials?.length ? <span className="src">Сер. бр.: {l.serials.join(", ")}</span> : null)}
                   {!isStock(l) && (editable
                     ? <label className="check small"><input type="checkbox" checked={l.allocate} onChange={(e) => set(i, "allocate", e.target.checked)} /> Зависен трошок (се распоредува во набавната цена)</label>
                     : l.allocate && <span className="src">зависен трошок</span>)}

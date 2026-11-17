@@ -2,15 +2,16 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { clients, items, lotBalances, lots, partners, purchaseFiles, purchaseInvoices, purchaseLines, stockBalances, stockDocs, stockMoves, users, vatRates,
+import { clients, invoices, items, lotBalances, lots, partners, purchaseFiles, purchaseInvoices, purchaseLines, serialMoves, serialNumbers, stockBalances, stockDocs, stockMoves, users, vatRates,
   warehouses } from "../db/schema.js";
+import { addMonths } from "../domain/calc.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
 import { calcLine, calcTotals } from "../domain/calc.js";
 import { postPurchase, voidPurchase } from "../domain/purchase.js";
 import { addFile, importUjpPurchase, MAX_FILE } from "../domain/ujp-import.js";
-import { balanceOf, postStockDoc, reverseStockDoc, StockDecimal as D, type MoveIn } from "../domain/stock.js";
+import { balanceOf, cleanSerials, postStockDoc, reverseStockDoc, StockDecimal as D, type MoveIn } from "../domain/stock.js";
 import { assertClientAccess, assertModule, requireAdmin, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 import { assertCostCenters, setCostCenter } from "../domain/costcenters.js";
@@ -24,6 +25,7 @@ const PurchaseLineIn = z.object({
   qty: Qty, unitPrice: z.coerce.number().min(0).max(1e12), discountPct: z.coerce.number().min(0).max(100).default(0),
   vatRateId: Id, allocate: z.boolean().default(false), lotNo: optText(50), expiryDate: Day.optional().nullable().or(z.literal("").transform(() => null)),
   costCenterId: Id.optional().nullable(),   // docs/14
+  serials: z.union([z.array(z.string().max(100)).max(10000), z.string().max(200000)]).optional().nullable().transform((v) => { const x = cleanSerials(v); return x.length ? x : null; }),   // zabeleska 9
 });
 const PurchaseIn = z.object({
   partnerId: Id, supplierNumber: z.string().trim().min(1).max(60), issueDate: Day, receivedDate: Day,
@@ -34,6 +36,7 @@ const PurchaseIn = z.object({
 const StockLineIn = z.object({
   itemId: Id, qty: z.coerce.number().min(0).max(1e9), unitCost: z.coerce.number().min(0).max(1e12).optional(),
   lotId: Id.optional().nullable(), lotNo: optText(50), expiryDate: Day.optional().nullable().or(z.literal("").transform(() => null)),
+  serials: z.union([z.array(z.string().max(100)).max(10000), z.string().max(200000)]).optional().nullable().transform((v) => { const x = cleanSerials(v); return x.length ? x : null; }),   // zabeleska 9
 });
 const StockDocIn = z.object({
   kind: z.enum(["receipt", "issue", "writeoff", "inventory", "transfer"]), warehouseId: Id, toWarehouseId: Id.optional().nullable(),
@@ -199,7 +202,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       const r = calcLine({ qty: l.qty, unitPrice: l.unitPrice, discountPct: l.discountPct, vatRatePct: rate.ratePct });
       await tx.insert(purchaseLines).values({ purchaseInvoiceId: id, lineNo: i + 1, itemId: l.itemId ?? null, description: l.description, unit: l.unit,
         qty: String(l.qty), unitPrice: String(l.unitPrice), discountPct: String(l.discountPct), vatRateId: rate.id, vatRatePct: rate.ratePct,
-        netAmount: r.netAmount, vatAmount: r.vatAmount, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null });
+        netAmount: r.netAmount, vatAmount: r.vatAmount, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null, serials: l.serials ?? null });
       calc.push({ ...r, vatRatePct: rate.ratePct });
     }
     const t = calcTotals(calc);
@@ -226,7 +229,7 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
     }
     await assertCostCenters(tx, clientId, [b.costCenterId, ...b.lines.map((l) => l.costCenterId)]);
     for (const [i, l] of b.lines.entries())
-      await tx.update(purchaseLines).set({ itemId: l.itemId ?? null, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null }).where(eq(purchaseLines.id, cur[i]!.id));
+      await tx.update(purchaseLines).set({ itemId: l.itemId ?? null, allocate: l.allocate, lotNo: l.lotNo, expiryDate: l.expiryDate ?? null, costCenterId: l.costCenterId ?? null, serials: l.serials ?? null }).where(eq(purchaseLines.id, cur[i]!.id));
     await tx.update(purchaseInvoices).set({ receivedDate: b.receivedDate, dueDate: b.dueDate ?? null, warehouseId: b.warehouseId ?? null, note: b.note, costCenterId: b.costCenterId ?? null,
       year: Number(b.receivedDate.slice(0, 4)), version: sql`${purchaseInvoices.version} + 1` }).where(eq(purchaseInvoices.id, p.id));
   }
@@ -308,6 +311,46 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
       lots: lotRows.filter((l) => l.itemId === r.itemId && l.warehouseId === r.warehouseId) }));
   });
 
+  /* ------------------------------------------- seriski broevi (zabeleska 9) */
+  /** Prebaruvanje: po broj (del), artikl, magacin; available=1 = samo na zaliha (za izbor pri izdavanje). */
+  app.get("/api/clients/:clientId/serials", async (req) => {
+    const { clientId } = await withModule(req, "warehouse");
+    const q = z.object({ q: z.string().trim().max(100).optional(), itemId: Id.optional(), warehouseId: Id.optional(),
+      available: z.enum(["0", "1"]).optional() }).parse(req.query);
+    const conds = [eq(serialNumbers.clientId, clientId)];
+    if (q.q) conds.push(ilike(serialNumbers.serialNo, `%${q.q.replace(/[%_\\]/g, "\\$&")}%`));
+    if (q.itemId) conds.push(eq(serialNumbers.itemId, q.itemId));
+    if (q.warehouseId) conds.push(eq(serialNumbers.warehouseId, q.warehouseId));
+    if (q.available === "1") conds.push(sql`${serialNumbers.warehouseId} is not null`);
+    return db.select({ id: serialNumbers.id, serialNo: serialNumbers.serialNo, itemId: items.id, code: items.code, name: items.name,
+      warehouseId: serialNumbers.warehouseId, warehouseName: warehouses.name })
+      .from(serialNumbers).innerJoin(items, eq(items.id, serialNumbers.itemId)).leftJoin(warehouses, eq(warehouses.id, serialNumbers.warehouseId))
+      .where(and(...conds)).orderBy(asc(items.code), asc(serialNumbers.serialNo)).limit(500);
+  });
+  /** Kartica na seriski broj: sekoe dvizenje (dokument, datum, partner, faktura) i garancija do. */
+  app.get("/api/clients/:clientId/serials/:id", async (req) => {
+    const { clientId } = await withModule(req, "warehouse");
+    const id = Id.parse((req.params as { id: string }).id);
+    const [sn] = await db.select({ s: serialNumbers, code: items.code, name: items.name, warrantyMonths: items.warrantyMonths, warehouseName: warehouses.name })
+      .from(serialNumbers).innerJoin(items, eq(items.id, serialNumbers.itemId)).leftJoin(warehouses, eq(warehouses.id, serialNumbers.warehouseId))
+      .where(and(eq(serialNumbers.id, id), eq(serialNumbers.clientId, clientId)));
+    if (!sn) throw new DomainError("not_found", "Серискиот број не постои.", 404);
+    const moves = await db.select({ id: serialMoves.id, qty: serialMoves.qty, docId: stockDocs.id, number: stockDocs.number, kind: stockDocs.kind, docDate: stockDocs.docDate,
+      reversesDocId: stockDocs.reversesDocId, warehouseName: warehouses.name, invoiceId: stockDocs.invoiceId, invoiceNumber: invoices.number,
+      purchaseInvoiceId: stockDocs.purchaseInvoiceId, purchaseNumber: purchaseInvoices.supplierNumber,
+      partnerName: sql<string | null>`coalesce(${partners.name}, ${invoices.buyerName}, (select p.name from partners p where p.id = ${purchaseInvoices.partnerId}))` })
+      .from(serialMoves).innerJoin(stockDocs, eq(stockDocs.id, serialMoves.docId)).innerJoin(warehouses, eq(warehouses.id, serialMoves.warehouseId))
+      .leftJoin(partners, eq(partners.id, stockDocs.partnerId)).leftJoin(invoices, eq(invoices.id, stockDocs.invoiceId))
+      .leftJoin(purchaseInvoices, eq(purchaseInvoices.id, stockDocs.purchaseInvoiceId))
+      .where(eq(serialMoves.serialId, sn.s.id)).orderBy(asc(serialMoves.id));
+    // garancija: od poslednata prodazba (izlez po faktura ili ispratnica) koja ne e vratena
+    const last = [...moves].reverse().find((m) => m.qty < 0 && m.kind === "issue" && !m.reversesDocId);
+    const sold = last && sn.s.warehouseId === null ? last : null;
+    const warrantyUntil = sold && sn.warrantyMonths ? addMonths(sold.docDate, sn.warrantyMonths) : null;
+    return { ...sn.s, code: sn.code, name: sn.name, warehouseName: sn.warehouseName, warrantyMonths: sn.warrantyMonths, soldAt: sold?.docDate ?? null,
+      soldTo: sold?.partnerName ?? null, warrantyUntil, moves };
+  });
+
   app.get("/api/clients/:clientId/stock/card", async (req) => {
     const { clientId } = await withModule(req, "warehouse");
     const q = z.object({ itemId: Id, warehouseId: Id.optional(), from: Day.optional(), to: Day.optional() }).parse(req.query);
@@ -377,10 +420,10 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
         if (b.kind === "receipt") {
           if (!(l.qty > 0)) throw new DomainError("validation", `Ставка ${i + 1}: количината мора да е поголема од 0.`, 422);
           if (l.unitCost === undefined) throw new DomainError("validation", `Ставка ${i + 1}: внесете набавна цена.`, 422);
-          moves.push({ ...base, qty: l.qty, unitCost: l.unitCost, lotNo: l.lotNo, expiryDate: l.expiryDate });
+          moves.push({ ...base, qty: l.qty, unitCost: l.unitCost, lotNo: l.lotNo, expiryDate: l.expiryDate, serials: l.serials });
         } else if (b.kind === "writeoff" || b.kind === "transfer" || b.kind === "issue") {
           if (!(l.qty > 0)) throw new DomainError("validation", `Ставка ${i + 1}: количината мора да е поголема од 0.`, 422);
-          moves.push({ ...base, qty: -l.qty });
+          moves.push({ ...base, qty: -l.qty, serials: l.serials });
         } else {
           // popis: l.qty = izbroena kolicina; razlikata vo odnos na knizenata
           let cur: InstanceType<typeof D>;
@@ -388,8 +431,9 @@ export async function stockRoutes(app: FastifyInstance, { db }: { db: Db }) {
             const [lb] = await tx.select().from(lotBalances).where(and(eq(lotBalances.lotId, l.lotId), eq(lotBalances.warehouseId, b.warehouseId)));
             cur = new D(lb?.qty ?? 0);
           } else {
-            const [it] = await tx.select({ trackLots: items.trackLots }).from(items).where(eq(items.id, l.itemId));
+            const [it] = await tx.select({ trackLots: items.trackLots, trackSerials: items.trackSerials }).from(items).where(eq(items.id, l.itemId));
             if (it?.trackLots) throw new DomainError("validation", `Ставка ${i + 1}: артиклот води лот, пописот се прави по лот.`, 422);
+            if (it?.trackSerials) throw new DomainError("validation", `Ставка ${i + 1}: артиклот води сериски број. Разликата внесете ја со приемница или отпис со сериските броеви.`, 422);
             cur = (await balanceOf(tx, b.warehouseId, l.itemId)).qty;
           }
           const diff = new D(l.qty).minus(cur);

@@ -74,3 +74,11 @@ export function calcFxTotals(fxLines: (LineResult & { vatRatePct: Num })[], rate
   };
   return { fx, mkd };
 }
+
+/** Datum + meseci (garancija, zabeleska 9): 31.01 + 1 mesec = 28/29.02 (posleden den na mesecot). */
+export function addMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.slice(0, 10).split("-").map(Number) as [number, number, number];
+  const t = (m - 1) + months, ny = y + Math.floor(t / 12), nm = ((t % 12) + 12) % 12;
+  const last = new Date(Date.UTC(ny, nm + 1, 0)).getUTCDate();
+  return `${ny}-${String(nm + 1).padStart(2, "0")}-${String(Math.min(d, last)).padStart(2, "0")}`;
+}

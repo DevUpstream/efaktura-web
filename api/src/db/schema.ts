@@ -7,7 +7,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
-  pgTable, pgEnum, serial, bigserial, integer, smallint, text, varchar, char, boolean, numeric,
+  pgTable, pgEnum, serial, bigserial, bigint, integer, smallint, text, varchar, char, boolean, numeric,
   date, timestamp, jsonb, uuid, uniqueIndex, index, primaryKey, check, customType,
 } from "drizzle-orm/pg-core";
 
@@ -194,6 +194,8 @@ export const partners = pgTable("partners", {
   legacySpId: integer("legacy_sp_id").unique(),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
   name: text("name").notNull(),
+  /** Kratok naziv za listi i prebaruvanje (zabeleska 24). Na faktura i kon UJP sekogas `name` (od registarot). */
+  shortName: varchar("short_name", { length: 100 }),
   bankAccount: varchar("bank_account", { length: 40 }),  // ziro-smetka, za prepoznavanje vo izvod
   creditLimit: money("credit_limit"),  // kreditni limit (otvoreno + nova faktura); null = bez limit (docs/08)
   edb: varchar("edb", { length: 13 }),
@@ -226,6 +228,8 @@ export const items = pgTable("items", {
   name: text("name").notNull(),
   type: itemType("type").notNull().default("service"),
   trackLots: boolean("track_lots").notNull().default(false),  // lot / rok na traenje
+  trackSerials: boolean("track_serials").notNull().default(false),  // seriski broj po parce (zabeleska 9)
+  warrantyMonths: smallint("warranty_months"),                       // garancija vo meseci (zabeleska 9); null = bez
   unit: varchar("unit", { length: 10 }).notNull(),
   unitPrice: amount4("unit_price").notNull(),
   vatRateId: integer("vat_rate_id").notNull().references(() => vatRates.id, { onDelete: "restrict" }),
@@ -235,6 +239,8 @@ export const items = pgTable("items", {
 }, (t) => [
   uniqueIndex("items_client_code_uq").on(t.clientId, t.code),
   check("items_price_ck", sql`${t.unitPrice} >= 0`),
+  check("items_lot_serial_ck", sql`not (${t.trackLots} and ${t.trackSerials})`),
+  check("items_warranty_ck", sql`${t.warrantyMonths} is null or ${t.warrantyMonths} between 1 and 600`),
 ]);
 
 /** Dogovoreni ceni (docs/03). Periodite ne smeat da se preklopuvaat - trigger vo 0001_integrity.sql. */
@@ -393,6 +399,9 @@ export const invoiceLines = pgTable("invoice_lines", {
   netAmount: amount4("net_amount").notNull(),
   vatAmount: amount4("vat_amount").notNull(),
   /** Devizna faktura (docs/16): cena i iznosi vo valutata (dokumentot); unit_price/net/vat gore se denarska protivrednost. */
+  /** Garancija vo meseci (snimka od artiklot pri zacuvuvanje) i seriski broevi na prodadenite parcinja (zabeleska 9). */
+  warrantyMonths: smallint("warranty_months"),
+  serials: text("serials").array(),
   fxUnitPrice: amount4("fx_unit_price"),
   fxNetAmount: amount4("fx_net_amount"),
   fxVatAmount: amount4("fx_vat_amount"),
@@ -604,6 +613,27 @@ export const lots = pgTable("lots", {
   createdAt: created(),
 }, (t) => [uniqueIndex("lots_item_no_uq").on(t.itemId, t.lotNo)]);
 
+/** Seriski broj (zabeleska 9). warehouse_id = kade e sega; null = ne e na zaliha (prodaden, otpisan). */
+export const serialNumbers = pgTable("serial_numbers", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: "restrict" }),
+  itemId: integer("item_id").notNull().references(() => items.id, { onDelete: "restrict" }),
+  serialNo: varchar("serial_no", { length: 100 }).notNull(),
+  warehouseId: integer("warehouse_id").references(() => warehouses.id, { onDelete: "restrict" }),
+  createdAt: created(),
+}, (t) => [uniqueIndex("serial_numbers_uq").on(t.clientId, t.itemId, t.serialNo), index("serial_numbers_no_ix").on(t.clientId, t.serialNo)]);
+
+/** Istorija na seriskiot broj: sekoe dvizenje (+1 vlez, -1 izlez) so dokumentot. Ne se menuva. */
+export const serialMoves = pgTable("serial_moves", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serialId: integer("serial_id").notNull().references(() => serialNumbers.id, { onDelete: "restrict" }),
+  docId: integer("doc_id").notNull().references(() => stockDocs.id, { onDelete: "restrict" }),
+  moveId: bigint("move_id", { mode: "number" }).notNull().references(() => stockMoves.id, { onDelete: "restrict" }),
+  warehouseId: integer("warehouse_id").notNull().references(() => warehouses.id, { onDelete: "restrict" }),
+  qty: smallint("qty").notNull(),
+  createdAt: created(),
+}, (t) => [index("serial_moves_serial_ix").on(t.serialId, t.id), index("serial_moves_move_ix").on(t.moveId), check("serial_moves_qty_ck", sql`${t.qty} in (-1, 1)`)]);
+
 /** Vlezni fakturi (od dobavuvaci). Knizenje -> priemnica (ako e vkluchen Magacin). */
 export const purchaseInvoices = pgTable("purchase_invoices", {
   id: serial("id").primaryKey(),
@@ -665,6 +695,7 @@ export const purchaseLines = pgTable("purchase_lines", {
   allocate: boolean("allocate").notNull().default(false),   // zavisen trosok -> vo nabavnata cena
   lotNo: varchar("lot_no", { length: 50 }),
   expiryDate: date("expiry_date"),
+  serials: text("serials").array(),   // seriski broevi na primenite parcinja (zabeleska 9)
   /** TM na stavkata ("по ставки"); prazno = TM od fakturata. */
   costCenterId: integer("cost_center_id").references(() => costCenters.id, { onDelete: "restrict" }),
   unitCost: amount4("unit_cost"),                            // presmetana pri knizenje
@@ -939,9 +970,13 @@ export const bankStatements = pgTable("bank_statements", {
   fileHash: varchar("file_hash", { length: 64 }).notNull(),
   importedBy: integer("imported_by").references(() => users.id),
   createdAt: created(),
+  /** Ponisten izvod (zabeleska 28): uplatite se storniraat, izvodot ostanuva vidliv, moze povtorno da se uveze. */
+  voidedAt: ts("voided_at"),
+  voidedBy: integer("voided_by").references(() => users.id),
+  voidReason: text("void_reason"),
 }, (t) => [
-  uniqueIndex("bank_statements_file_uq").on(t.clientId, t.fileHash),
-  uniqueIndex("bank_statements_no_uq").on(t.clientId, t.ownAccount, t.statementDate, t.statementNo).where(sql`${t.ownAccount} is not null and ${t.statementNo} is not null`),
+  uniqueIndex("bank_statements_file_uq").on(t.clientId, t.fileHash).where(sql`${t.voidedAt} is null`),
+  uniqueIndex("bank_statements_no_uq").on(t.clientId, t.ownAccount, t.statementDate, t.statementNo).where(sql`${t.ownAccount} is not null and ${t.statementNo} is not null and ${t.voidedAt} is null`),
   index("bank_statements_account_ix").on(t.ownAccount),
 ]);
 
@@ -968,8 +1003,9 @@ export const bankStatementLines = pgTable("bank_statement_lines", {
   category: varchar("category", { length: 20 }),              // EXPENSE_CATEGORIES (docs/08)
   categorySource: varchar("category_source", { length: 10 }),  // auto | manual
   paymentId: integer("payment_id").references(() => payments.id, { onDelete: "restrict" }),
+  voidedAt: ts("voided_at"),   // izvodot e ponisten (zabeleska 28)
 }, (t) => [
-  uniqueIndex("bank_lines_key_uq").on(t.clientId, t.lineKey),
+  uniqueIndex("bank_lines_key_uq").on(t.clientId, t.lineKey).where(sql`${t.voidedAt} is null`),
   index("bank_lines_statement_ix").on(t.statementId),
   check("bank_lines_amount_ck", sql`${t.amount} > 0`),
 ]);

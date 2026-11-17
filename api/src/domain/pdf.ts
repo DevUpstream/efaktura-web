@@ -9,7 +9,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { clients, invoiceLines, invoices, PdfSettings } from "../db/schema.js";
-import { calcTotals } from "./calc.js";
+import { addMonths, calcTotals } from "./calc.js";
 import { calcFxTotals } from "./fx.js";
 
 type Client = typeof clients.$inferSelect;
@@ -163,6 +163,12 @@ export async function renderInvoicePdf(d: PdfInput): Promise<Buffer> {
       disc: Number(l.discountPct) ? nfQ.format(Number(l.discountPct)) : "", net: m2(net), vatp: nfQ.format(Number(l.vatRatePct)),
       vat: m2(vat), gross: m2(Math.round((net + vat) * 100) / 100),
     };
+    // zabeleska 9: garancija i seriski broevi pod opisot
+    const extra = [
+      l.warrantyMonths && inv.docType !== "PF" ? `Гаранција ${l.warrantyMonths} мес., до ${day(addMonths(inv.supplyDate ?? inv.issueDate, l.warrantyMonths))}` : null,
+      l.serials?.length ? `Сер. бр.: ${l.serials.join(", ")}` : null,
+    ].filter(Boolean);
+    if (extra.length) cells.desc = `${cells.desc}\n${extra.join("\n")}`;
     doc.font("r").fontSize(8);
     const h = Math.max(11, doc.heightOfString(cells.desc!, { width: cols.find((c) => c.k === "desc")!.w - 4 }));
     if (ty + h > LIMIT && i > 0) { doc.addPage(); ty = head(40); }

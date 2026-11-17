@@ -31,11 +31,13 @@ export interface Me {
   user?: { id: number; email: string; displayName: string; role: "admin" | "accountant"; provider: "entra" | "local" };
   clients?: ClientRef[];
 }
-export interface Partner { id: number; name: string; edb: string | null; embs: string | null; vatNumber: string | null; address: string | null;
+export interface Partner { id: number; name: string; shortName?: string | null; edb: string | null; embs: string | null; vatNumber: string | null; address: string | null;
   city: string | null; postalCode: string | null; country: string; email: string | null; phone: string | null; bankAccount?: string | null; isActive: boolean; ujpRegistryAt: string | null;
   isCustomer: boolean; isSupplier: boolean }
 export type ItemType = "goods" | "service" | "material" | "product";
-export interface Item { id: number; code: string; name: string; type: ItemType; trackLots: boolean; unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
+export interface Item { id: number; code: string; name: string; type: ItemType; trackLots: boolean;
+  trackSerials?: boolean; warrantyMonths?: number | null;   // zabeleska 9
+  unit: string; unitPrice: string; vatRateId: number; isActive: boolean }
 export interface VatRate { id: number; code: string; name: string; ratePct: string; isActive: boolean }
 export interface InvoiceRow { id: number; number: string | null; docType: DocType; status: Status; issueDate: string; dueDate: string | null;
   buyerName: string; netTotal: string; vatTotal: string; grossTotal: string; payableAmount: string | null;
@@ -45,7 +47,8 @@ export interface Line { id?: number; itemId: number | null; description: string;
   discountPct: string; vatRateId: number; vatRatePct?: string; netAmount?: string; vatAmount?: string; priceSource: string | null;
   stockDocId?: number | null;   // stavka od ispratnica (docs/12)
   costCenterId?: number | null;    // TM na stavkata (docs/14)
-  fxUnitPrice?: string | null; fxNetAmount?: string | null; fxVatAmount?: string | null }   // devizna faktura (docs/16)
+  fxUnitPrice?: string | null; fxNetAmount?: string | null; fxVatAmount?: string | null;
+  serials?: string[] | null; warrantyMonths?: number | null }   // zabeleska 9   // devizna faktura (docs/16)
 export interface CostCenter { id: number; code: string; name: string; isActive: boolean }
 export interface Invoice extends InvoiceRow { clientId: number; partnerId: number; warehouseId: number | null; costCenterId?: number | null; supplyDate: string | null; paymentMethod: string;
   note: string | null; clauses: string | null; version: number; lines: Line[]; advanceAmount: string | null; issuedAt: string | null;

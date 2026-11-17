@@ -60,7 +60,7 @@ export async function todayRoutes(app: FastifyInstance, { db }: { db: Db }) {
       out.receivables = { overdue: { count: overdue.length, amount: sum(overdue), top: pick(overdue) },
         dueSoon: { count: dueSoon.length, amount: sum(dueSoon), top: pick(dueSoon) }, open: { count: recv.length, amount: sum(recv) } };
       const [st] = rowsOf(await db.execute(sql`select count(*)::int n from bank_statement_lines l left join payments y on y.id = l.payment_id
-        where l.client_id = ${clientId} and not l.ignored and (l.payment_id is null or y.voided_at is not null)`));
+        where l.client_id = ${clientId} and l.voided_at is null and not l.ignored and (l.payment_id is null or y.voided_at is not null)`));
       out.statementLinesOpen = Number(st?.n ?? 0);
     }
     if (mods.includes("payments") && mods.includes("incoming")) {

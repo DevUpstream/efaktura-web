@@ -2,7 +2,8 @@
  * Ispratnici bez faktura (docs/12): lista na nefakturirani, faktura od izbrani ispratnici, PDF na magacinski dokument.
  */
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
+import { addMonths } from "../domain/calc.js";
 import { z } from "zod";
 import { clients, invoices, items, lots, partners, stockDocs, stockMoves, warehouses } from "../db/schema.js";
 import type { Db } from "../db/types.js";
@@ -12,6 +13,7 @@ import { listDispatches } from "../domain/dispatch.js";
 import { renderSimpleDoc, q3 } from "../domain/pdf-docs.js";
 import { assertModule, requireUser } from "../auth/context.js";
 import { Id, suggestPrice } from "./master.js";
+const dmy = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 import { writeDraft, type Draft } from "./invoices.js";
 
 const today = () => new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Skopje" });
@@ -51,8 +53,8 @@ export async function dispatchRoutes(app: FastifyInstance, { db }: { db: Db }) {
     for (const d of sorted) for (const l of d.lines) {
       const it = its.get(l.itemId)!;
       const p = await suggestPrice(db, clientId, { partnerId, itemId: l.itemId, date });
-      lines.push({ itemId: l.itemId, description: it.name, unit: it.unit, qty: Number(l.qty), unitPrice: Number(p.price), discountPct: 0,
-        vatRateId: it.vatRateId, priceSource: p.source.slice(0, 80), stockDocId: d.id });
+      lines.push({ itemId: l.itemId, description: it.name, unit: it.unit, qty: Number(l.qty), unitPrice: Number(p.price ?? 0), discountPct: 0,
+        vatRateId: it.vatRateId, priceSource: p.source.slice(0, 80), stockDocId: d.id, serials: l.serials ?? null });
     }
     const whs = new Set(ds.map((d) => d.warehouseId));
     const due = new Date(Date.parse(`${date}T12:00:00Z`) + 15 * 864e5).toISOString().slice(0, 10);   // ist rok kako nova faktura vo urednikot
@@ -76,7 +78,9 @@ export async function dispatchRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const [client] = await db.select().from(clients).where(eq(clients.id, clientId));
     const [wh] = await db.select().from(warehouses).where(eq(warehouses.id, d.warehouseId));
     const [partner] = d.partnerId ? await db.select().from(partners).where(eq(partners.id, d.partnerId)) : [];
-    const moves = await db.select({ code: items.code, name: items.name, unit: items.unit, qty: stockMoves.qty, lotNo: lots.lotNo, whId: stockMoves.warehouseId })
+    const moves = await db.select({ id: stockMoves.id, code: items.code, name: items.name, unit: items.unit, qty: stockMoves.qty, lotNo: lots.lotNo, whId: stockMoves.warehouseId,
+      warrantyMonths: items.warrantyMonths,
+      serials: sql<string[] | null>`(select array_agg(n.serial_no order by n.serial_no) from serial_moves sm join serial_numbers n on n.id = sm.serial_id where sm.move_id = ${stockMoves.id})` })
       .from(stockMoves).innerJoin(items, eq(items.id, stockMoves.itemId)).leftJoin(lots, eq(lots.id, stockMoves.lotId))
       .where(eq(stockMoves.docId, d.id)).orderBy(asc(stockMoves.id));
     const own = moves.filter((m) => m.whId === d.warehouseId);
@@ -87,7 +91,9 @@ export async function dispatchRoutes(app: FastifyInstance, { db }: { db: Db }) {
       partnerLabel: "Примач", intro: d.note ? [d.note] : [],
       sections: [{ cols: [{ title: "Р.бр.", width: 6 }, { title: "Шифра", width: 16 }, { title: "Назив", width: 50 }, { title: "Лот", width: 12 },
         { title: "Ед.", width: 7 }, { title: "Количина", width: 12, align: "right" }],
-        rows: own.map((m, i) => [String(i + 1), m.code, m.name, m.lotNo ?? "", m.unit, q3(Math.abs(Number(m.qty)))]) }],
+        // zabeleska 9: seriski broevi i garancija pod nazivot
+        rows: own.map((m, i) => [String(i + 1), m.code, [m.name, isIssue && m.warrantyMonths && !d.reversesDocId ? `Гаранција ${m.warrantyMonths} мес., до ${dmy(addMonths(d.docDate, m.warrantyMonths))}` : null,
+          m.serials?.length ? `Сер. бр.: ${m.serials.join(", ")}` : null].filter(Boolean).join("\n"), m.lotNo ?? "", m.unit, q3(Math.abs(Number(m.qty)))]) }],
       outro: isIssue ? ["Испратницата не е фактура. Фактурата ќе биде издадена дополнително."] : [],
       signatures: isIssue ? ["Издал", "Превезол", "Примил (име, презиме, потпис)"] : ["Изготвил", "Одобрил"],
     });

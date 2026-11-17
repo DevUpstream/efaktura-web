@@ -325,3 +325,10 @@ tr.clickable:hover td { background: var(--line-2); }
 .ujp-panel ul { margin: 6px 0 0 18px; padding: 0; }
 details.inline { display: inline; }
 details.inline summary { display: inline; cursor: pointer; text-decoration: underline; }
+
+/* seriski broevi na stavka (zabeleska 9) */
+.serials { display: grid; gap: 4px; margin-top: 4px; }
+.serials textarea { font-family: inherit; font-size: 0.85rem; min-height: 2.6em; resize: vertical; }
+.serials .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.serials .chips .chip { cursor: pointer; border: 1px solid var(--line-2); background: transparent; }
+small.warn { color: var(--err); }

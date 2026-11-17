@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
-import { date, money, today } from "../format";
+import { date, money, today, partnerOption } from "../format";
 import { Tabs } from "./Payments";
 
 const pdfLink = (url: string, label = "PDF") => <a className="btn btn-small" href={url} target="_blank" rel="noreferrer">{label}</a>;
@@ -95,7 +95,7 @@ export function Compensations() {
           Во листата се само партнери што се и купувачи и добавувачи.</p>
         <div className="toolbar">
           <label>Партнер<select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")}><option value="">— изберете —</option>
-            {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+            {partners.map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
           <label>Датум<input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></label>
         </div>
         {cand && (Number(cand.max) <= 0 ? <p className="notice wait">Нема отворени ставки на двете страни за компензација.</p> : <>

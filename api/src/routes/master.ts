@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { and, desc, eq, gt, gte, inArray, lte, ne, sql } from "drizzle-orm";
 import { Decimal } from "decimal.js";
 import { z } from "zod";
-import { clients, invoiceLines, invoices, items, partnerPrices, partners, ujpReasons, vatRates } from "../db/schema.js";
+import { clients, invoiceLines, invoices, items, partnerPrices, partners, stockBalances, ujpReasons, vatRates } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
@@ -22,6 +22,7 @@ const PartnerIn = z.object({
   country: z.string().trim().length(2).toUpperCase().default("MK"),
   email: opt(z.string().max(254)), phone: opt(z.string().max(50)),
   bankAccount: opt(z.string().max(40)),
+  shortName: opt(z.string().max(100)),   // zabeleska 24: ne e zaklucen (ne e od registarot)
   isActive: z.boolean().default(true),
   isCustomer: z.boolean().optional(),
   isSupplier: z.boolean().optional(),
@@ -34,6 +35,8 @@ const ItemIn = z.object({
   name: z.string().trim().min(2).max(300),
   type: z.enum(["goods", "service", "material", "product"]).default("service"),
   trackLots: z.boolean().default(false),
+  trackSerials: z.boolean().default(false),   // zabeleska 9: seriski broj po parce
+  warrantyMonths: z.coerce.number().int().min(1).max(600).optional().nullable().or(z.literal("").transform(() => null)),
   unit: z.string().trim().min(1).max(10),
   unitPrice: z.coerce.number().min(0).max(1e12).transform((n) => n.toFixed(4)),
   vatRateId: Id,
@@ -148,6 +151,7 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
   app.post("/api/clients/:clientId/items", async (req, reply) => {
     const { u, clientId } = await ctx(req);
     const b = ItemIn.parse(req.body);
+    if (b.trackLots && b.trackSerials) throw new DomainError("validation", "Артиклот води или лот или сериски број, не двете.", 422);
     try {
       const [it] = await db.insert(items).values({ ...b, clientId }).returning();
       await audit(db, { userId: u.id, ip: req.ip }, { clientId, entity: "item", entityId: it!.id, action: "create", changes: b });
@@ -162,6 +166,14 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const { u, clientId } = await ctx(req);
     const id = Id.parse((req.params as { id: string }).id);
     const b = ItemIn.partial().parse(req.body);
+    const [cur] = await db.select().from(items).where(and(eq(items.id, id), eq(items.clientId, clientId)));
+    if (!cur) throw new DomainError("not_found", "Артиклот не постои.", 404);
+    if ((b.trackLots ?? cur.trackLots) && (b.trackSerials ?? cur.trackSerials)) throw new DomainError("validation", "Артиклот води или лот или сериски број, не двете.", 422);
+    if (b.trackSerials && !cur.trackSerials) {
+      // zabeleska 9: postoeckata zaliha nema seriski broevi -> vklucuvanje samo bez zaliha
+      const [z0] = await db.select({ q: sql<string>`coalesce(sum(${stockBalances.qty}), 0)` }).from(stockBalances).where(eq(stockBalances.itemId, id));
+      if (Number(z0?.q ?? 0) !== 0) throw new DomainError("validation", "Артиклот има залиха без сериски броеви. Прво отпишете ја (или пренесете ја на нула), па вклучете „Води сериски број“ и примете ја повторно со броевите.", 422);
+    }
     try {
       const [it] = await db.update(items).set(b).where(and(eq(items.id, id), eq(items.clientId, clientId))).returning();
       if (!it) throw new DomainError("not_found", "Артиклот не постои.", 404);

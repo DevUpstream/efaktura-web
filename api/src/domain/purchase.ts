@@ -77,7 +77,7 @@ export async function postPurchase(db: Db, id: number, actor: Actor & { userId: 
         clientId: p.clientId, kind: "receipt", warehouseId: warehouseId!, docDate: p.receivedDate, purchaseInvoiceId: p.id,
         note: `${supplier!.name}, ф-ра ${p.supplierNumber}`, createdBy: actor.userId,
         moves: stockLines.map((l) => ({ warehouseId: warehouseId!, itemId: l.itemId!, qty: l.qty, unitCost: costs.get(l.id)!,
-          lotNo: l.lotNo, expiryDate: l.expiryDate })),
+          lotNo: l.lotNo, expiryDate: l.expiryDate, serials: l.serials })),
       });
       receipt = r.doc.number;
     }

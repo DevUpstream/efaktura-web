@@ -162,6 +162,13 @@
       "when": 1794906288902,
       "tag": "0022_iban_smetki",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794908703368,
+      "tag": "0023_paket2",
+      "breakpoints": true
     }
   ]
 }

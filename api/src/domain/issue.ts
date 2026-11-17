@@ -165,7 +165,7 @@ export async function issueInvoice(db: Db, invoiceId: number, actor: Actor & { u
           const wh = inv.warehouseId ?? (await defaultWarehouse(stx, inv.clientId)).id;
           const r = await postStockDoc(stx, { clientId: inv.clientId, kind: "issue", warehouseId: wh, docDate, invoiceId: inv.id,
             note: `${number}, ${partner!.name}`, createdBy: actor.userId,
-            moves: moves.map((l) => ({ warehouseId: wh, itemId: l.itemId!, qty: `-${String(l.qty).replace("-", "")}` })) });
+            moves: moves.map((l) => ({ warehouseId: wh, itemId: l.itemId!, qty: `-${String(l.qty).replace("-", "")}`, serials: l.serials })) });
           stockWarnings.push(...r.warnings); stockDocNumber = r.doc.number;
         }
       }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Item, type Partner, type Warehouse } from "../api";
-import { date, ITEM_TYPE, money, qtyFmt, STOCK_KIND, STOCK_TYPES, today } from "../format";
+import { SerialsBox, serialList } from "../components/SerialsBox";
+import { date, ITEM_TYPE, money, qtyFmt, STOCK_KIND, STOCK_TYPES, today, partnerOption } from "../format";
 
 interface StockRow { warehouseId: number; warehouseName: string; itemId: number; code: string; name: string; type: string; unit: string; trackLots: boolean;
   qty: string; value: string; avgCost: string; salePrice: string; lots: { lotId: number; lotNo: string; expiryDate: string | null; qty: string }[] }
@@ -14,7 +15,7 @@ function useWarehouses(clientId: number) {
   return w;
 }
 export function StockTabs({ clientId }: { clientId: number }) {
-  return <nav className="seg tabs" aria-label="Магацин"><NavLink to={`/c/${clientId}/stock`} end>Залиха</NavLink><NavLink to={`/c/${clientId}/stock/docs`}>Документи</NavLink><NavLink to={`/c/${clientId}/stock/dispatches`}>Испратници</NavLink></nav>;
+  return <nav className="seg tabs" aria-label="Магацин"><NavLink to={`/c/${clientId}/stock`} end>Залиха</NavLink><NavLink to={`/c/${clientId}/stock/docs`}>Документи</NavLink><NavLink to={`/c/${clientId}/stock/dispatches`}>Испратници</NavLink><NavLink to={`/c/${clientId}/stock/serials`}>Сериски броеви</NavLink></nav>;
 }
 const soon = (d: string | null) => !!d && d <= new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
 
@@ -178,7 +179,7 @@ export function StockDocView() {
 }
 
 /* ------------------------------------------------------ nov racen dokument */
-interface NLine { itemId: number | ""; qty: string; unitCost: string; lotNo: string; expiryDate: string; lotId: number | "" }
+interface NLine { itemId: number | ""; qty: string; unitCost: string; lotNo: string; expiryDate: string; lotId: number | ""; serialsText?: string }
 const KIND_HELP: Record<string, string> = {
   receipt: "Прием без влезна фактура, на пр. почетна состојба. Внесете набавна цена.",
   issue: "Испратница без фактура (реверс, консигнација, испорака пред фактура). Стоката излегува веднаш; фактурата ја правите подоцна од „Испратници“.",
@@ -217,7 +218,8 @@ export function StockDocNew() {
       const r = await api.post<{ id: number; warnings: string[] }>(`/api/clients/${client.id}/stock-docs`, {
         kind, warehouseId: wh, toWarehouseId: kind === "transfer" ? toWh || null : null, docDate, note, partnerId: kind === "issue" ? partnerId || null : null,
         lines: lines.filter((l) => l.itemId).map((l) => ({ itemId: l.itemId, qty: Number(l.qty.replace(",", ".")),
-          ...(l.unitCost !== "" ? { unitCost: Number(l.unitCost.replace(",", ".")) } : {}), lotNo: l.lotNo || null, expiryDate: l.expiryDate || null, lotId: l.lotId || null })) });
+          ...(l.unitCost !== "" ? { unitCost: Number(l.unitCost.replace(",", ".")) } : {}), lotNo: l.lotNo || null, expiryDate: l.expiryDate || null, lotId: l.lotId || null,
+          serials: serialList(l.serialsText).length ? serialList(l.serialsText) : null })) });
       nav(`../${r.id}`, { relative: "path" });
     } catch (e) { setErr((e as ApiError).message); } finally { setBusy(false); }
   }
@@ -234,14 +236,14 @@ export function StockDocNew() {
           {kind === "transfer" && <label>Во магацин<select value={toWh} onChange={(e) => setToWh(e.target.value ? Number(e.target.value) : "")}><option value="">— изберете —</option>
             {whs.filter((w) => w.id !== wh).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
           {kind === "issue" && <label className="span2">Купувач<select value={partnerId} onChange={(e) => setPartnerId(e.target.value ? Number(e.target.value) : "")} required>
-            <option value="">— изберете —</option>{partners.filter((p) => p.isCustomer || !p.isSupplier).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>}
+            <option value="">— изберете —</option>{partners.filter((p) => p.isCustomer || !p.isSupplier).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>}
           <label>Датум<input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} /></label>
           <label className="span2">Опис<input value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === "writeoff" ? "Причина за отпис" : ""} /></label>
         </div>
         {itemsList.length === 0 && <p className="alert">Нема артикли што водат залиха. Во „Артикли и услуги“ поставете вид Стока, Материјал или Готов производ.</p>}
         <div className="table-wrap"><table className="grid lines">
           <thead><tr><th className="c-item">Артикл</th><th className="num">Сега</th><th className="c-qty num">{kind === "inventory" ? "Изброено" : "Количина"}</th>
-            {(kind === "receipt" || kind === "inventory") && <th className="c-price num">Набавна цена</th>}<th>Лот</th><th className="c-x" /></tr></thead>
+            {(kind === "receipt" || kind === "inventory") && <th className="c-price num">Набавна цена</th>}<th>Лот / сериски бр.</th><th className="c-x" /></tr></thead>
           <tbody>{lines.map((l, i) => {
             const it = itemsList.find((x) => x.id === l.itemId);
             const c = cur(l.itemId);
@@ -253,7 +255,10 @@ export function StockDocNew() {
                 <td className="c-qty num"><input inputMode="decimal" value={l.qty} onChange={(e) => set(i, "qty", e.target.value)} aria-label="Количина" /></td>
                 {(kind === "receipt" || kind === "inventory") && <td className="c-price num"><input inputMode="decimal" value={l.unitCost} onChange={(e) => set(i, "unitCost", e.target.value)}
                   placeholder={kind === "inventory" ? (c ? money(c.avgCost) : "просечна") : ""} aria-label="Набавна цена" /></td>}
-                <td>{it?.trackLots ? (kind === "receipt"
+                <td>{it?.trackSerials ? (kind === "inventory" ? <span className="muted small">попис по сериски број: приемница / отпис</span>
+                  : <SerialsBox clientId={client.id} itemId={l.itemId || null} warehouseId={wh || null} need={Number(l.qty.replace(",", ".")) || 0} value={l.serialsText ?? ""}
+                      pick={kind !== "receipt"} label={`Сериски броеви ${i + 1}`} onChange={(t) => set(i, "serialsText", t)} />)
+                  : it?.trackLots ? (kind === "receipt"
                   ? <div className="lot-row"><input value={l.lotNo} onChange={(e) => set(i, "lotNo", e.target.value)} placeholder="Лот" aria-label="Лот" />
                       <input type="date" value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок" /></div>
                   : <select value={l.lotId} onChange={(e) => set(i, "lotId", e.target.value ? Number(e.target.value) : "")} aria-label="Лот">
@@ -268,6 +273,52 @@ export function StockDocNew() {
       {err && <p className="alert" role="alert">{err}</p>}
       <div className="actions"><button className="btn btn-primary" disabled={busy || !lines.some((l) => l.itemId) || (kind === "issue" && !partnerId)} onClick={submit}>Книжи {kind === "receipt" ? "приемница" : STOCK_KIND[kind]!.toLowerCase()}</button>
         <span className="muted small">Книжен документ не се менува. Грешка се исправа со сторно.</span></div>
+    </>
+  );
+}
+
+/* ---------------------------------------------- seriski broevi (zabeleska 9) */
+interface SerialRow { id: number; serialNo: string; itemId: number; code: string; name: string; warehouseId: number | null; warehouseName: string | null }
+interface SerialCard { id: number; serialNo: string; code: string; name: string; warehouseName: string | null; warrantyMonths: number | null;
+  soldAt: string | null; soldTo: string | null; warrantyUntil: string | null;
+  moves: { id: number; qty: number; docId: number; number: string; kind: string; docDate: string; reversesDocId: number | null; warehouseName: string;
+    invoiceId: number | null; invoiceNumber: string | null; purchaseInvoiceId: number | null; purchaseNumber: string | null; partnerName: string | null }[] }
+export function SerialSearch() {
+  const client = useOutletContext<ClientRef>();
+  const [q, setQ] = useState("");
+  const [rows, setRows] = useState<SerialRow[] | null>(null);
+  const [card, setCard] = useState<SerialCard | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => { api.get<SerialRow[]>(`/api/clients/${client.id}/serials?${new URLSearchParams(q.trim() ? { q: q.trim() } : {})}`).then(setRows, () => setRows([])); }, 250);
+    return () => clearTimeout(t);
+  }, [client.id, q]);
+  const open = (id: number) => api.get<SerialCard>(`/api/clients/${client.id}/serials/${id}`).then(setCard);
+  return (
+    <>
+      <header className="page-head"><h1>Магацин</h1></header>
+      <StockTabs clientId={client.id} />
+      <div className="toolbar"><input type="search" placeholder="Сериски број (дел од бројот)" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај сериски број" autoFocus /></div>
+      {card && <section className="panel">
+        <h2>{card.serialNo} · {card.code} {card.name}</h2>
+        <p>{card.warehouseName ? <>На залиха: <strong>{card.warehouseName}</strong></> : card.soldAt ? <>Продаден {date(card.soldAt)}{card.soldTo ? ` на ${card.soldTo}` : ""}</> : "Не е на залиха."}
+          {card.warrantyUntil && <> · Гаранција до <strong>{date(card.warrantyUntil)}</strong>{card.warrantyUntil < today() && <span className="chip err">истечена</span>}</>}</p>
+        <div className="table-wrap"><table className="grid compact">
+          <thead><tr><th>Датум</th><th>Документ</th><th>Магацин</th><th>Партнер</th><th>Врска</th><th className="num">Кол.</th></tr></thead>
+          <tbody>{card.moves.map((m) => <tr key={m.id}>
+            <td>{date(m.docDate)}</td><td><Link to={`/c/${client.id}/stock/docs/${m.docId}`}>{m.number}</Link> <span className="muted small">{STOCK_KIND[m.kind] ?? m.kind}{m.reversesDocId ? " (сторно)" : ""}</span></td>
+            <td>{m.warehouseName}</td><td>{m.partnerName ?? "–"}</td>
+            <td>{m.invoiceId ? <Link to={`/c/${client.id}/invoices/${m.invoiceId}`}>{m.invoiceNumber ?? "фактура"}</Link> : m.purchaseInvoiceId ? <Link to={`/c/${client.id}/purchases/${m.purchaseInvoiceId}`}>ф-ра {m.purchaseNumber}</Link> : "–"}</td>
+            <td className="num">{m.qty > 0 ? "+1" : "−1"}</td></tr>)}</tbody>
+        </table></div>
+        <button className="link" onClick={() => setCard(null)}>Затвори</button>
+      </section>}
+      {rows && rows.length === 0 && <div className="empty"><p>{q ? "Нема сериски број што содржи „" + q + "“." : "Нема сериски броеви. Артиклот мора да има „Води сериски број“."}</p></div>}
+      {rows && rows.length > 0 && <div className="table-wrap"><table className="grid">
+        <thead><tr><th>Сериски број</th><th>Артикл</th><th>Состојба</th></tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.id} onClick={() => open(r.id)}>
+          <td><button className="link" onClick={(e) => { e.stopPropagation(); void open(r.id); }}>{r.serialNo}</button></td><td>{r.code} · {r.name}</td>
+          <td>{r.warehouseName ? <span className="chip ok">{r.warehouseName}</span> : <span className="chip">не е на залиха</span>}</td></tr>)}</tbody>
+      </table></div>}
     </>
   );
 }

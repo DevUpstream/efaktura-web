@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type CostCenter, type Partner } from "../api";
-import { date, money } from "../format";
+import { date, money, partnerOption } from "../format";
 import { useSession } from "../session";
 
 const MODE = { off: "Исклучено", optional: "Опционално", required: "Задолжително" } as const;
@@ -125,7 +125,7 @@ function Assign({ client, ccs }: { client: ClientRef; ccs: CostCenter[] }) {
         <label>од<input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
         <label>до<input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
         <label className="span2">Партнер (по избор)<select value={f.partnerId} onChange={(e) => setF({ ...f, partnerId: e.target.value ? Number(e.target.value) : "" })}>
-          <option value="">— сите —</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+          <option value="">— сите —</option>{partners.map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
         <label>Трошковно место<select value={f.costCenterId} onChange={(e) => setF({ ...f, costCenterId: e.target.value ? Number(e.target.value) : "" })}>
           <option value="">— изберете —</option>{ccs.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}</select></label>
         <label className="check span-all"><input type="checkbox" checked={f.onlyEmpty} onChange={(e) => setF({ ...f, onlyEmpty: e.target.checked })} /> Само документи без ТМ</label>

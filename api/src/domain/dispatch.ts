@@ -32,7 +32,7 @@ export async function assertDispatchesFree(tx: Db, clientId: number, partnerId: 
 
 export interface DispatchRow {
   id: number; number: string; docDate: string; partnerId: number; partnerName: string; warehouseId: number; warehouseName: string; note: string | null;
-  lines: { itemId: number; code: string; name: string; unit: string; qty: string; value: string }[];
+  lines: { itemId: number; code: string; name: string; unit: string; qty: string; value: string; serials?: string[] | null }[];
   billedBy: { id: number; number: string | null; status: string } | null; reversed: boolean;
 }
 
@@ -47,7 +47,10 @@ export async function listDispatches(db: Db, clientId: number, o: { partnerId?: 
   if (!docs.length) return [];
   const ids = docs.map((x) => x.d.id);
   const moves = await db.select({ docId: stockMoves.docId, itemId: items.id, code: items.code, name: items.name, unit: items.unit,
-    qty: sql<string>`-sum(${stockMoves.qty})`, value: sql<string>`-sum(${stockMoves.value})` })
+    qty: sql<string>`-sum(${stockMoves.qty})`, value: sql<string>`-sum(${stockMoves.value})`,
+    // seriski broevi (zabeleska 9): odat na fakturata od ispratnicata
+    serials: sql<string[] | null>`(select array_agg(n.serial_no order by n.serial_no) from serial_moves sm join serial_numbers n on n.id = sm.serial_id
+      join stock_moves m2 on m2.id = sm.move_id where m2.doc_id = ${stockMoves.docId} and m2.item_id = ${items.id})` })
     .from(stockMoves).innerJoin(items, eq(items.id, stockMoves.itemId)).where(inArray(stockMoves.docId, ids))
     .groupBy(stockMoves.docId, items.id, items.code, items.name, items.unit).orderBy(asc(items.code));
   const reversed = new Set((await db.select({ r: stockDocs.reversesDocId }).from(stockDocs).where(inArray(stockDocs.reversesDocId, ids))).map((x) => x.r));
