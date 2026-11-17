@@ -32,3 +32,7 @@ ssh -i $k ubuntu@92.5.149.62 "sudo bash ~/efaktura-deploy/oneoff/purge-client-do
 3. OneDrive: `eFakturi\export\UPSTRI-izvoz-202611171120.zip` (CSV, читливо).
 
 Враќање: само целата база (`05-restore-test.sh` за проба). Делумно враќање на една фирма не постои.
+
+## Извршено 17.11.2026 13:02
+Проба и `--commit` без грешка. Избришано: 107 излезни, 153 влезни, 32 изводи (79 ставки), 4 плаќања, 1 опомена, 2 магацински документи, 227 артикли. Остануваат 187 партнери и 3 магацини.
+Копии: `/opt/efaktura/backups/rezerva-pred-brisenje-4015023508550-20261117-1302.dump`; облак `dnevni/efaktura-20261117-1302.dump` (sha256 a30513b44162ae58…).
