@@ -38,7 +38,7 @@
 ## Постапка (PowerShell)
 ```powershell
 $k = "$env:USERPROFILE\.ssh\oracle-efaktura.key"; $s = "ubuntu@92.5.149.62"
-ssh -i $k $s "sudo bash ~/efaktura-deploy/03-deploy.sh <слика>"
+ssh -i $k $s "sudo bash ~/efaktura-deploy/03-deploy.sh 20261117-1263774"
 # по ред: vlezni, izlezni, izvodi (за секоја прво --dry-run)
 scp -i $k "C:\Users\User\OneDrive - FKK VIDI\eFakturi\uvoz\UPSTREAM\upstream-2023-vlezni.json" "${s}:u.json"
 ssh -i $k $s "cd /opt/efaktura && sudo docker compose exec -T api node dist/tools/import-docs.js - --client 4015023508550 --user <е-пошта> --dry-run < ~/u.json"
