@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Contact, type Note, type NoteKind, type PartnerCardData } from "../api";
@@ -136,7 +137,7 @@ function NoteForm({ client, partnerId, contacts, onSaved }: { client: ClientRef;
       <div className="row-actions">
         {contacts.length > 0 && <label className="grow">Со кого<select name="contactId" defaultValue=""><option value="">–</option>
           {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-        <label>Потсети ме на<input type="date" value={fu} min={today()} onChange={(e) => setFu(e.target.value)} /></label>
+        <label>Потсети ме на<DateInput value={fu} min={today()} onChange={(e) => setFu(e.target.value)} /></label>
         <div className="quick">{quick.map(([l, n]) => <button key={n} type="button" className="link small" onClick={() => setFu(addDays(today(), n))}>{l}</button>)}</div>
       </div>
       {err && <p className="alert">{err}</p>}

@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, type ClientRef } from "../api";
@@ -14,7 +15,7 @@ const DOC: Record<string, string> = { INV: "Фактура", AV: "Авансна
 const range = (m: string) => { const [y, mo] = m.split("-").map(Number); const last = new Date(Date.UTC(y!, mo!, 0)).getUTCDate(); return [`${m}-01`, `${m}-${String(last).padStart(2, "0")}`] as const; };
 const prevMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 
-/** КИФ / КУФ по период (docs/13). */
+/** КИФ / КВФ по период (docs/13). */
 export function VatBooks() {
   const client = useOutletContext<ClientRef>();
   const hasKuf = client.modules.includes("incoming");
@@ -27,16 +28,16 @@ export function VatBooks() {
   const showExempt = !!b?.rows.some((x) => Number(x.exempt));
   return (
     <>
-      <header className="page-head"><h1>КИФ / КУФ</h1>
+      <header className="page-head"><h1>КИФ / КВФ</h1>
         <div className="row-actions"><a className="btn btn-primary" href={`/api/clients/${client.id}/vat-books/${kind}?from=${from}&to=${to}&format=csv`}>Преземи за Excel (CSV)</a></div></header>
-      <p className="muted small">Книга на излезни фактури (КИФ) и книга на влезни фактури (КУФ) за период, по ДДВ стапка. КИФ: по датум на издавање; сторно и одобрение со минус;
-        кај корекција се книжи разликата. КУФ: прокнижени влезни по датум на прием. Распоредот на колоните нека го потврди сметководителот.</p>
+      <p className="muted small">Книга на излезни фактури (КИФ) и книга на влезни фактури (КВФ) за период, по ДДВ стапка. КИФ: по датум на издавање; сторно и одобрение со минус;
+        кај корекција се книжи разликата. КВФ: прокнижени влезни по датум на прием. Распоредот на колоните нека го потврди сметководителот.</p>
       <div className="toolbar">
         <div className="seg" role="tablist"><button role="tab" aria-selected={kind === "kif"} onClick={() => setKind("kif")}>КИФ (излезни)</button>
-          {hasKuf && <button role="tab" aria-selected={kind === "kuf"} onClick={() => setKind("kuf")}>КУФ (влезни)</button>}</div>
+          {hasKuf && <button role="tab" aria-selected={kind === "kuf"} onClick={() => setKind("kuf")}>КВФ (влезни)</button>}</div>
         <label>Месец <input type="month" value={from.slice(0, 7)} onChange={(e) => e.target.value && setRange(range(e.target.value))} /></label>
-        <label>од <input type="date" value={from} onChange={(e) => e.target.value && setRange([e.target.value, to])} /></label>
-        <label>до <input type="date" value={to} onChange={(e) => e.target.value && setRange([from, e.target.value])} /></label>
+        <label>од <DateInput value={from} onChange={(e) => e.target.value && setRange([e.target.value, to])} /></label>
+        <label>до <DateInput value={to} onChange={(e) => e.target.value && setRange([from, e.target.value])} /></label>
       </div>
       {err && <p className="alert">{err}</p>}
       {!b && !err && <p className="muted">Се вчитува…</p>}

@@ -1,4 +1,4 @@
-/** КИФ / КУФ (docs/13): преглед и CSV за Excel / сметководителот. */
+/** КИФ / КВФ (docs/13): преглед и CSV за Excel / сметководителот. */
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -20,6 +20,6 @@ export async function vatBookRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (q.format === "json") return b;
     const [c] = await db.select({ p: clients.invoicePrefix }).from(clients).where(eq(clients.id, clientId));
     return reply.header("content-type", "text/csv; charset=utf-8")
-      .header("content-disposition", `attachment; filename="${c!.p}-${kind.toUpperCase()}-${q.from}_${q.to}.csv"`).send(bookCsv(b));
+      .header("content-disposition", `attachment; filename="${c!.p}-${kind === "kuf" ? "KVF" : "KIF"}-${q.from}_${q.to}.csv"`).send(bookCsv(b));
   });
 }

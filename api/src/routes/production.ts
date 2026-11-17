@@ -157,7 +157,7 @@ export async function productionRoutes(app: FastifyInstance, { db }: { db: Db })
     const { u, clientId } = await ctx(req);
     const b = OrderIn.parse(req.body);
     const its = await stockItems(clientId, [b.productItemId, ...(b.lines ?? []).map((l) => l.itemId)]);
-    if (its.get(b.productItemId)!.type === "goods") throw new DomainError("validation", "Производ мора да е од вид „Готов производ“ или „Материјал / дел“.", 422);
+    if (its.get(b.productItemId)!.type === "goods") throw new DomainError("validation", "Производ мора да е од вид „Сопствен производ“ или „Материјал / дел“.", 422);
     await ownWarehouse(clientId, b.warehouseId); await ownWarehouse(clientId, b.outputWarehouseId);
     const plan = await planFromBom(clientId, b.productItemId, b.qty);
     const id = await db.transaction(async (tx) => {

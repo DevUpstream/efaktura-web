@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type CostCenter, type Partner } from "../api";
@@ -79,9 +80,9 @@ function Report({ client }: { client: ClientRef }) {
     <section className="panel stack">
       <div className="sec-head"><h2>Извештај по трошковни места</h2>
         <a className="btn btn-small" href={`/api/clients/${client.id}/reports/cost-centers?from=${from}&to=${to}&format=csv`}>Excel (CSV)</a></div>
-      <div className="toolbar"><label>од <input type="date" value={from} onChange={(e) => e.target.value && setR([e.target.value, to])} /></label>
-        <label>до <input type="date" value={to} onChange={(e) => e.target.value && setR([from, e.target.value])} /></label></div>
-      <p className="muted small">Приходи = КИФ, трошоци = КУФ, нето (без ДДВ). Сторно и одобрение се со минус; кај корекција – разликата. Трошоците од изводи засега не се вклучени.</p>
+      <div className="toolbar"><label>од <DateInput value={from} onChange={(e) => e.target.value && setR([e.target.value, to])} /></label>
+        <label>до <DateInput value={to} onChange={(e) => e.target.value && setR([from, e.target.value])} /></label></div>
+      <p className="muted small">Приходи = КИФ, трошоци = КВФ, нето (без ДДВ). Сторно и одобрение се со минус; кај корекција – разликата. Трошоците од изводи засега не се вклучени.</p>
       {d && <div className="table-wrap"><table className="grid compact">
         <thead><tr><th>Трошковно место</th><th className="num">Приходи</th><th className="num">Трошоци</th><th className="num">Разлика</th></tr></thead>
         <tbody>{d.rows.map((r) => <tr key={r.id ?? 0} className="clickable" onClick={() => setOpen(r)}><td>{r.code ? `${r.code} · ` : ""}{r.name}</td>
@@ -122,8 +123,8 @@ function Assign({ client, ccs }: { client: ClientRef; ccs: CostCenter[] }) {
       <div className="form-grid">
         <label>Документи<select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as "invoice" | "purchase" })}>
           <option value="invoice">Излезни фактури</option>{client.modules.includes("incoming") && <option value="purchase">Влезни фактури</option>}</select></label>
-        <label>од<input type="date" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
-        <label>до<input type="date" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
+        <label>од<DateInput value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
+        <label>до<DateInput value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
         <label className="span2">Партнер (по избор)<select value={f.partnerId} onChange={(e) => setF({ ...f, partnerId: e.target.value ? Number(e.target.value) : "" })}>
           <option value="">— сите —</option>{partners.map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
         <label>Трошковно место<select value={f.costCenterId} onChange={(e) => setF({ ...f, costCenterId: e.target.value ? Number(e.target.value) : "" })}>

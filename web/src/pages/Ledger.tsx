@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, type ClientRef } from "../api";
@@ -15,8 +16,8 @@ function Period({ side, setSide, from, setFrom, to, setTo, sides }: { side: Side
   return (
     <div className="toolbar">
       <div className="seg" role="tablist">{sides.map((s) => <button key={s} role="tab" aria-selected={side === s} onClick={() => setSide(s)}>{SIDE[s]}</button>)}</div>
-      <label>од <input type="date" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} /></label>
-      <label>до <input type="date" value={to} onChange={(e) => e.target.value && setTo(e.target.value)} /></label>
+      <label>од <DateInput value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} /></label>
+      <label>до <DateInput value={to} onChange={(e) => e.target.value && setTo(e.target.value)} /></label>
     </div>
   );
 }

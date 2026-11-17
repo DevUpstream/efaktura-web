@@ -61,9 +61,19 @@ export async function userRoutes(app: FastifyInstance, { db, publicUrl }: { db: 
     const id = Id.parse((req.params as { id: string }).id);
     const b = z.object({
       displayName: z.string().trim().min(2).max(200).optional(),
+      email: z.string().trim().toLowerCase().email().max(254).optional(),   // zabeleska 1/7
       role: z.enum(["admin", "accountant"]).optional(),
       isActive: z.boolean().optional(),
     }).parse(req.body);
+    if (b.email) {
+      const [cur] = await db.select().from(users).where(eq(users.id, id));
+      if (!cur) throw new DomainError("not_found", "Корисникот не постои.", 404);
+      // Microsoft smetka vrzana pri najava: e-postata ja nosi Entra (najavata e po oid)
+      if (cur.provider === "entra" && cur.entraOid && b.email !== cur.email.toLowerCase())
+        throw new DomainError("validation", "Microsoft сметката е веќе поврзана: е-поштата се менува кај Microsoft (Entra), не тука.", 422);
+      const [dup] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${b.email} and ${users.id} <> ${id}`);
+      if (dup) throw new DomainError("duplicate", "Корисник со оваа е-пошта веќе постои.", 409);
+    }
     if ((b.role === "accountant" || b.isActive === false) && (await adminsLeft(id)) === 0)
       throw new DomainError("last_admin", "Мора да остане барем еден активен администратор.", 409);
     const [u] = await db.update(users).set(b).where(eq(users.id, id)).returning();

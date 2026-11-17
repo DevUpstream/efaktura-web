@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
-import { users, userTokens } from "../db/schema.js";
+import { DEFAULT_UNITS, users, userTokens } from "../db/schema.js";
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { audit } from "../domain/audit.js";
@@ -33,7 +33,8 @@ export async function authRoutes(app: FastifyInstance, d: AuthDeps) {
     return {
       authenticated: true, pending,
       user: { id: u.id, email: u.email, displayName: u.displayName, role: u.role, provider: u.provider },
-      clients: pending ? [] : (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, modules: c.modules, costCenterMode: c.costCenterMode })),
+      clients: pending ? [] : (await accessibleClients(db, u)).map((c) => ({ id: c.id, name: c.name, edb: c.edb, prefix: c.invoicePrefix, modules: c.modules, costCenterMode: c.costCenterMode,
+        units: c.units?.length ? c.units : DEFAULT_UNITS })),
     };
   });
 

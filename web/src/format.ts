@@ -29,9 +29,18 @@ export const partnerOption = (p: { name: string; shortName?: string | null; edb?
   `${p.shortName?.trim() ? `${p.shortName.trim()} — ${p.name}` : p.name}${p.edb ? ` (${p.edb})` : ""}`;
 export const partnerMatches = (p: { name: string; shortName?: string | null; edb?: string | null }, needle: string) =>
   !needle || p.name.toLowerCase().includes(needle) || (p.shortName ?? "").toLowerCase().includes(needle) || (p.edb ?? "").includes(needle);
-export const ITEM_TYPE: Record<string, string> = { service: "Услуга", goods: "Стока", material: "Материјал / дел", product: "Готов производ" };
+/** Edinici merka (zabeleska 14, 15): listata na firmata ili standardnata; prvata e pocetna. */
+export const DEFAULT_UNITS = ["парче", "кг", "г", "литар", "м", "м²", "м³", "час", "ден", "месец", "пакет", "кутија", "пар", "сет", "услуга"];
+export const unitsOf = (c: { units?: string[] }) => (c.units?.length ? c.units : DEFAULT_UNITS);
+/** Opcii za pole so prebaruvanje (zabeleska 25). */
+export const partnerOpt = (p: { id: number; name: string; shortName?: string | null; edb?: string | null; city?: string | null }) => ({
+  id: p.id, label: p.shortName?.trim() || p.name, sub: [p.shortName?.trim() ? p.name : null, p.edb, p.city].filter(Boolean).join(" · "), search: p.edb ?? "" });
+export const itemOpt = (it: { id: number; code: string; name: string; unit?: string }, stockQty?: number | null) => ({
+  id: it.id, label: `${it.code} · ${it.name}`,
+  sub: stockQty === undefined || stockQty === null ? undefined : `залиха ${new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(stockQty)} ${it.unit ?? ""}`.trim() });
+export const ITEM_TYPE: Record<string, string> = { service: "Услуга", goods: "Трговски производ", material: "Материјал / дел", product: "Сопствен производ" };
 export const STOCK_TYPES = ["goods", "material", "product"];
-export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос", consumption: "Издатница за производство", output: "Готов производ" };
+export const STOCK_KIND: Record<string, string> = { receipt: "Приемница", issue: "Испратница", writeoff: "Отпис", inventory: "Попис", transfer: "Пренос", consumption: "Издатница за производство", output: "Прием од производство" };
 export const qtyFmt = (v: string | number | null | undefined) => (v === null || v === undefined ? "–" : new Intl.NumberFormat("de-DE", { maximumFractionDigits: 3 }).format(Number(v)));
 /** Broj od vnes: "1,5" / "1.234,56" / "1234.56" / "1 234" -> broj (NaN ako ne e broj). */
 export function parseNum(v: string | number | null | undefined): number {

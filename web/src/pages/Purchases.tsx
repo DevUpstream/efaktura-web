@@ -1,9 +1,12 @@
+import { DateInput } from "../components/DateInput";
+import { SearchSelect } from "../components/SearchSelect";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcLine, calcTotals } from "@calc";
 import { api, ApiError, type ClientRef, type CostCenter, type Item, type Partner, type VatRate, type Warehouse } from "../api";
 import { SerialsBox, serialList } from "../components/SerialsBox";
-import { date, money, STOCK_KIND, STOCK_TYPES, today, partnerOption } from "../format";
+import { UNITS_DL, UnitsList } from "../components/UnitsList";
+import { date, money, STOCK_KIND, STOCK_TYPES, today, partnerOption, unitsOf, partnerOpt, itemOpt } from "../format";
 import { useYears, YearSelect } from "../components/YearSelect";
 
 interface PurchaseRow { id: number; number: string | null; status: "draft" | "posted" | "voided"; supplierNumber: string; supplierName: string;
@@ -50,7 +53,7 @@ export function Purchases() {
       {rows && rows.length === 0 && <div className="empty"><p>{q || status ? "Нема фактури за овој избор." : "Сè уште нема влезни фактури."}</p></div>}
       {rows && rows.length > 0 && (
         <div className="table-wrap"><table className="grid">
-          <thead><tr><th>Наш број</th><th>Добавувач</th><th>Број кај добавувачот</th><th>Примена</th><th>Рок</th><th className="num">Основица</th><th className="num">ДДВ</th><th className="num">Вкупно</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Наш број</th><th>Добавувач</th><th>Број на фактура (добавувач)</th><th>Примена</th><th>Рок</th><th className="num">Основица</th><th className="num">ДДВ</th><th className="num">Вкупно</th><th>Статус</th></tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.id} className={`row-${r.status === "voided" ? "voided" : r.status}`}>
               <td><Link className="docno" to={String(r.id)}>{r.number ?? "Нацрт"}</Link>{r.source === "ujp_json" && <span className="doctype" title="Увезена е-фактура (JSON)">е-ф</span>}{r.source === "erpnext" && <span className="doctype" title="Пренесена од ERPNext (архива, без залиха)">ERP</span>}
@@ -131,7 +134,7 @@ function ImportPanel({ client, onDone }: { client: ClientRef; onDone: () => void
   );
 }
 
-const blank = (vat: number): PLine => ({ itemId: null, description: "", unit: "ком", qty: "1", unitPrice: "0", discountPct: "0", vatRateId: vat, allocate: false, lotNo: "", expiryDate: "" });
+const blank = (vat: number, unit = "парче"): PLine => ({ itemId: null, description: "", unit, qty: "1", unitPrice: "0", discountPct: "0", vatRateId: vat, allocate: false, lotNo: "", expiryDate: "" });
 
 export function PurchaseEditor() {
   const client = useOutletContext<ClientRef>();
@@ -170,7 +173,7 @@ export function PurchaseEditor() {
   useEffect(() => {
     void Promise.all([api.get<Partner[]>(`/api/clients/${client.id}/partners`).then(setPartners), api.get<Item[]>(`/api/clients/${client.id}/items`).then(setItems),
       api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs),
-      api.get<VatRate[]>("/api/vat-rates").then((r) => { setRates(r); if (!id || id === "new") setLines([blank(r.find((x) => x.code === "S18")?.id ?? r[0]!.id)]); })]);
+      api.get<VatRate[]>("/api/vat-rates").then((r) => { setRates(r); if (!id || id === "new") setLines([blank(r.find((x) => x.code === "S18")?.id ?? r[0]!.id, unitsOf(client)[0])]); })]);
     void load().catch((e) => setMsg({ kind: "err", text: (e as ApiError).message }));
   }, [client.id, id]);
 
@@ -243,17 +246,15 @@ export function PurchaseEditor() {
       <section className="doc">
         <div className="doc-head">
           <label className="span2">Добавувач
-            {free ? <select value={head.partnerId} onChange={(e) => setHead({ ...head, partnerId: e.target.value ? Number(e.target.value) : "" })} required>
-              <option value="">— изберете —</option>
-              {partners.filter((x) => (x.isActive && (allPartners || x.isSupplier)) || x.id === head.partnerId).map((x) => <option key={x.id} value={x.id}>{partnerOption(x)}</option>)}
-            </select> : <output>{supplier?.name}</output>}
+            {free ? <SearchSelect value={head.partnerId} onChange={(id) => setHead({ ...head, partnerId: id })} required ariaLabel="Добавувач" placeholder="Назив, краток назив или ЕДБ…"
+              options={partners.filter((x) => (x.isActive && (allPartners || x.isSupplier)) || x.id === head.partnerId).map(partnerOpt)} /> : <output>{supplier?.name}</output>}
             {free && partners.some((x) => x.isActive && !x.isSupplier) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и купувачите</label>}
             {free && <small className="muted">Нов добавувач се додава во <Link to={`/c/${client.id}/partners`}>Партнери</Link>, од регистарот на УЈП.</small>}
           </label>
-          <label>Број кај добавувачот{free ? <input value={head.supplierNumber} onChange={(e) => setHead({ ...head, supplierNumber: e.target.value })} required maxLength={60} /> : <output>{head.supplierNumber}</output>}</label>
-          <label>Датум на фактурата{free ? <input type="date" value={head.issueDate} onChange={(e) => setHead({ ...head, issueDate: e.target.value })} /> : <output>{date(head.issueDate)}</output>}</label>
-          <label>Датум на прием{editable ? <input type="date" value={head.receivedDate} onChange={(e) => setHead({ ...head, receivedDate: e.target.value })} /> : <output>{date(head.receivedDate)}</output>}</label>
-          <label>Рок за плаќање{editable ? <input type="date" value={head.dueDate} onChange={(e) => setHead({ ...head, dueDate: e.target.value })} /> : <output>{date(head.dueDate)}</output>}</label>
+          <label>Број на фактура (добавувач){free ? <input value={head.supplierNumber} onChange={(e) => setHead({ ...head, supplierNumber: e.target.value })} required maxLength={60} /> : <output>{head.supplierNumber}</output>}</label>
+          <label>Датум на фактурата{free ? <DateInput value={head.issueDate} onChange={(e) => setHead({ ...head, issueDate: e.target.value })} /> : <output>{date(head.issueDate)}</output>}</label>
+          <label>Датум на прием{editable ? <DateInput value={head.receivedDate} onChange={(e) => setHead({ ...head, receivedDate: e.target.value })} /> : <output>{date(head.receivedDate)}</output>}</label>
+          <label>Рок за плаќање{editable ? <DateInput value={head.dueDate} onChange={(e) => setHead({ ...head, dueDate: e.target.value })} /> : <output>{date(head.dueDate)}</output>}</label>
           {stock && whs.filter((w) => w.isActive).length > 1 && <label>Магацин{editable ? <select value={head.warehouseId} onChange={(e) => setHead({ ...head, warehouseId: e.target.value ? Number(e.target.value) : "" })}>
             <option value="">Главен</option>{whs.filter((w) => w.isActive && !w.isDefault).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
             : <output>{whs.find((w) => w.id === p?.warehouseId)?.name ?? "Главен"}</output>}</label>}
@@ -267,6 +268,7 @@ export function PurchaseEditor() {
               if (!e.target.checked) setLines((ls) => ls.map((l) => ({ ...l, costCenterId: null }))); }} /> по ставки</label>}
         </div>
 
+        <UnitsList client={client} />
         <div className="table-wrap"><table className="grid lines">
           <thead><tr><th className="c-no">#</th><th className="c-item">Артикл / опис</th><th className="c-unit">Ед.</th><th className="c-qty num">Кол.</th><th className="c-price num">Цена без ДДВ</th>
             <th className="c-disc num">Попуст %</th><th className="c-vat">ДДВ</th><th className="c-amt num">Основица</th>{free && <th className="c-x" />}</tr></thead>
@@ -277,14 +279,14 @@ export function PurchaseEditor() {
                 <td className="c-no">{i + 1}</td>
                 <td className="c-item">
                   {editable ? <>
-                    <select value={l.itemId ?? ""} onChange={(e) => pickItem(i, e.target.value)} aria-label={`Артикл ${i + 1}`}>
-                      <option value="">— без артикл (трошок) —</option>{itemsList.filter((x) => x.isActive || x.id === l.itemId).map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}</select>
+                    <SearchSelect value={l.itemId} onChange={(id) => pickItem(i, String(id))} ariaLabel={`Артикл ${i + 1}`} emptyLabel="— без артикл (трошок) —" placeholder="Шифра или назив…"
+                      options={itemsList.filter((x) => x.isActive || x.id === l.itemId).map((x) => itemOpt(x))} />
                     {fixed ? <span className="src">{l.description}</span>
                       : <input value={l.description} onChange={(e) => set(i, "description", e.target.value)} placeholder="Опис" aria-label={`Опис ${i + 1}`} />}
                   </> : <>{l.description}</>}
                   {isStock(l) && it?.trackLots && (editable
                     ? <div className="lot-row"><input value={l.lotNo} onChange={(e) => set(i, "lotNo", e.target.value)} placeholder="Лот" aria-label="Лот" />
-                        <input type="date" value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок на траење" /></div>
+                        <DateInput value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок на траење" /></div>
                     : <span className="src">лот {l.lotNo}{l.expiryDate ? `, рок ${date(l.expiryDate)}` : ""}</span>)}
                   {isStock(l) && it?.trackSerials && (editable
                     ? <SerialsBox clientId={client.id} itemId={l.itemId} need={Number(String(l.qty).replace(",", ".")) || 0} value={l.serialsText ?? ""} pick={false}
@@ -299,7 +301,7 @@ export function PurchaseEditor() {
                     <option value="">ТМ: од фактурата</option>
                     {ccs.filter((c) => c.isActive || c.id === l.costCenterId).map((c) => <option key={c.id} value={c.id}>ТМ: {c.code} · {c.name}</option>)}</select>}
                 </td>
-                <td className="c-unit">{free ? <input value={l.unit} onChange={(e) => set(i, "unit", e.target.value)} /> : l.unit}</td>
+                <td className="c-unit">{free ? <input value={l.unit} list={UNITS_DL} onChange={(e) => set(i, "unit", e.target.value)} aria-label="Единица мерка" /> : l.unit}</td>
                 <td className="c-qty num">{free ? <input inputMode="decimal" value={l.qty} onChange={(e) => set(i, "qty", e.target.value)} /> : Number(l.qty)}</td>
                 <td className="c-price num">{free ? <input inputMode="decimal" value={l.unitPrice} onChange={(e) => set(i, "unitPrice", e.target.value)} /> : money(l.unitPrice)}</td>
                 <td className="c-disc num">{free ? <input inputMode="decimal" value={l.discountPct} onChange={(e) => set(i, "discountPct", e.target.value)} /> : Number(l.discountPct)}</td>
@@ -310,7 +312,7 @@ export function PurchaseEditor() {
               </tr>);
           })}</tbody>
         </table></div>
-        {free && <button className="btn add-line" onClick={() => setLines([...lines, blank(rates.find((x) => x.code === "S18")?.id ?? rates[0]!.id)])}>Додај ставка</button>}
+        {free && <button className="btn add-line" onClick={() => setLines([...lines, blank(rates.find((x) => x.code === "S18")?.id ?? rates[0]!.id, unitsOf(client)[0])])}>Додај ставка</button>}
 
         <div className="doc-foot">
           <div className="stack">
@@ -356,7 +358,7 @@ function VoidForm({ client, id, onDone }: { client: ClientRef; id: number; onDon
       <h2>Сторно на влезна фактура</h2>
       <p className="muted small">Ако стоката е примена во магацин, се враќа по истата набавна цена. Ако е веќе продадена, важи правилото за залиха во минус од поставките.</p>
       <div className="row-actions"><label className="grow">Причина<input value={reason} onChange={(e) => setReason(e.target.value)} minLength={3} /></label>
-        <label>Датум<input type="date" value={d} onChange={(e) => setD(e.target.value)} /></label></div>
+        <label>Датум<DateInput value={d} onChange={(e) => setD(e.target.value)} /></label></div>
       {err && <p className="alert">{err}</p>}
       <div className="row-actions"><button className="btn btn-primary" disabled={reason.trim().length < 3} onClick={go}>Сторнирај</button><button className="link" onClick={() => onDone(null)}>Откажи</button></div>
     </section>

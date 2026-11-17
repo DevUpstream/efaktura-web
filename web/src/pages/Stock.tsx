@@ -1,8 +1,10 @@
+import { DateInput } from "../components/DateInput";
+import { SearchSelect } from "../components/SearchSelect";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Item, type Partner, type Warehouse } from "../api";
 import { SerialsBox, serialList } from "../components/SerialsBox";
-import { date, ITEM_TYPE, money, qtyFmt, STOCK_KIND, STOCK_TYPES, today, partnerOption } from "../format";
+import { date, ITEM_TYPE, money, qtyFmt, STOCK_KIND, STOCK_TYPES, today, partnerOption, partnerOpt, itemOpt } from "../format";
 
 interface StockRow { warehouseId: number; warehouseName: string; itemId: number; code: string; name: string; type: string; unit: string; trackLots: boolean;
   qty: string; value: string; avgCost: string; salePrice: string; lots: { lotId: number; lotNo: string; expiryDate: string | null; qty: string }[] }
@@ -235,12 +237,12 @@ export function StockDocNew() {
           {whs.length > 1 && <label>{kind === "transfer" ? "Од магацин" : "Магацин"}<select value={wh} onChange={(e) => setWh(Number(e.target.value))}>{whs.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
           {kind === "transfer" && <label>Во магацин<select value={toWh} onChange={(e) => setToWh(e.target.value ? Number(e.target.value) : "")}><option value="">— изберете —</option>
             {whs.filter((w) => w.id !== wh).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>}
-          {kind === "issue" && <label className="span2">Купувач<select value={partnerId} onChange={(e) => setPartnerId(e.target.value ? Number(e.target.value) : "")} required>
-            <option value="">— изберете —</option>{partners.filter((p) => p.isCustomer || !p.isSupplier).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>}
-          <label>Датум<input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} /></label>
+          {kind === "issue" && <label className="span2">Купувач<SearchSelect value={partnerId} onChange={setPartnerId} required ariaLabel="Купувач" placeholder="Назив, краток назив или ЕДБ…"
+            options={partners.filter((p) => p.isCustomer || !p.isSupplier).map(partnerOpt)} /></label>}
+          <label>Датум<DateInput value={docDate} onChange={(e) => setDocDate(e.target.value)} /></label>
           <label className="span2">Опис<input value={note} onChange={(e) => setNote(e.target.value)} placeholder={kind === "writeoff" ? "Причина за отпис" : ""} /></label>
         </div>
-        {itemsList.length === 0 && <p className="alert">Нема артикли што водат залиха. Во „Артикли и услуги“ поставете вид Стока, Материјал или Готов производ.</p>}
+        {itemsList.length === 0 && <p className="alert">Нема артикли што водат залиха. Во „Артикли и услуги“ поставете вид Трговски производ, Материјал или Сопствен производ.</p>}
         <div className="table-wrap"><table className="grid lines">
           <thead><tr><th className="c-item">Артикл</th><th className="num">Сега</th><th className="c-qty num">{kind === "inventory" ? "Изброено" : "Количина"}</th>
             {(kind === "receipt" || kind === "inventory") && <th className="c-price num">Набавна цена</th>}<th>Лот / сериски бр.</th><th className="c-x" /></tr></thead>
@@ -249,8 +251,8 @@ export function StockDocNew() {
             const c = cur(l.itemId);
             return (
               <tr key={i}>
-                <td className="c-item"><select value={l.itemId} onChange={(e) => set(i, "itemId", e.target.value ? Number(e.target.value) : "")} aria-label={`Артикл ${i + 1}`}>
-                  <option value="">— изберете —</option>{itemsList.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name}</option>)}</select></td>
+                <td className="c-item"><SearchSelect value={l.itemId} onChange={(id) => set(i, "itemId", id)} ariaLabel={`Артикл ${i + 1}`} placeholder="Шифра или назив…"
+                  options={itemsList.map((x) => itemOpt(x, cur(x.id) ? Number(cur(x.id)!.qty) : 0))} /></td>
                 <td className="num muted">{c ? `${qtyFmt(c.qty)} ${c.unit}` : "–"}</td>
                 <td className="c-qty num"><input inputMode="decimal" value={l.qty} onChange={(e) => set(i, "qty", e.target.value)} aria-label="Количина" /></td>
                 {(kind === "receipt" || kind === "inventory") && <td className="c-price num"><input inputMode="decimal" value={l.unitCost} onChange={(e) => set(i, "unitCost", e.target.value)}
@@ -260,7 +262,7 @@ export function StockDocNew() {
                       pick={kind !== "receipt"} label={`Сериски броеви ${i + 1}`} onChange={(t) => set(i, "serialsText", t)} />)
                   : it?.trackLots ? (kind === "receipt"
                   ? <div className="lot-row"><input value={l.lotNo} onChange={(e) => set(i, "lotNo", e.target.value)} placeholder="Лот" aria-label="Лот" />
-                      <input type="date" value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок" /></div>
+                      <DateInput value={l.expiryDate} onChange={(e) => set(i, "expiryDate", e.target.value)} aria-label="Рок" /></div>
                   : <select value={l.lotId} onChange={(e) => set(i, "lotId", e.target.value ? Number(e.target.value) : "")} aria-label="Лот">
                       <option value="">{kind === "inventory" ? "— изберете лот —" : "автоматски (најблизок рок)"}</option>
                       {(c?.lots ?? []).map((x) => <option key={x.lotId} value={x.lotId}>{x.lotNo} ({qtyFmt(x.qty)})</option>)}</select>) : <span className="muted">–</span>}</td>

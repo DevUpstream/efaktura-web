@@ -25,7 +25,8 @@ export const api = {
 /* --------------------------------------------------------------- tipovi */
 export type DocType = "INV" | "AV" | "OD" | "KZ" | "ST" | "KR" | "PF";
 export type Status = "draft" | "to_issue" | "issued" | "json_exported" | "sent_to_ujp" | "rejected" | "voided" | "corrected" | "cancelled_draft";
-export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[]; costCenterMode?: "off" | "optional" | "required" }
+export interface ClientRef { id: number; name: string; edb: string; prefix: string; modules: string[]; costCenterMode?: "off" | "optional" | "required";
+  units?: string[] }   // edinici merka na firmata (zabeleska 15)
 export interface Me {
   authenticated: boolean; entra?: boolean; pending?: "totp" | "totp_setup" | null;
   user?: { id: number; email: string; displayName: string; role: "admin" | "accountant"; provider: "entra" | "local" };

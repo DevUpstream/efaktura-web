@@ -93,7 +93,7 @@ export async function assignCostCenter(db: Db, clientId: number, f: AssignFilter
 
 /**
  * Извештај по ТМ за период. Приходи = КИФ (иста селекција: издадени по датум на издавање, сторно со минус, корекција = разлика),
- * трошоци = КУФ (прокнижени по датум на прием). Нето износи (без ДДВ).
+ * трошоци = КВФ (прокнижени по датум на прием). Нето износи (без ДДВ).
  */
 export async function costCenterReport(db: Db, clientId: number, from: string, to: string) {
   const rev = rowsOf(await db.execute(sql`

@@ -19,6 +19,7 @@ export function Admin() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [invite, setInvite] = useState<{ email: string; link: string } | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<U | null>(null);   // zabeleska 1/7
   const load = () => api.get<U[]>("/api/users").then(setUsers).catch((e) => setMsg({ kind: "err", text: e.message }));
   useEffect(() => { void load(); }, []);
 
@@ -52,6 +53,7 @@ export function Admin() {
             <button className="link" onClick={() => setInvite(null)}>Затвори</button></div>
         </div>
       )}
+      {editing && <EditUser u={editing} onDone={(ok) => { setEditing(null); void load(); if (ok) setMsg({ kind: "ok", text: ok }); }} />}
       {adding && <NewUser onDone={(created) => { setAdding(false); void load(); if (created) setMsg({ kind: "ok", text: created }); }} />}
       {users && (
         <div className="table-wrap">
@@ -61,7 +63,8 @@ export function Admin() {
               const self = u.id === me.user!.id;
               return (
                 <tr key={u.id} className={u.isActive ? "" : "row-inactive"}>
-                  <td><strong>{u.displayName}</strong><br /><span className="muted small">{u.email}</span></td>
+                  <td><strong>{u.displayName}</strong> <button className="link small" onClick={() => setEditing(u)} aria-label={`Уреди ${u.email}`}>Уреди</button>
+                    <br /><span className="muted small">{u.email}</span></td>
                   <td className="small">
                     {u.provider === "entra" ? "Microsoft" : "Сопствена"}
                     <br /><span className="muted">{u.provider === "entra" ? (u.entraLinked ? `последно ${u.lastLoginAt ? date(u.lastLoginAt.slice(0, 10)) : "–"}` : "уште не е најавен")
@@ -207,5 +210,29 @@ function UserModules({ u, clients, catalog, onDone }: { u: U; clients: ClientRef
       {err && <p className="alert">{err}</p>}
       <div className="row-actions"><button className="btn btn-primary" onClick={save}>Зачувај</button><button className="link" onClick={onDone}>Откажи</button></div>
     </section>
+  );
+}
+
+/** Uredi korisnik (zabeleska 1/7): ime i e-posta. Ulogata i aktivnosta se menuvaat vo tabelata. */
+function EditUser({ u, onDone }: { u: U; onDone: (msg?: string) => void }) {
+  const [err, setErr] = useState<string | null>(null);
+  const emailLocked = u.provider === "entra" && u.entraLinked;
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    const body: Record<string, string> = { displayName: f.displayName! };
+    if (!emailLocked && f.email && f.email.trim().toLowerCase() !== u.email.toLowerCase()) body.email = f.email;
+    try { await api.patch(`/api/users/${u.id}`, body); onDone("Корисникот е зачуван."); }
+    catch (x) { setErr((x as ApiError).message); }
+  }
+  return (
+    <form className="panel form-grid" onSubmit={submit}>
+      <h2 className="span-all">Уреди: {u.displayName}</h2>
+      {err && <p className="alert span-all">{err}</p>}
+      <div className="span2"><label>Име и презиме<input name="displayName" defaultValue={u.displayName} required minLength={2} autoFocus /></label></div>
+      <div className="span2"><label>Е-пошта{u.provider === "local" ? " (најава)" : ""}<input name="email" type="email" defaultValue={u.email} disabled={emailLocked} required /></label>
+        {emailLocked && <small className="muted">Microsoft сметката е поврзана: е-поштата се менува кај Microsoft.</small>}</div>
+      <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button><button type="button" className="link" onClick={() => onDone()}>Откажи</button></div>
+    </form>
   );
 }

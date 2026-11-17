@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Item, type Warehouse } from "../api";
@@ -106,7 +107,7 @@ export function WorkOrderEditor() {
     try {
       const r = await api.post<{ number: string; unitCost: string; warnings: string[] }>(`/api/clients/${client.id}/work-orders/${oid}/post`);
       await load(String(oid));
-      setMsg({ kind: r.warnings.length ? "err" : "ok", text: `Прокнижен ${r.number}. Цена на чинење ${money(r.unitCost)} ден. по ${product?.unit ?? "ком"}.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
+      setMsg({ kind: r.warnings.length ? "err" : "ok", text: `Прокнижен ${r.number}. Цена на чинење ${money(r.unitCost)} ден. по ${product?.unit ?? "парче"}.${r.warnings.length ? ` ${r.warnings.join(" ")}` : ""}` });
     } catch (e) { setMsg({ kind: "err", text: (e as ApiError).message }); } finally { setBusy(false); }
   }
 
@@ -127,10 +128,10 @@ export function WorkOrderEditor() {
             {editable && !o ? <select value={head.productItemId} onChange={(e) => upd({ productItemId: e.target.value ? Number(e.target.value) : "" })}>
               <option value="">— изберете —</option>{products.map((x) => <option key={x.id} value={x.id}>{x.code} · {x.name} ({ITEM_TYPE[x.type]})</option>)}</select>
               : <output>{o?.product.name} <span className="muted small">{o?.product.code}</span></output>}
-            {editable && !o && products.length === 0 && <small className="alert">Нема артикли од вид „Готов производ“. Поставете вид во „Артикли и услуги“.</small>}
+            {editable && !o && products.length === 0 && <small className="alert">Нема артикли од вид „Сопствен производ“. Поставете вид во „Артикли и услуги“.</small>}
           </label>
           <label>Количина{editable ? <input inputMode="decimal" value={head.qty} onChange={(e) => upd({ qty: e.target.value })} /> : <output>{qtyFmt(head.qty)} {o?.product.unit}</output>}</label>
-          <label>Датум{editable ? <input type="date" value={head.docDate} onChange={(e) => upd({ docDate: e.target.value })} /> : <output>{date(head.docDate)}</output>}</label>
+          <label>Датум{editable ? <DateInput value={head.docDate} onChange={(e) => upd({ docDate: e.target.value })} /> : <output>{date(head.docDate)}</output>}</label>
           {multiWh && <label>Делови од магацин{editable ? <select value={head.warehouseId} onChange={(e) => upd({ warehouseId: e.target.value ? Number(e.target.value) : "" })}>
             <option value="">Главен</option>{whs.filter((w) => w.isActive && !w.isDefault).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select>
             : <output>{whs.find((w) => w.id === o?.warehouseId)?.name}</output>}</label>}
@@ -211,7 +212,7 @@ function VoidOrder({ client, id, onDone }: { client: ClientRef; id: number; onDo
       <h2>Сторно на работен налог</h2>
       <p className="muted small">Готовиот производ излегува од магацин, а деловите се враќаат по истите цени. Ако производот е веќе продаден, важи правилото за залиха во минус.</p>
       <div className="row-actions"><label className="grow">Причина<input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-        <label>Датум<input type="date" value={d} onChange={(e) => setD(e.target.value)} /></label></div>
+        <label>Датум<DateInput value={d} onChange={(e) => setD(e.target.value)} /></label></div>
       {err && <p className="alert">{err}</p>}
       <div className="row-actions"><button className="btn btn-primary" disabled={reason.trim().length < 3} onClick={go}>Сторнирај</button><button className="link" onClick={() => onDone(null)}>Откажи</button></div>
     </section>
@@ -228,8 +229,8 @@ export function Boms() {
   return (
     <>
       <header className="page-head"><h1>Производство</h1><div className="row-actions"><Tabs clientId={client.id} /></div></header>
-      <p className="muted small">Нормативот кажува од што е направен производот. Тука се прикажуваат артиклите од вид „Готов производ“. Полупроизвод (на пр. рамка) е исто готов производ што влегува во друг норматив.</p>
-      {rows && rows.length === 0 && <div className="empty"><p>Нема артикли од вид „Готов производ“.</p><p className="small">Во <Link to={`/c/${client.id}/items`}>Артикли и услуги</Link> поставете вид „Готов производ“.</p></div>}
+      <p className="muted small">Нормативот кажува од што е направен производот. Тука се прикажуваат артиклите од вид „Сопствен производ“. Полупроизвод (на пр. рамка) е исто готов производ што влегува во друг норматив.</p>
+      {rows && rows.length === 0 && <div className="empty"><p>Нема артикли од вид „Сопствен производ“.</p><p className="small">Во <Link to={`/c/${client.id}/items`}>Артикли и услуги</Link> поставете вид „Сопствен производ“.</p></div>}
       {rows && rows.length > 0 && (
         <div className="table-wrap"><table className="grid">
           <thead><tr><th>Шифра</th><th>Производ</th><th>Норматив</th><th className="num">Делови</th><th className="num">Труд (часови)</th></tr></thead>

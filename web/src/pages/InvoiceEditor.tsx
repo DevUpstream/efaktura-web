@@ -1,10 +1,13 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { calcFxTotals, calcLine, calcTotals } from "@calc";
 import { api, ApiError, type CostCenter, type ClientRef, type DocType, type Invoice, type Item, type Line, type Partner, type VatRate, type Warehouse } from "../api";
 import { GRADE, GradeChip, useScore } from "../components/Score";
 import { SerialsBox, serialList } from "../components/SerialsBox";
-import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf, partnerOption } from "../format";
+import { SearchSelect } from "../components/SearchSelect";
+import { UNITS_DL, UnitsList } from "../components/UnitsList";
+import { DOC, PAYMENT, addDays, date, money, money0, parseNum, today, statusOf, partnerOption, unitsOf, partnerOpt, itemOpt, STOCK_TYPES } from "../format";
 import { UjpState } from "../components/UjpState";
 import { UjpPanel } from "../components/UjpPanel";
 import { RecurringForm } from "./Recurring";
@@ -24,7 +27,7 @@ const signOf = (d: DocType): 1 | -1 => (d === "OD" || d === "ST" ? -1 : 1);
 type EditLine = Omit<Line, "itemId"> & { key: number; itemId: number | null; serialsText?: string };
 
 let seq = 0;
-const blankLine = (vatRateId: number): EditLine => ({ key: ++seq, itemId: null, description: "", unit: "ком", qty: "1",
+const blankLine = (vatRateId: number, unit = "парче"): EditLine => ({ key: ++seq, itemId: null, description: "", unit, qty: "1",
   unitPrice: "0", discountPct: "0", vatRateId, priceSource: null });
 
 export function InvoiceEditor() {
@@ -43,6 +46,16 @@ export function InvoiceEditor() {
   const [reasons, setReasons] = useState<Reason[]>([]);
   const [whs, setWhs] = useState<Warehouse[]>([]);
   useEffect(() => { if (client.modules.includes("warehouse")) api.get<Warehouse[]>(`/api/clients/${client.id}/warehouses`).then(setWhs); else setWhs([]); }, [client.id]);
+  // zabeleska 27: zaliha po artikl vo izbraniot magacin (ili glavniot)
+  const [stockRows, setStockRows] = useState<{ warehouseId: number; itemId: number; qty: string }[]>([]);
+  useEffect(() => { if (client.modules.includes("warehouse")) api.get<typeof stockRows>(`/api/clients/${client.id}/stock`).then(setStockRows, () => setStockRows([])); else setStockRows([]); }, [client.id]);
+  const stockWh = () => (head.warehouseId || whs.find((w) => w.isDefault)?.id) ?? null;
+  /** undefined = artiklot ne vodi zaliha / nema Magacin. */
+  const stockOf = (it: Item): number | undefined => {
+    if (!client.modules.includes("warehouse") || !STOCK_TYPES.includes(it.type)) return undefined;
+    const wh = stockWh();
+    return stockRows.filter((r) => r.itemId === it.id && (!wh || r.warehouseId === wh)).reduce((a, r) => a + Number(r.qty), 0);
+  };
   const [advances, setAdvances] = useState<Advance[]>([]);
   const [lines, setLines] = useState<EditLine[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -75,7 +88,7 @@ export function InvoiceEditor() {
       } else {
         // ?item=ID (od „Артикли“): prva stavka so toj artikl i negovata standardna cena
         const pre = it.find((x) => x.id === Number(new URLSearchParams(window.location.search).get("item")) && x.isActive);
-        setLines(pre ? [{ ...blankLine(pre.vatRateId), itemId: pre.id, description: pre.name, unit: pre.unit, unitPrice: Number(pre.unitPrice).toString(), priceSource: "Стандардна цена" }] : []);
+        setLines(pre ? [{ ...blankLine(pre.vatRateId, unitsOf(client)[0]), itemId: pre.id, description: pre.name, unit: pre.unit, unitPrice: Number(pre.unitPrice).toString(), priceSource: "Стандардна цена" }] : []);
       }
       setDirty(false);
     }).catch((e) => setMsg({ kind: "err", text: e.message }));
@@ -283,10 +296,8 @@ export function InvoiceEditor() {
         <div className="doc-head">
           <label className="span2">Купувач
             {editable && !isDerived ? (
-              <select value={head.partnerId} onChange={(e) => set("partnerId", e.target.value ? Number(e.target.value) : "")} required>
-                <option value="">— изберете —</option>
-                {partners.filter((p) => (p.isActive && (allPartners || p.isCustomer)) || p.id === head.partnerId).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}
-              </select>
+              <SearchSelect value={head.partnerId} onChange={(id) => set("partnerId", id)} required ariaLabel="Купувач" placeholder="Назив, краток назив или ЕДБ…"
+                options={partners.filter((p) => (p.isActive && (allPartners || p.isCustomer)) || p.id === head.partnerId).map(partnerOpt)} />
             ) : <output>{inv?.buyerName}</output>}
             {editable && !isDerived && partners.some((p) => p.isActive && !p.isCustomer) && <label className="check small"><input type="checkbox" checked={allPartners} onChange={(e) => setAllPartners(e.target.checked)} /> прикажи ги и добавувачите</label>}
             {editable && !isDerived && loaded && !partners.some((p) => p.isActive && p.isCustomer) && (
@@ -303,13 +314,13 @@ export function InvoiceEditor() {
             ) : <output>{DOC[head.docType]}</output>}
           </label>
           <label>Датум на издавање
-            {editable ? <input type="date" value={head.issueDate} onChange={(e) => set("issueDate", e.target.value)} required /> : <output>{date(inv!.issueDate)}</output>}
+            {editable ? <DateInput value={head.issueDate} onChange={(e) => set("issueDate", e.target.value)} required /> : <output>{date(inv!.issueDate)}</output>}
           </label>
           {head.docType !== "AV" && head.docType !== "PF" && <label>Датум на промет
-            {editable ? <input type="date" value={head.supplyDate} onChange={(e) => set("supplyDate", e.target.value)} /> : <output>{date(inv!.supplyDate)}</output>}
+            {editable ? <DateInput value={head.supplyDate} onChange={(e) => set("supplyDate", e.target.value)} /> : <output>{date(inv!.supplyDate)}</output>}
           </label>}
           <label>{head.docType === "PF" ? "Важи до" : "Рок за плаќање"}
-            {editable ? <input type="date" value={head.dueDate} onChange={(e) => set("dueDate", e.target.value)} /> : <output>{date(inv!.dueDate)}</output>}
+            {editable ? <DateInput value={head.dueDate} onChange={(e) => set("dueDate", e.target.value)} /> : <output>{date(inv!.dueDate)}</output>}
           </label>
           {whs.filter((w) => w.isActive).length > 1 && ["INV", "KR"].includes(head.docType) && <label>Магацин
             {editable ? <select value={head.warehouseId} onChange={(e) => set("warehouseId", e.target.value ? Number(e.target.value) : "")}>
@@ -379,6 +390,7 @@ export function InvoiceEditor() {
         )}
 
         <div className="table-wrap">
+          <UnitsList client={client} />
           <table className="grid lines">
             <thead><tr>
               <th className="c-no">#</th><th className="c-item">Артикл / опис</th><th className="c-unit">Ед.</th>
@@ -391,10 +403,10 @@ export function InvoiceEditor() {
                   <td className="c-no">{i + 1}</td>
                   <td className="c-item">
                     {linesEditable ? <>
-                      <select value={l.itemId ?? ""} onChange={(e) => pickItem(l.key, Number(e.target.value))} aria-label={`Артикл, ставка ${i + 1}`}>
-                        <option value="">— без артикл —</option>
-                        {items.filter((it) => it.isActive || it.id === l.itemId).map((it) => <option key={it.id} value={it.id}>{it.code} · {it.name}</option>)}
-                      </select>
+                      <SearchSelect value={l.itemId} onChange={(id) => pickItem(l.key, Number(id || 0))} ariaLabel={`Артикл, ставка ${i + 1}`} emptyLabel="— без артикл —"
+                        placeholder="Шифра или назив…" options={items.filter((it) => it.isActive || it.id === l.itemId).map((it) => itemOpt(it, stockOf(it)))} />
+                      {(() => { const it = items.find((x) => x.id === l.itemId); const q = it ? stockOf(it) : null;
+                        return q !== null && q !== undefined && q < Math.abs(parseNum(l.qty)) ? <small className="warn">На залиха: {q} {it!.unit} – помалку од количината.</small> : null; })()}
                       <input value={l.description} onChange={(e) => setLine(l.key, { description: e.target.value })} placeholder="Опис на ставката" aria-label={`Опис, ставка ${i + 1}`} />
                       {(items.find((x) => x.id === l.itemId)?.trackSerials || !!l.serialsText) && !l.stockDocId &&
                         <SerialsBox clientId={client.id} itemId={l.itemId} warehouseId={head.warehouseId || null} need={Math.abs(parseNum(l.qty))} value={l.serialsText ?? ""}
@@ -406,12 +418,14 @@ export function InvoiceEditor() {
                       <option value="">ТМ: од фактурата</option>
                       {ccs.filter((c) => c.isActive || c.id === l.costCenterId).map((c) => <option key={c.id} value={c.id}>ТМ: {c.code} · {c.name}</option>)}</select>}
                   </td>
-                  <td className="c-unit">{linesEditable ? <input value={l.unit} onChange={(e) => setLine(l.key, { unit: e.target.value })} aria-label="Единица мерка" /> : l.unit}</td>
+                  <td className="c-unit">{linesEditable ? <input value={l.unit} list={UNITS_DL} onChange={(e) => setLine(l.key, { unit: e.target.value })} aria-label="Единица мерка" /> : l.unit}</td>
                   <td className="num c-qty">{linesEditable ? <input inputMode="decimal" value={l.qty} onChange={(e) => setLine(l.key, { qty: e.target.value.replace(",", ".") })} aria-label="Количина" /> : Number(l.qty)}</td>
                   <td className="num c-price">
                     {linesEditable ? <input inputMode="decimal" value={l.unitPrice} title={l.priceSource ?? undefined}
                       onChange={(e) => setLine(l.key, { unitPrice: e.target.value.replace(",", "."), priceSource: "Рачно внесена" })} aria-label="Цена без ДДВ" /> : money(l.unitPrice)}
                     {linesEditable && l.priceSource && <small className="src">{l.priceSource}</small>}
+                    {linesEditable && l.itemId && <LastPrices clientId={client.id} itemId={l.itemId} partnerId={head.partnerId || null} currency={head.currency}
+                      onPick={(price, src) => setLine(l.key, { unitPrice: String(Number(price)), priceSource: src })} />}
                     {l.stockDocId ? <small className="src" title="Залихата е веќе издадена со испратницата">од испратница</small> : null}
                   </td>
                   <td className="num c-disc">{linesEditable ? <input inputMode="decimal" value={l.discountPct} onChange={(e) => setLine(l.key, { discountPct: e.target.value.replace(",", ".") })} aria-label="Попуст во проценти" /> : Number(l.discountPct)}</td>
@@ -429,7 +443,7 @@ export function InvoiceEditor() {
             </tbody>
           </table>
         </div>
-        {linesEditable && head.docType !== "ST" && <button className="btn add-line" onClick={() => { setLines((ls) => [...ls, blankLine(defaultRate)]); setDirty(true); }}>Додај ставка</button>}
+        {linesEditable && head.docType !== "ST" && <button className="btn add-line" onClick={() => { setLines((ls) => [...ls, blankLine(defaultRate, unitsOf(client)[0])]); setDirty(true); }}>Додај ставка</button>}
         {linesEditable && lines.length === 0 && <p className="muted">Додадете барем една ставка.</p>}
 
         {canAdvance && (editable ? advances.length > 0 || !!head.advanceId : !!inv?.advanceInvoiceId) && (
@@ -528,3 +542,34 @@ export function InvoiceEditor() {
   );
 }
 
+/** Zabeleska 19: poslednite ceni za artiklot – za ovoj kupuvac i za site (vo valutata na fakturata). Klik = ja zema cenata. */
+function LastPrices({ clientId, itemId, partnerId, currency, onPick }: { clientId: number; itemId: number; partnerId: number | null; currency: string;
+  onPick: (price: string, source: string) => void }) {
+  const [rows, setRows] = useState<{ docId: number; number: string; date: string; partnerId: number; partner: string; price: string; currency: string }[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState<{ right: number; top: number } | null>(null);
+  async function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (open) { setOpen(false); return; }
+    const r = e.currentTarget.getBoundingClientRect();
+    setAt({ right: window.innerWidth - r.right, top: r.bottom + 2 });
+    setOpen(true);
+    const q = new URLSearchParams({ direction: "out", limit: "60", currency });
+    setRows(await api.get<NonNullable<typeof rows>>(`/api/clients/${clientId}/items/${itemId}/prices?${q}`).catch(() => []));
+  }
+  const mine = (rows ?? []).filter((r) => partnerId && r.partnerId === partnerId).slice(0, 5);
+  const others = (rows ?? []).filter((r) => !partnerId || r.partnerId !== partnerId).slice(0, 5);
+  const row = (r: NonNullable<typeof rows>[number], who: boolean) => <li key={`${r.docId}-${r.price}`}><button type="button" className="link small"
+    onClick={() => { onPick(r.price, `Цена од ${r.number} (${date(r.date)})`.slice(0, 80)); setOpen(false); }}>
+    {money(r.price)}{currency !== "MKD" ? ` ${currency}` : ""}</button> <span className="muted small">{date(r.date)}{who ? ` · ${r.partner}` : ""}</span></li>;
+  return (
+    <span className="last-prices">
+      <button type="button" className="link small" onClick={toggle} aria-expanded={open}>последни цени</button>
+      {open && <div className="lp-pop" style={at ? { position: "fixed", right: at.right, top: at.top } : undefined}>
+        {!rows ? <span className="muted small">Се вчитува…</span> : rows.length === 0 ? <span className="muted small">Нема издадени фактури со овој артикл{currency !== "MKD" ? ` во ${currency}` : ""}.</span> : <>
+          {partnerId && <><strong className="small">За овој купувач</strong>{mine.length ? <ul>{mine.map((r) => row(r, false))}</ul> : <p className="muted small">Нема.</p>}</>}
+          <strong className="small">{partnerId ? "За други купувачи" : "Последни"}</strong>{others.length ? <ul>{others.map((r) => row(r, true))}</ul> : <p className="muted small">Нема.</p>}
+        </>}
+      </div>}
+    </span>
+  );
+}

@@ -1,8 +1,10 @@
+import { DateInput } from "../components/DateInput";
+import { SearchSelect } from "../components/SearchSelect";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "../session";
 import { Link, NavLink, useOutletContext, useParams } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
-import { date, money, today, partnerOption } from "../format";
+import { date, money, today, partnerOption, partnerOpt } from "../format";
 
 type Dir = "in" | "out";
 interface OpenItem { id: number; number: string; docType: string; issueDate: string; dueDate: string | null; partnerId: number; partnerName: string;
@@ -110,9 +112,9 @@ function PaymentForm({ client, direction, partnerId, onDone }: { client: ClientR
     <section className="panel stack">
       <h2>{direction === "in" ? "Уплата од купувач" : "Плаќање на добавувач"}</h2>
       <div className="form-grid pay-grid">
-        <label className="span2">{direction === "in" ? "Купувач" : "Добавувач"}<select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")}>
-          <option value="">— изберете —</option>{partners.filter((p) => p.isActive || p.id === pid).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
-        <label>Датум<input type="date" value={f.payDate} onChange={(e) => setF({ ...f, payDate: e.target.value })} /></label>
+        <label className="span2">{direction === "in" ? "Купувач" : "Добавувач"}<SearchSelect value={pid} onChange={setPid} ariaLabel={direction === "in" ? "Купувач" : "Добавувач"}
+          placeholder="Назив, краток назив или ЕДБ…" options={partners.filter((p) => p.isActive || p.id === pid).map(partnerOpt)} /></label>
+        <label>Датум<DateInput value={f.payDate} onChange={(e) => setF({ ...f, payDate: e.target.value })} /></label>
         <label>Износ (ден.)<input inputMode="decimal" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} placeholder={total ? money(total) : ""} /></label>
         <label>Начин<select value={f.method} onChange={(e) => setF({ ...f, method: e.target.value })}>{Object.entries(METHOD).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
         <label className="span2">Референца (извод, налог)<input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} /></label>
@@ -371,8 +373,8 @@ function LineCard({ l, client, partners, busy, act, cats }: { l: Line; client: C
           <div className="sl-conf">{s?.category && !changed ? <span className="chip wait">предлог: {cats[s.category]?.name}</span> : conf === "sure" ? <span className="chip ok">сигурно</span> : conf === "likely" ? <span className="chip wait">предлог</span> : conf === "manual" ? <span className="chip">рачно</span> : <span className="chip err">непознат</span>}
             {s?.partnerBy && !changed && <span className="muted small"> партнер по {BY[s.partnerBy]}{s.allocBy ? `, фактура по ${ALLOC[s.allocBy]}` : ""}</span>}
             {s?.hint && <span className="muted small"> {s.hint}</span>}</div>
-          <select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")} aria-label={`Партнер за ставка ${l.lineNo}`}>
-            <option value="">— изберете партнер —</option>{partners.filter((p) => p.isActive).map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select>
+          <SearchSelect value={pid} onChange={setPid} ariaLabel={`Партнер за ставка ${l.lineNo}`} placeholder="— изберете партнер —"
+            options={partners.filter((p) => p.isActive).map(partnerOpt)} />
           {pid !== "" && (manual
             ? <table className="grid compact"><tbody>{open.map((o) => <tr key={o.id}><td>{o.number}</td><td className="num">{money(o.remaining)}</td>
                 <td className="num"><input className="amt-in" inputMode="decimal" value={alloc[o.id] ?? ""} onChange={(e) => setAlloc({ ...alloc, [o.id]: e.target.value })} aria-label={`Износ за ${o.number}`} /></td></tr>)}</tbody></table>
@@ -464,8 +466,8 @@ export function BankExpenses() {
     <>
       <header className="page-head"><h1>Трошоци од изводи</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
       <div className="toolbar">
-        <label>Од<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label>До<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label>Од<DateInput value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label>До<DateInput value={to} onChange={(e) => setTo(e.target.value)} /></label>
         <a className="btn" href={`/api/clients/${client.id}/bank-expenses?from=${from}&to=${to}&format=csv`}>Преземи CSV (Excel)</a>
       </div>
       {d.lines.length === 0 ? <div className="empty"><p>Нема трошоци од изводи во овој период.</p>

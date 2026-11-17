@@ -79,6 +79,10 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
     invoiceClauses: z.string().max(4000).optional().nullable(),
     negativeStock: z.enum(["block", "warn"]).optional(),
     costCenterMode: z.enum(["off", "optional", "required"]).optional(),   // docs/14
+    units: z.array(z.string().trim().min(1).max(10)).min(1).max(60).optional().nullable()
+      .transform((u) => (u ? [...new Set(u)] : u)),   // zabeleska 15
+    dunningTexts: z.object({ "1": z.string().trim().max(2000).optional(), "2": z.string().trim().max(2000).optional(), "3": z.string().trim().max(2000).optional() })
+      .optional().nullable(),   // zabeleska 22
     productionSettings: z.object({ useWaste: z.boolean(), labor: z.enum(["none", "hour", "piece"]), laborRate: z.coerce.number().min(0).max(1e9),
       overhead: z.enum(["none", "percent", "piece"]), overheadValue: z.coerce.number().min(0).max(1e9) }).optional(),
     pdfSettings: z.object({
@@ -183,6 +187,36 @@ export async function masterRoutes(app: FastifyInstance, { db }: { db: Db }) {
       if (pgUnique(e)) throw new DomainError("duplicate", "Артикл со оваа шифра веќе постои.", 409);
       throw e;
     }
+  });
+
+  /* ------------------------- ceni po artikl (zabeleski 16, 18, 19): izlez i vlez, so partner */
+  app.get("/api/clients/:clientId/items/:id/prices", async (req) => {
+    const { clientId } = await ctx(req);
+    const id = Id.parse((req.params as { id: string }).id);
+    const q = z.object({ partnerId: Id.optional(), direction: z.enum(["out", "in", "all"]).default("all"), currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+      limit: z.coerce.number().int().min(1).max(1000).default(500) }).parse(req.query);
+    const [it] = await db.select({ id: items.id }).from(items).where(and(eq(items.id, id), eq(items.clientId, clientId)));
+    if (!it) throw new DomainError("not_found", "Артиклот не постои.", 404);
+    // izlez: izdadeni fakturi (bez ponudi, nacrti, otkazani, storno i odobrenija); devizna -> cenata vo valutata
+    const out = q.direction === "in" ? [] : await db.execute(sql`
+      select 'out' as dir, i.id as doc_id, coalesce(i.number, '') as number, to_char(coalesce(i.supply_date, i.issue_date), 'YYYY-MM-DD') as date, i.partner_id, coalesce(p.short_name, i.buyer_name) as partner,
+        abs(l.qty) as qty, coalesce(l.fx_unit_price, l.unit_price) as price, l.discount_pct, i.currency
+      from invoice_lines l join invoices i on i.id = l.invoice_id left join partners p on p.id = i.partner_id
+      where i.client_id = ${clientId} and l.item_id = ${id} and i.doc_type in ('INV', 'KR', 'AV') and l.qty > 0
+        and i.status in ('issued', 'json_exported', 'sent_to_ujp', 'corrected')
+        ${q.partnerId ? sql`and i.partner_id = ${q.partnerId}` : sql``} ${q.currency ? sql`and i.currency = ${q.currency}` : sql``}
+      order by coalesce(i.supply_date, i.issue_date) desc, i.id desc limit ${q.limit}`);
+    const inn = q.direction === "out" || (q.currency && q.currency !== "MKD") ? [] : await db.execute(sql`
+      select 'in' as dir, v.id as doc_id, coalesce(v.number, '') || ' (' || v.supplier_number || ')' as number, to_char(v.received_date, 'YYYY-MM-DD') as date, v.partner_id,
+        coalesce(p.short_name, p.name) as partner, l.qty, l.unit_price as price, l.discount_pct, 'MKD' as currency
+      from purchase_lines l join purchase_invoices v on v.id = l.purchase_invoice_id join partners p on p.id = v.partner_id
+      where v.client_id = ${clientId} and l.item_id = ${id} and v.status = 'posted'
+        ${q.partnerId ? sql`and v.partner_id = ${q.partnerId}` : sql``}
+      order by v.received_date desc, v.id desc limit ${q.limit}`);
+    const rows = (x: unknown) => (Array.isArray(x) ? x : (x as { rows: unknown[] }).rows) as Record<string, unknown>[];
+    return [...rows(out), ...rows(inn)].map((r) => ({ direction: r.dir as "out" | "in", docId: Number(r.doc_id), number: String(r.number), date: String(r.date).slice(0, 10),
+      partnerId: Number(r.partner_id), partner: r.partner as string, qty: String(r.qty), price: String(r.price), discountPct: String(r.discount_pct), currency: String(r.currency) }))
+      .sort((a, b) => b.date.localeCompare(a.date) || b.docId - a.docId).slice(0, q.limit);
   });
 
   /* -------------------------------- predlog-cena: dogovorena > posledna > standardna */

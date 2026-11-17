@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef } from "../api";
@@ -68,7 +69,7 @@ function EditRec({ client, r, onDone }: { client: ClientRef; r: Rec; onDone: (ok
   return <form className="row-actions wrap" onSubmit={submit}>
     <label>Назив<input name="name" defaultValue={r.name} required minLength={2} /></label>
     <label>Ден во месецот<select name="dayOfMonth" defaultValue={r.dayOfMonth}>{DAYS.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}</select></label>
-    <label>Крај (опционално)<input type="date" name="endDate" defaultValue={r.endDate ?? ""} /></label>
+    <label>Крај (опционално)<DateInput name="endDate" defaultValue={r.endDate ?? ""} /></label>
     <button className="btn btn-primary">Зачувај</button><button type="button" className="link" onClick={() => onDone(false)}>Откажи</button>
     {err && <p className="alert">{err}</p>}
   </form>;
@@ -93,8 +94,8 @@ export function RecurringForm({ client, invoiceId, defaultName, onDone }: { clie
       <div className="row-actions wrap">
         <label className="grow">Назив<input name="name" defaultValue={defaultName} required minLength={2} maxLength={120} /></label>
         <label>Ден во месецот<select name="dayOfMonth" defaultValue={1}>{DAYS.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}</select></label>
-        <label>Почеток<input type="date" name="startDate" defaultValue={today()} required /></label>
-        <label>Крај (опционално)<input type="date" name="endDate" /></label>
+        <label>Почеток<DateInput name="startDate" defaultValue={today()} required /></label>
+        <label>Крај (опционално)<DateInput name="endDate" /></label>
       </div>
       {err && <p className="alert">{err}</p>}
       <div className="row-actions"><button className="btn btn-primary">Зачувај повторувачка</button><button type="button" className="link" onClick={() => onDone(false)}>Откажи</button>

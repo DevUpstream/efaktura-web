@@ -1,3 +1,4 @@
+import { DateInput } from "../components/DateInput";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext } from "react-router-dom";
 import { api, ApiError, type ClientRef, type Partner } from "../api";
@@ -20,7 +21,7 @@ export function Ios() {
       <header className="page-head"><h1>Плаќања и наплата</h1><div className="row-actions"><Tabs c={client.id} /></div></header>
       <p className="muted small">Извод на отворени ставки (ИОС) по партнер на избран ден. Вообичаено се праќа со состојба на 31.12. Партнерот го потврдува или оспорува салдото.</p>
       <div className="toolbar">
-        <label>Состојба на ден <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value || today())} /></label>
+        <label>Состојба на ден <DateInput value={asOf} onChange={(e) => setAsOf(e.target.value || today())} /></label>
         <button className="btn btn-small" onClick={() => setAsOf(`${new Date().getFullYear() - 1}-12-31`)}>31.12.{new Date().getFullYear() - 1}</button>
         <input type="search" placeholder="Партнер" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Пребарај" />
       </div>
@@ -96,7 +97,7 @@ export function Compensations() {
         <div className="toolbar">
           <label>Партнер<select value={pid} onChange={(e) => setPid(e.target.value ? Number(e.target.value) : "")}><option value="">— изберете —</option>
             {partners.map((p) => <option key={p.id} value={p.id}>{partnerOption(p)}</option>)}</select></label>
-          <label>Датум<input type="date" value={day} onChange={(e) => setDay(e.target.value)} /></label>
+          <label>Датум<DateInput value={day} onChange={(e) => setDay(e.target.value)} /></label>
         </div>
         {cand && (Number(cand.max) <= 0 ? <p className="notice wait">Нема отворени ставки на двете страни за компензација.</p> : <>
           <div className="card-cols">{table("Наши побарувања", cand.receivable, inA, setInA)}{table("Наши обврски", cand.payable, outA, setOutA)}</div>
@@ -120,7 +121,7 @@ export function Compensations() {
 /* -------------------------------------------------------------- опомени */
 interface DunRow { partnerId: number; partnerName: string; count: number; amount: string; maxDays: number; lastLetter: { id: number; date: string; level: number } | null; nextLevel: number }
 interface Letter { id: number; docDate: string; level: number; amount: string; partnerName: string }
-const LEVEL = ["", "Опомена", "Втора опомена", "Последна опомена"];
+const LEVEL = ["", "Опомена", "Втора опомена", "Опомена пред тужба"];   // zabeleska 22
 export function Dunning() {
   const client = useOutletContext<ClientRef>();
   const [minDays, setMinDays] = useState(8);

@@ -102,6 +102,9 @@ export const users = pgTable("users", {
 
 /* ------------------------------------------------------------- klienti */
 
+/** Standardni edinici merka (zabeleska 14, 15): "парче" e pocetna. */
+export const DEFAULT_UNITS = ["парче", "кг", "г", "литар", "м", "м²", "м³", "час", "ден", "месец", "пакет", "кутија", "пар", "сет", "услуга"];
+
 /** Podatoci za zaglavjeto i podnozjeto na PDF fakturata (format od UPSTREAM fakturata 2026/10/11). */
 export interface PdfSettings {
   shortName?: string;            // golem naziv, npr. "УПСТРЕАМ ДООЕЛ"
@@ -138,6 +141,10 @@ export const clients = pgTable("clients", {
   invoicePrefix: varchar("invoice_prefix", { length: 10 }).notNull().unique(),
   /** Trosковни mesta (docs/14): off = ne se gledaat; optional; required = bez TM ne se izdava / knizi. */
   costCenterMode: costCenterMode("cost_center_mode").notNull().default("off"),
+  /** Edinici merka na firmata (zabeleska 15); null = standardnata lista (DEFAULT_UNITS). Prvata e pocetna. */
+  units: text("units").array(),
+  /** Tekst na opomenite po nivo (zabeleska 22): {"1": "...", "2": "...", "3": "..."}; prazno = standardniot. */
+  dunningTexts: jsonb("dunning_texts").$type<Partial<Record<"1" | "2" | "3", string>>>(),
   invoiceClauses: text("invoice_clauses"),
   pdfSettings: jsonb("pdf_settings").$type<PdfSettings>(),
   productionSettings: jsonb("production_settings").$type<ProductionSettings>(),  // docs/07

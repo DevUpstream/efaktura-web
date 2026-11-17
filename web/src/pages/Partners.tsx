@@ -1,3 +1,4 @@
+import { usePaged } from "../components/Pager";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { GradeChip, type PartnerScore } from "../components/Score";
@@ -27,6 +28,7 @@ export function Partners() {
   }, [client.id]);
   const inTab = (p: Partner) => tab === "all" || (tab === "customer" ? p.isCustomer : p.isSupplier);
   const shown = (rows ?? []).filter((p) => inTab(p) && partnerMatches(p, needle));
+  const paged = usePaged(shown, "partners", [needle, tab]);
   const count = (t: "customer" | "supplier") => (rows ?? []).filter((p) => (t === "customer" ? p.isCustomer : p.isSupplier)).length;
   const role = tab === "supplier" ? "supplier" : "customer";
   const noun = tab === "supplier" ? "добавувач" : tab === "all" ? "партнер" : "купувач";
@@ -49,7 +51,7 @@ export function Partners() {
       {shown.length > 0 && (
         <div className="table-wrap"><table className="grid">
           <thead><tr><th>Назив</th><th>ЕДБ</th><th>ДДВ број</th><th>Град</th>{tab === "all" && <th>Улога</th>}<th>Регистар</th>{scores && <th title="Платежна дисциплина">Плаќа</th>}</tr></thead>
-          <tbody>{shown.map((p) => (
+          <tbody>{paged.rows.map((p) => (
             <tr key={p.id} onClick={() => (client.modules.includes("crm") ? nav(`/c/${client.id}/partners/${p.id}`) : setEdit(p))} className={p.isActive ? "" : "row-inactive"}>
               <td>{client.modules.includes("crm") ? <Link className="docno" to={`/c/${client.id}/partners/${p.id}`} onClick={(e) => e.stopPropagation()}>{partnerShort(p)}</Link>
                 : <button className="link" onClick={() => setEdit(p)}>{partnerShort(p)}</button>}{p.shortName && <><br /><span className="muted small">{p.name}</span></>}{!p.isActive && <span className="doctype">неактивен</span>}</td>
@@ -61,6 +63,7 @@ export function Partners() {
           </tbody>
         </table></div>
       )}
+      {paged.bar}
     </>
   );
 }

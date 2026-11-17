@@ -1,3 +1,4 @@
+import { usePaged } from "../components/Pager";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { api, type ClientRef, type InvoiceRow } from "../api";
@@ -47,6 +48,7 @@ export function Invoices() {
     return (rows ?? []).filter((r) => f.match(r) &&
       (!needle || (r.number ?? "").toLowerCase().includes(needle) || r.buyerName.toLowerCase().includes(needle)));
   }, [rows, filter, q]);
+  const paged = usePaged(shown, "invoices");
   const total = shown.filter((r) => r.status !== "draft" && r.docType !== "PF").reduce((s, r) => s + Number(r.payableAmount ?? Math.round(Number(r.grossTotal))), 0);
 
   return (
@@ -83,7 +85,7 @@ export function Invoices() {
               <th>Број</th><th>Датум</th><th>Купувач</th><th className="num">За плаќање</th><th>Статус</th><th>УЈП</th>
             </tr></thead>
             <tbody>
-              {shown.map((r) => (
+              {paged.rows.map((r) => (
                 <tr key={r.id} onClick={() => nav(`../invoices/${r.id}`, { relative: "path" })} className={`row-${r.status}`}>
                   <td>
                     <Link to={`../invoices/${r.id}`} relative="path" onClick={(e) => e.stopPropagation()} className="docno">
@@ -104,6 +106,7 @@ export function Invoices() {
           </table>
         </div>
       )}
+      {paged.bar}
     </>
   );
 }

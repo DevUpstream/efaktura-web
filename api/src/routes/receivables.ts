@@ -8,7 +8,7 @@ import { clients, compensations, dunningLetters, partners } from "../db/schema.j
 import type { Db } from "../db/types.js";
 import { DomainError } from "../domain/errors.js";
 import { renderSimpleDoc, m2, day } from "../domain/pdf-docs.js";
-import { compensationCandidates, compensationDetail, createCompensation, createDunning, DUNNING_TITLE, dunningCandidates, iosFor, iosSummary, voidCompensation } from "../domain/receivables.js";
+import { compensationCandidates, compensationDetail, createCompensation, createDunning, DUNNING_TEXT, DUNNING_TITLE, dunningCandidates, iosFor, iosSummary, voidCompensation } from "../domain/receivables.js";
 import { assertModule, requireUser } from "../auth/context.js";
 import { Id } from "./master.js";
 
@@ -135,17 +135,12 @@ export async function receivableRoutes(app: FastifyInstance, { db }: { db: Db })
     const [l] = await db.select().from(dunningLetters).where(and(eq(dunningLetters.id, id!), eq(dunningLetters.clientId, client.id)));
     if (!l) throw new DomainError("not_found", "Опомената не постои.", 404);
     const [p] = await db.select().from(partners).where(eq(partners.id, l.partnerId));
-    const text: Record<number, string[]> = {
-      1: ["Според нашата евиденција, следните фактури не се платени до рокот на плаќање.",
-        "Ве молиме да ги платите во рок од 8 дена од приемот на оваа опомена."],
-      2: ["Ве потсетуваме дека следните фактури сè уште не се платени, иако веќе ви испративме опомена.",
-        "Ве молиме да ги платите во рок од 8 дена. Ако имате приговор за износот, известете нè веднаш."],
-      3: ["Следните фактури не се платени и покрај претходните опомени.",
-        "Ако не ги платите во рок од 8 дена, ќе побараме присилна наплата преку надлежен орган. Тогаш ќе ги побараме и трошоците на постапката и законската казнена камата."],
-    };
+    // zabeleska 22: tekstot na firmata ili standardniot
+    const lvl = l.level as 1 | 2 | 3;
+    const intro = (client.dunningTexts?.[String(lvl) as "1" | "2" | "3"]?.trim() || DUNNING_TEXT[lvl]).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
     const b = await renderSimpleDoc({
       client, title: DUNNING_TITLE[l.level]!, date: l.docDate, partner: party(p!), partnerLabel: "До",
-      intro: text[l.level],
+      intro,
       sections: [{ cols: [{ title: "Фактура", width: 34 }, { title: "Рок", width: 18 }, { title: "Денови доцнење", width: 18, align: "right" }, { title: "Неплатено", width: 30, align: "right" }],
         rows: l.items.map((i) => [i.number, day(i.dueDate), String(i.daysOverdue), m2(i.remaining)]), total: ["Вкупно", "", "", m2(l.amount)] }],
       outro: [`Уплатата направете ја на жиро-сметка ${banks(client) || "(внесете ја во Поставки)"}. Во „повикување на број“ наведете го бројот на фактурата.`,

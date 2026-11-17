@@ -9,7 +9,8 @@ interface Pdf { shortName?: string; tagline?: string; subtitle?: string; contact
   bankAccounts?: Bank[]; invoiceTitle?: string; signatory?: string; paymentNote?: string; showPaymentReference?: boolean; clausesTitle?: string;
   receiverDeclaration?: string; showReceivedBy?: boolean }
 interface Client { id: number; name: string; edb: string; embs: string | null; vatNumber: string | null; address: string; city: string;
-  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn"; productionSettings: ProductionSettings | null }
+  postalCode: string | null; invoiceClauses: string | null; pdfSettings: Pdf | null; ujpRegistryAt: string | null; negativeStock: "block" | "warn"; productionSettings: ProductionSettings | null;
+  units: string[] | null; dunningTexts: Partial<Record<"1" | "2" | "3", string>> | null }
 
 /** Izgled na PDF fakturata za klientot (format: UPSTREAM Фактура-Испратница). Samo administrator menuva. */
 export function ClientSettings() {
@@ -52,6 +53,7 @@ export function ClientSettings() {
       </dl>
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"} role="status">{msg.text}</p>}
       {ref.modules.includes("warehouse") && <WarehouseSettings client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />}
+      <UnitsAndDunning client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />
       {ref.modules.includes("production") && <ProductionSettingsForm client={c} admin={admin} onSaved={(x) => setC({ ...c, ...x })} />}
       <form className="panel form-grid" onSubmit={submit}>
         <h2 className="span-all">Заглавје (лево)</h2>
@@ -161,5 +163,42 @@ function ProductionSettingsForm({ client, admin, onSaved }: { client: Client; ad
       {msg && <p className={msg.kind === "ok" ? "notice" : "alert"}>{msg.text}</p>}
       {admin && <div><button className="btn btn-primary" onClick={save}>Зачувај</button></div>}
     </section>
+  );
+}
+
+/** Zabeleski 15 i 22: edinici merka na firmata i tekst na opomenite. Samo administrator menuva. */
+const DUNNING_DEFAULT: Record<"1" | "2" | "3", string> = {
+  "1": "Според нашата евиденција, следните фактури не се платени до рокот на плаќање.\nВе молиме да ги платите во рок од 8 дена од приемот на оваа опомена.",
+  "2": "Ве потсетуваме дека следните фактури сè уште не се платени, иако веќе ви испративме опомена.\nВе молиме да ги платите во рок од 8 дена. Ако имате приговор за износот, известете нè веднаш.",
+  "3": "Следните фактури не се платени и покрај претходните опомени.\nВе молиме да ги платите во рок од 8 дена од приемот на оваа опомена пред тужба.\nАко не ги платите во тој рок, без друго известување ќе поднесеме тужба или предлог за извршување пред надлежен орган. Тогаш ќе ги побараме и трошоците на постапката и законската казнена камата.",
+};
+const DUNNING_NAME: Record<"1" | "2" | "3", string> = { "1": "Опомена", "2": "Втора опомена", "3": "Опомена пред тужба" };
+function UnitsAndDunning({ client, admin, onSaved }: { client: Client; admin: boolean; onSaved: (c: Partial<Client>) => void }) {
+  const { refresh } = useSession();
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  async function save(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    const units = (f.units ?? "").split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+    const dunningTexts = Object.fromEntries((["1", "2", "3"] as const).map((k) => [k, (f[`d${k}`] ?? "").trim()]).filter(([, v]) => v));
+    try {
+      onSaved(await api.patch<Client>(`/api/clients/${client.id}`, { units: units.length ? units : null, dunningTexts }));
+      await refresh();
+      setMsg({ kind: "ok", text: "Зачувано." });
+    } catch (x) { setMsg({ kind: "err", text: (x as ApiError).message }); }
+  }
+  return (
+    <form className="panel form-grid" onSubmit={save}>
+      <h2 className="span-all">Единици мерка и опомени</h2>
+      {msg && <p className={msg.kind === "ok" ? "notice span-all" : "alert span-all"} role="status">{msg.text}</p>}
+      <div className="span-all"><label>Единици мерка (по една во ред; првата е почетна)
+        <textarea name="units" rows={5} defaultValue={(client.units ?? []).join("\n")} disabled={!admin}
+          placeholder={"парче\nкг\nлитар\nчас\n… (празно = стандардна листа)"} /></label>
+        <small className="muted">Кај артикл и ставка се избира од листата; може да се внесе и друга (до 10 знаци).</small></div>
+      {(["1", "2", "3"] as const).map((k) => <div className="span-all" key={k}><label>Текст: {DUNNING_NAME[k]}
+        <textarea name={`d${k}`} rows={k === "3" ? 5 : 3} defaultValue={client.dunningTexts?.[k] ?? ""} disabled={!admin} placeholder={DUNNING_DEFAULT[k]} /></label></div>)}
+      <p className="muted small span-all">Празно = стандарден текст (се гледа во полето). Текстот за опомена пред тужба нека го прегледа правник.</p>
+      {admin && <div className="span-all row-actions"><button className="btn btn-primary">Зачувај</button></div>}
+    </form>
   );
 }
